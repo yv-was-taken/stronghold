@@ -25,6 +25,49 @@ sudo usermod -aG docker $USER
 newgrp docker
 ```
 
+### Fly.io Deployment (Recommended)
+
+1. **Install Fly CLI**
+```bash
+curl -L https://fly.io/install.sh | sh
+fly auth login
+```
+
+2. **Launch the app**
+```bash
+git clone https://github.com/yv-was-taken/stronghold.git
+cd stronghold
+
+fly launch --name stronghold-api --region iad
+```
+
+3. **Set secrets**
+```bash
+fly secrets set X402_WALLET_ADDRESS=0xYOUR_WALLET_ADDRESS
+fly secrets set X402_NETWORK=base
+fly secrets set STRONGHOLD_LLM_API_KEY=optional_api_key
+```
+
+4. **Deploy**
+```bash
+fly deploy
+```
+
+Your app will be available at `https://stronghold-api.fly.dev` (or your custom domain).
+
+### VPS Deployment
+
+1. **Provision a VPS** (Ubuntu 22.04+ recommended)
+   - Minimum: 2 vCPU, 2GB RAM
+   - Recommended: 4 vCPU, 4GB RAM for ML models
+
+2. **Install Docker**
+```bash
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
 3. **Clone and configure**
 ```bash
 git clone https://github.com/yv-was-taken/stronghold.git
