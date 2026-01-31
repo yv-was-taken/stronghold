@@ -1,39 +1,23 @@
-app = "stronghold-api"
-primary_region = "iad"
+# fly.toml app configuration file generated for app-dawn-wind-502 on 2026-01-31T04:14:59Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'app-dawn-wind-502'
+primary_region = 'iad'
 
 [build]
-  dockerfile = "Dockerfile"
-
-[env]
-  PORT = "8080"
-  X402_NETWORK = "base"
-  STRONGHOLD_ENABLE_HUGOT = "true"
-  STRONGHOLD_ENABLE_SEMANTICS = "true"
 
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
-  processes = ["app"]
-
-  [http_service.concurrency]
-    type = "connections"
-    hard_limit = 1000
-    soft_limit = 200
+  processes = ['app']
 
 [[vm]]
-  cpu_kind = "shared"
+  memory = '1gb'
+  cpu_kind = 'shared'
   cpus = 1
-  memory_mb = 512
-
-# Scale up when you need more:
-# [[vm]]
-#   cpu_kind = "shared"
-#   cpus = 2
-#   memory_mb = 1024
-
-[metrics]
-  port = 8080
-  path = "/health"
+  memory_mb = 256
