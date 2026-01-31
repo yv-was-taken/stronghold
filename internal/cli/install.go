@@ -21,7 +21,7 @@ type InstallState int
 const (
 	StateWarning InstallState = iota
 	StateChecking
-	StateAuth
+	StateAccount
 	StatePayment
 	StateConfig
 	StateInstalling
@@ -39,13 +39,12 @@ type InstallModel struct {
 	// Warning step
 	confirmWarning bool
 
-	// Auth step
-	authChoice    int // 0 = login, 1 = signup, 2 = skip
-	emailInput    textinput.Model
-	passwordInput textinput.Model
+	// Account step
+	accountChoice int // 0 = create, 1 = existing, 2 = skip
+	accountNumber string
+	walletAddress string
 	authToken     string
 	loggedIn      bool
-	userEmail     string
 
 	// Payment step
 	paymentMethod int // 0 = stripe, 1 = wallet
@@ -95,18 +94,6 @@ var (
 
 // NewInstallModel creates a new install model
 func NewInstallModel() *InstallModel {
-	emailInput := textinput.New()
-	emailInput.Placeholder = "user@example.com"
-	emailInput.Focus()
-	emailInput.CharLimit = 100
-	emailInput.Width = 40
-
-	passwordInput := textinput.New()
-	passwordInput.Placeholder = "password"
-	passwordInput.EchoMode = textinput.EchoPassword
-	passwordInput.CharLimit = 100
-	passwordInput.Width = 40
-
 	portInput := textinput.New()
 	portInput.Placeholder = "8080"
 	portInput.CharLimit = 5
@@ -120,8 +107,6 @@ func NewInstallModel() *InstallModel {
 	return &InstallModel{
 		state:         StateWarning,
 		config:        DefaultConfig(),
-		emailInput:    emailInput,
-		passwordInput: passwordInput,
 		portInput:     portInput,
 		apiInput:      apiInput,
 		configPort:    8080,
@@ -176,12 +161,6 @@ func (m *InstallModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Update text inputs
 	var cmd tea.Cmd
 	switch m.state {
-	case StateAuth:
-		if m.emailInput.Focused() {
-			m.emailInput, cmd = m.emailInput.Update(msg)
-		} else {
-			m.passwordInput, cmd = m.passwordInput.Update(msg)
-		}
 	case StateConfig:
 		if m.portInput.Focused() {
 			m.portInput, cmd = m.portInput.Update(msg)
@@ -200,8 +179,8 @@ func (m *InstallModel) View() string {
 		return m.viewWarning()
 	case StateChecking:
 		return m.viewChecking()
-	case StateAuth:
-		return m.viewAuth()
+	case StateAccount:
+		return m.viewAccount()
 	case StatePayment:
 		return m.viewPayment()
 	case StateConfig:
@@ -221,52 +200,37 @@ func (m *InstallModel) View() string {
 func (m *InstallModel) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.state {
 	case StateChecking:
-		m.state = StateAuth
+		m.state = StateAccount
 		return m, nil
 
-	case StateAuth:
-		if m.authChoice == 0 { // Login
-			if m.emailInput.Value() != "" && m.passwordInput.Value() != "" {
-				// Simulate login - in production this would call the API
-				m.userEmail = m.emailInput.Value()
-				m.loggedIn = true
-				m.authToken = "simulated-jwt-token"
-				m.config.Auth.Token = m.authToken
-				m.config.Auth.Email = m.userEmail
-				m.config.Auth.UserID = "user-" + m.emailInput.Value() // Simulated user ID
-				m.config.Auth.LoggedIn = true
+	case StateAccount:
+		if m.accountChoice == 0 { // Create new account
+			// Generate a unique user ID for wallet creation
+			userID := generateUserID()
+			m.config.Auth.UserID = userID
 
-				// Create wallet for user
-				walletAddress, err := SetupWallet(m.config.Auth.UserID, "base")
-				if err != nil {
-					m.progress = append(m.progress, errorStyle.Render(fmt.Sprintf("✗ Wallet setup failed: %v", err)))
-				} else {
-					m.config.Wallet.Address = walletAddress
-					m.config.Wallet.Network = "base"
-					m.progress = append(m.progress, successStyle.Render("✓ Wallet created"))
-				}
-
-				m.state = StatePayment
-			}
-		} else if m.authChoice == 1 { // Signup
-			m.userEmail = m.emailInput.Value()
-			m.loggedIn = true
-			m.authToken = "simulated-jwt-token"
-			m.config.Auth.Token = m.authToken
-			m.config.Auth.Email = m.userEmail
-			m.config.Auth.UserID = "user-" + m.emailInput.Value() // Simulated user ID
-			m.config.Auth.LoggedIn = true
-
-			// Create wallet for new user
-			walletAddress, err := SetupWallet(m.config.Auth.UserID, "base")
+			// Create wallet for user
+			walletAddress, err := SetupWallet(userID, "base")
 			if err != nil {
 				m.progress = append(m.progress, errorStyle.Render(fmt.Sprintf("✗ Wallet setup failed: %v", err)))
 			} else {
 				m.config.Wallet.Address = walletAddress
 				m.config.Wallet.Network = "base"
+				m.walletAddress = walletAddress
 				m.progress = append(m.progress, successStyle.Render("✓ Wallet created"))
 			}
 
+			// In production, this would call the API to create an account
+			// For now, we simulate account creation
+			m.accountNumber = generateSimulatedAccountNumber()
+			m.config.Auth.AccountNumber = m.accountNumber
+			m.config.Auth.LoggedIn = true
+			m.loggedIn = true
+
+			m.state = StatePayment
+		} else if m.accountChoice == 1 { // Use existing account
+			// User would enter their account number
+			// For now, we skip to payment
 			m.state = StatePayment
 		} else { // Skip
 			m.state = StatePayment
@@ -306,9 +270,9 @@ func (m *InstallModel) handleEnter() (tea.Model, tea.Cmd) {
 // handleUp handles up arrow
 func (m *InstallModel) handleUp() {
 	switch m.state {
-	case StateAuth:
-		if m.authChoice > 0 {
-			m.authChoice--
+	case StateAccount:
+		if m.accountChoice > 0 {
+			m.accountChoice--
 		}
 	case StatePayment:
 		if m.paymentMethod > 0 {
@@ -320,9 +284,9 @@ func (m *InstallModel) handleUp() {
 // handleDown handles down arrow
 func (m *InstallModel) handleDown() {
 	switch m.state {
-	case StateAuth:
-		if m.authChoice < 2 {
-			m.authChoice++
+	case StateAccount:
+		if m.accountChoice < 2 {
+			m.accountChoice++
 		}
 	case StatePayment:
 		if m.paymentMethod < 1 {
@@ -334,14 +298,6 @@ func (m *InstallModel) handleDown() {
 // handleTab handles tab key
 func (m *InstallModel) handleTab() {
 	switch m.state {
-	case StateAuth:
-		if m.emailInput.Focused() {
-			m.emailInput.Blur()
-			m.passwordInput.Focus()
-		} else {
-			m.passwordInput.Blur()
-			m.emailInput.Focus()
-		}
 	case StateConfig:
 		if m.portInput.Focused() {
 			m.portInput.Blur()
@@ -389,17 +345,22 @@ func (m *InstallModel) viewChecking() string {
 	return b.String()
 }
 
-// viewAuth renders the authentication screen
-func (m *InstallModel) viewAuth() string {
+// viewAccount renders the account setup screen
+func (m *InstallModel) viewAccount() string {
 	var b strings.Builder
 
-	b.WriteString(headerStyle.Render("Authentication"))
+	b.WriteString(headerStyle.Render("Account Setup"))
 	b.WriteString("\n\n")
 
-	// Auth choices
-	choices := []string{"Login", "Sign Up", "Skip (limited functionality)"}
+	b.WriteString("Stronghold uses Mullvad-style authentication:\n")
+	b.WriteString("• No email or password required\n")
+	b.WriteString("• 16-digit account number (XXXX-XXXX-XXXX-XXXX)\n")
+	b.WriteString("• Account number is your only credential\n\n")
+
+	// Account choices
+	choices := []string{"Create new account", "I have an existing account", "Skip for now"}
 	for i, choice := range choices {
-		if i == m.authChoice {
+		if i == m.accountChoice {
 			b.WriteString(selectedStyle.Render(fmt.Sprintf("▸ %s", choice)))
 		} else {
 			b.WriteString(unselectedStyle.Render(fmt.Sprintf("  %s", choice)))
@@ -408,17 +369,7 @@ func (m *InstallModel) viewAuth() string {
 	}
 
 	b.WriteString("\n")
-
-	if m.authChoice < 2 {
-		b.WriteString("Email:\n")
-		b.WriteString(m.emailInput.View())
-		b.WriteString("\n\n")
-		b.WriteString("Password:\n")
-		b.WriteString(m.passwordInput.View())
-	}
-
-	b.WriteString("\n\n")
-	b.WriteString(infoStyle.Render("Use Tab to switch fields, Enter to continue"))
+	b.WriteString(infoStyle.Render("Press Enter to continue"))
 
 	return b.String()
 }
@@ -431,18 +382,23 @@ func (m *InstallModel) viewPayment() string {
 	b.WriteString("\n\n")
 
 	if m.config.Wallet.Address != "" {
-		b.WriteString("Your Stronghold wallet has been created:\n\n")
-		b.WriteString("Address:\n")
+		b.WriteString("Your Stronghold account has been created:\n\n")
+		if m.accountNumber != "" {
+			b.WriteString("Account Number:\n")
+			b.WriteString(selectedStyle.Render(fmt.Sprintf("  %s", m.accountNumber)))
+			b.WriteString("\n\n")
+		}
+		b.WriteString("Wallet Address (for deposits):\n")
 		b.WriteString(selectedStyle.Render(fmt.Sprintf("  %s", m.config.Wallet.Address)))
 		b.WriteString("\n\n")
 		b.WriteString("Fund your wallet to start using Stronghold:\n\n")
 		b.WriteString(infoStyle.Render("  1. Visit https://dashboard.stronghold.security"))
 		b.WriteString("\n")
-		b.WriteString(infoStyle.Render("  2. Sign in with your account"))
+		b.WriteString(infoStyle.Render("  2. Login with your account number"))
 		b.WriteString("\n")
-		b.WriteString(infoStyle.Render("  3. Use Stripe on-ramp to buy USDC, or send directly"))
+		b.WriteString(infoStyle.Render("  3. Use Stripe on-ramp or send USDC directly"))
 		b.WriteString("\n\n")
-		b.WriteString("Or send USDC on Base directly to the address above.")
+		b.WriteString("Or use: stronghold account deposit")
 	} else {
 		b.WriteString("No wallet configured. You can skip funding for now,")
 		b.WriteString("\nbut you'll need to add funds before using Stronghold.")
@@ -501,11 +457,15 @@ func (m *InstallModel) viewComplete() string {
 	b.WriteString("This cannot be bypassed by applications.\n\n")
 
 	if m.config.Wallet.Address != "" {
-		b.WriteString(headerStyle.Render("Your Wallet:"))
+		b.WriteString(headerStyle.Render("Your Account:"))
 		b.WriteString("\n")
-		b.WriteString(fmt.Sprintf("  %s\n\n", m.config.Wallet.Address))
-		b.WriteString(infoStyle.Render("Fund this address with USDC on Base to start scanning.\n"))
-		b.WriteString(infoStyle.Render("Visit https://dashboard.stronghold.security to add funds.\n\n"))
+		if m.accountNumber != "" {
+			b.WriteString(fmt.Sprintf("Account Number: %s\n", m.accountNumber))
+		}
+		b.WriteString(fmt.Sprintf("Wallet Address: %s\n\n", m.config.Wallet.Address))
+		b.WriteString(infoStyle.Render("Fund with USDC on Base to start scanning.\n"))
+		b.WriteString(infoStyle.Render("Use: stronghold account deposit\n"))
+		b.WriteString(infoStyle.Render("Or visit: https://dashboard.stronghold.security\n\n"))
 	}
 
 	b.WriteString(headerStyle.Render("Quick Commands:"))
@@ -771,4 +731,20 @@ func Confirm(prompt string) bool {
 	response, _ := reader.ReadString('\n')
 	response = strings.ToLower(strings.TrimSpace(response))
 	return response == "y" || response == "yes"
+}
+
+// generateUserID generates a unique user ID for wallet creation
+func generateUserID() string {
+	return fmt.Sprintf("user-%d", time.Now().UnixNano())
+}
+
+// generateSimulatedAccountNumber generates a simulated account number for demo
+// In production, this would come from the API
+func generateSimulatedAccountNumber() string {
+	parts := []string{}
+	for i := 0; i < 4; i++ {
+		parts = append(parts, fmt.Sprintf("%04d", time.Now().UnixNano()%10000))
+		time.Sleep(1 * time.Millisecond)
+	}
+	return fmt.Sprintf("%s-%s-%s-%s", parts[0], parts[1], parts[2], parts[3])
 }

@@ -3,15 +3,19 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
 // Config holds all service configuration
 type Config struct {
-	Server    ServerConfig
-	X402      X402Config
+	Server     ServerConfig
+	Database   DatabaseConfig
+	Auth       AuthConfig
+	Dashboard  DashboardConfig
+	X402       X402Config
 	Stronghold StrongholdConfig
-	Pricing   PricingConfig
+	Pricing    PricingConfig
 }
 
 // ServerConfig holds HTTP server configuration
@@ -19,6 +23,29 @@ type ServerConfig struct {
 	Port         string
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
+}
+
+// DatabaseConfig holds PostgreSQL database configuration
+type DatabaseConfig struct {
+	Host     string
+	Port     string
+	User     string
+	Password string
+	Name     string
+	SSLMode  string
+}
+
+// AuthConfig holds JWT authentication configuration
+type AuthConfig struct {
+	JWTSecret       string
+	AccessTokenTTL  time.Duration
+	RefreshTokenTTL time.Duration
+}
+
+// DashboardConfig holds dashboard configuration
+type DashboardConfig struct {
+	URL            string
+	AllowedOrigins []string
 }
 
 // X402Config holds x402 payment configuration
@@ -54,6 +81,23 @@ func Load() *Config {
 			Port:         getEnv("PORT", "8080"),
 			ReadTimeout:  getDuration("SERVER_READ_TIMEOUT", 10*time.Second),
 			WriteTimeout: getDuration("SERVER_WRITE_TIMEOUT", 30*time.Second),
+		},
+		Database: DatabaseConfig{
+			Host:     getEnv("DB_HOST", "localhost"),
+			Port:     getEnv("DB_PORT", "5432"),
+			User:     getEnv("DB_USER", "stronghold"),
+			Password: getEnv("DB_PASSWORD", ""),
+			Name:     getEnv("DB_NAME", "stronghold"),
+			SSLMode:  getEnv("DB_SSLMODE", "require"),
+		},
+		Auth: AuthConfig{
+			JWTSecret:       getEnv("JWT_SECRET", ""),
+			AccessTokenTTL:  getDuration("ACCESS_TOKEN_TTL", 15*time.Minute),
+			RefreshTokenTTL: getDuration("REFRESH_TOKEN_TTL", 90*24*time.Hour),
+		},
+		Dashboard: DashboardConfig{
+			URL:            getEnv("DASHBOARD_URL", "http://localhost:3000"),
+			AllowedOrigins: getEnvSlice("DASHBOARD_ALLOWED_ORIGINS", []string{"http://localhost:3000"}),
 		},
 		X402: X402Config{
 			WalletAddress:  getEnv("X402_WALLET_ADDRESS", ""),
@@ -108,6 +152,13 @@ func getDuration(key string, defaultValue time.Duration) time.Duration {
 		if d, err := time.ParseDuration(value); err == nil {
 			return d
 		}
+	}
+	return defaultValue
+}
+
+func getEnvSlice(key string, defaultValue []string) []string {
+	if value := os.Getenv(key); value != "" {
+		return strings.Split(value, ",")
 	}
 	return defaultValue
 }

@@ -48,3 +48,10 @@ caddy_config/
 tmp/
 temp/
 *.tmp
+
+# Next.js build output
+web/.next/
+web/out/
+web/dist/
+web/node_modules/
+web/*.log

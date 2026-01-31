@@ -88,7 +88,7 @@ func AccountBalance() error {
 	return nil
 }
 
-// AccountDeposit shows deposit options
+// AccountDeposit shows deposit address for direct USDC deposits
 func AccountDeposit() error {
 	config, err := LoadConfig()
 	if err != nil {
@@ -101,37 +101,37 @@ func AccountDeposit() error {
 		return nil
 	}
 
-	if config.Wallet.Address == "" {
-		fmt.Println(accountWarningStyle.Render("⚠ Account not fully set up"))
-		fmt.Println(accountInfoStyle.Render("Run 'stronghold install' to complete account setup"))
-		return nil
-	}
-
 	fmt.Println(accountTitleStyle.Render("💳 Add Funds"))
 	fmt.Println()
 
-	fmt.Println("Your Account ID:")
-	fmt.Println(accountAddressStyle.Render("  " + config.Wallet.Address))
-	fmt.Println()
+	// Show account number for dashboard login
+	if config.Auth.AccountNumber != "" {
+		fmt.Println("Your Account Number:")
+		fmt.Println(accountAddressStyle.Render("  " + config.Auth.AccountNumber))
+		fmt.Println()
+	}
 
-	fmt.Println("Deposit Options:")
-	fmt.Println()
+	// Show wallet address for direct deposits
+	if config.Wallet.Address != "" {
+		fmt.Println("USDC Deposit Address (Base network):")
+		fmt.Println(accountAddressStyle.Render("  " + config.Wallet.Address))
+		fmt.Println()
 
-	fmt.Println(accountInfoStyle.Render("1. Dashboard (Recommended)"))
-	fmt.Println(accountInfoStyle.Render("   Visit: https://dashboard.stronghold.security"))
-	fmt.Println(accountInfoStyle.Render("   - Pay with card via Stripe"))
-	fmt.Println(accountInfoStyle.Render("   - Coinbase Pay"))
-	fmt.Println(accountInfoStyle.Render("   - Moonpay"))
-	fmt.Println()
+		fmt.Println(accountInfoStyle.Render("Send USDC on Base network to the address above."))
+		fmt.Println(accountInfoStyle.Render("Deposits are credited automatically after confirmation."))
+		fmt.Println()
+	}
 
-	fmt.Println(accountInfoStyle.Render("2. Direct Deposit"))
-	fmt.Println(accountInfoStyle.Render("   Send USDC on Base network to your Account ID above"))
+	fmt.Println(accountInfoStyle.Render("Or visit the dashboard:"))
+	fmt.Println(accountInfoStyle.Render("  https://dashboard.stronghold.security"))
+	fmt.Println(accountInfoStyle.Render("  - Pay with card via Stripe"))
+	fmt.Println(accountInfoStyle.Render("  - Coinbase Pay integration"))
 	fmt.Println()
 
 	fmt.Println(accountWarningStyle.Render("Important:"))
 	fmt.Println(accountInfoStyle.Render("  - Only send USDC on Base network"))
+	fmt.Println(accountInfoStyle.Render("  - Sending other tokens may result in permanent loss"))
 	fmt.Println(accountInfoStyle.Render("  - Deposits typically arrive in 1-2 minutes"))
-	fmt.Println(accountInfoStyle.Render("  - Dashboard provides the best experience"))
 
 	return nil
 }

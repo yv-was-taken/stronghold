@@ -10,6 +10,7 @@ const navLinks = [
   { label: 'Features', href: '#features' },
   { label: 'Pricing', href: '#pricing' },
   { label: 'Docs', href: '#docs' },
+  { label: 'Dashboard', href: '/dashboard' },
 ]
 
 export default function Navigation() {
@@ -76,9 +77,11 @@ export default function Navigation() {
             >
               <Github size={20} />
             </motion.a>
-            <Button variant="primary" size="sm">
-              Get Started
-            </Button>
+            <a href="/dashboard/create">
+              <Button variant="primary" size="sm">
+                Get Started
+              </Button>
+            </a>
           </div>
 
           {/* Mobile Menu Button */}

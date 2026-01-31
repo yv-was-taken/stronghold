@@ -27,10 +27,11 @@ type APIConfig struct {
 
 // AuthConfig holds authentication configuration
 type AuthConfig struct {
-	Token    string `yaml:"token"`
-	Email    string `yaml:"email"`
-	UserID   string `yaml:"user_id"`
-	LoggedIn bool   `yaml:"logged_in"`
+	Token         string `yaml:"token"`
+	Email         string `yaml:"email"`
+	UserID        string `yaml:"user_id"`
+	AccountNumber string `yaml:"account_number"`
+	LoggedIn      bool   `yaml:"logged_in"`
 }
 
 // WalletConfig holds wallet configuration
