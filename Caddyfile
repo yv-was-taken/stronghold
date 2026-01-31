@@ -1,0 +1,69 @@
+# Citadel API - Caddy Reverse Proxy Configuration
+# Replace api.citadel.security with your actual domain
+
+api.citadel.security {
+    # Enable compression
+    encode gzip zstd
+
+    # Security headers
+    header {
+        # CORS headers for x402
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Origin, Content-Type, Accept, X-PAYMENT, X-PAYMENT-RESPONSE, Authorization"
+        Access-Control-Expose-Headers "X-PAYMENT-RESPONSE"
+        Access-Control-Max-Age 300
+
+        # Security headers
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+
+        # Remove server identification
+        -Server
+    }
+
+    # Handle CORS preflight
+    @options method OPTIONS
+    respond @options 204
+
+    # Rate limiting (requires caddy-rate-limit module or use fail2ban)
+    # See deployment docs for rate limiting setup
+
+    # Reverse proxy to citadel-api
+    reverse_proxy localhost:8080 {
+        # Health checks
+        health_uri /health
+        health_interval 30s
+        health_timeout 10s
+
+        # Headers
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+
+        # Timeouts
+        transport http {
+            dial_timeout 10s
+            response_header_timeout 30s
+        }
+    }
+
+    # Logging
+    log {
+        output file /var/log/caddy/access.log {
+            roll_size 10MB
+            roll_keep 5
+            roll_keep_for 720h
+        }
+        format json
+    }
+
+    # TLS with Let's Encrypt (automatic)
+    tls {
+        protocols tls1.2 tls1.3
+    }
+}

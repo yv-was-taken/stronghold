@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  citadel-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8080:8080"  # Bind to localhost only - use reverse proxy for external access
+    environment:
+      - PORT=8080
+      - X402_WALLET_ADDRESS=${X402_WALLET_ADDRESS}
+      - X402_FACILITATOR_URL=${X402_FACILITATOR_URL:-https://x402.org/facilitator}
+      - X402_NETWORK=${X402_NETWORK:-base}
+      - CITADEL_BLOCK_THRESHOLD=${CITADEL_BLOCK_THRESHOLD:-0.55}
+      - CITADEL_WARN_THRESHOLD=${CITADEL_WARN_THRESHOLD:-0.35}
+      - CITADEL_ENABLE_HUGOT=${CITADEL_ENABLE_HUGOT:-true}
+      - CITADEL_ENABLE_SEMANTICS=${CITADEL_ENABLE_SEMANTICS:-true}
+      - HUGOT_MODEL_PATH=${HUGOT_MODEL_PATH:-./models}
+      - CITADEL_LLM_PROVIDER=${CITADEL_LLM_PROVIDER}
+      - CITADEL_LLM_API_KEY=${CITADEL_LLM_API_KEY}
+    volumes:
+      - ./models:/app/models:ro
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Caddy reverse proxy
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - CADDY_ADMIN=0.0.0.0:2019
+    depends_on:
+      - citadel-api
+    restart: unless-stopped
+    profiles:
+      - with-proxy
+
+volumes:
+  caddy_data:
+  caddy_config:

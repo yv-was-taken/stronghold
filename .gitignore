@@ -1,0 +1,50 @@
+# Binaries
+citadel-api
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binaries
+*.test
+
+# Output of go coverage
+*.out
+
+# Go vendor directory
+vendor/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Models (large files)
+models/*.onnx
+models/*.bin
+models/*.safetensors
+models/checkpoints/
+
+# Docker volumes
+caddy_data/
+caddy_config/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
