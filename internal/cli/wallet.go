@@ -10,45 +10,44 @@ import (
 )
 
 var (
-	walletTitleStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("#00D4AA"))
+	accountTitleStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#00D4AA"))
 
-	walletAddressStyle = lipgloss.NewStyle().
+	accountAddressStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(lipgloss.Color("#FFFFFF"))
 
-	walletBalanceStyle = lipgloss.NewStyle().
+	accountBalanceStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(lipgloss.Color("#00D4AA"))
 
-	walletInfoStyle = lipgloss.NewStyle().
+	accountInfoStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#888888"))
 
-	walletWarningStyle = lipgloss.NewStyle().
+	accountWarningStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#FFA500"))
 
-	walletErrorStyle = lipgloss.NewStyle().
+	accountErrorStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#FF4444"))
 )
 
-// WalletShow displays the wallet information
-func WalletShow() error {
+// AccountBalance displays the account balance and status
+func AccountBalance() error {
 	config, err := LoadConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
 	if !config.Auth.LoggedIn {
-		fmt.Println(walletErrorStyle.Render("✗ Not logged in"))
-		fmt.Println(walletInfoStyle.Render("Run 'stronghold install' to set up your account and wallet"))
+		fmt.Println(accountErrorStyle.Render("✗ Not logged in"))
+		fmt.Println(accountInfoStyle.Render("Run 'stronghold install' to set up your account"))
 		return nil
 	}
 
 	if config.Wallet.Address == "" {
-		fmt.Println(walletWarningStyle.Render("⚠ No wallet configured"))
-		fmt.Println(walletInfoStyle.Render("Your account doesn't have a wallet yet."))
-		fmt.Println(walletInfoStyle.Render("This will be set up automatically during account creation."))
+		fmt.Println(accountWarningStyle.Render("⚠ Account not fully set up"))
+		fmt.Println(accountInfoStyle.Render("Run 'stronghold install' to complete account setup"))
 		return nil
 	}
 
@@ -58,23 +57,15 @@ func WalletShow() error {
 		Network: config.Wallet.Network,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to load wallet: %w", err)
+		return fmt.Errorf("failed to load account: %w", err)
 	}
 
-	fmt.Println(walletTitleStyle.Render("💳 Stronghold Wallet"))
+	fmt.Println(accountTitleStyle.Render("💳 Account"))
 	fmt.Println()
 
 	// Display address
-	fmt.Println("Address:")
-	fmt.Println(walletAddressStyle.Render("  " + config.Wallet.Address))
-	fmt.Println()
-
-	// Display network
-	networkDisplay := "Base Mainnet"
-	if config.Wallet.Network == "base-sepolia" {
-		networkDisplay = "Base Sepolia (Testnet)"
-	}
-	fmt.Printf("Network: %s\n", walletInfoStyle.Render(networkDisplay))
+	fmt.Println("Account ID:")
+	fmt.Println(accountAddressStyle.Render("  " + config.Wallet.Address))
 	fmt.Println()
 
 	// Check balance
@@ -83,70 +74,65 @@ func WalletShow() error {
 
 	balance, err := w.GetBalanceHuman(ctx)
 	if err != nil {
-		fmt.Println(walletWarningStyle.Render("⚠ Could not fetch balance"))
-		fmt.Println(walletInfoStyle.Render(fmt.Sprintf("  Error: %v", err)))
+		fmt.Println(accountWarningStyle.Render("⚠ Could not fetch balance"))
+		fmt.Println(accountInfoStyle.Render(fmt.Sprintf("  Error: %v", err)))
 	} else {
-		fmt.Printf("Balance: %s\n", walletBalanceStyle.Render(fmt.Sprintf("%.6f USDC", balance)))
+		fmt.Printf("Balance: %s\n", accountBalanceStyle.Render(fmt.Sprintf("%.6f USDC", balance)))
 		if balance < 1.0 {
 			fmt.Println()
-			fmt.Println(walletWarningStyle.Render("⚠ Low balance"))
-			fmt.Println(walletInfoStyle.Render("  Visit https://dashboard.stronghold.security to add funds"))
-			fmt.Println(walletInfoStyle.Render("  Or send USDC directly to your wallet address above"))
+			fmt.Println(accountWarningStyle.Render("⚠ Low balance"))
+			fmt.Println(accountInfoStyle.Render("  Run 'stronghold account deposit' to add funds"))
 		}
 	}
 
+	return nil
+}
+
+// AccountDeposit shows deposit options
+func AccountDeposit() error {
+	config, err := LoadConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	if !config.Auth.LoggedIn {
+		fmt.Println(accountErrorStyle.Render("✗ Not logged in"))
+		fmt.Println(accountInfoStyle.Render("Run 'stronghold install' to set up your account"))
+		return nil
+	}
+
+	if config.Wallet.Address == "" {
+		fmt.Println(accountWarningStyle.Render("⚠ Account not fully set up"))
+		fmt.Println(accountInfoStyle.Render("Run 'stronghold install' to complete account setup"))
+		return nil
+	}
+
+	fmt.Println(accountTitleStyle.Render("💳 Add Funds"))
 	fmt.Println()
-	fmt.Println(walletInfoStyle.Render("To add funds:"))
-	fmt.Println(walletInfoStyle.Render("  1. Visit https://dashboard.stronghold.security"))
-	fmt.Println(walletInfoStyle.Render("  2. Sign in with your account"))
-	fmt.Println(walletInfoStyle.Render("  3. Use Stripe on-ramp or send USDC directly"))
 
-	return nil
-}
+	fmt.Println("Your Account ID:")
+	fmt.Println(accountAddressStyle.Render("  " + config.Wallet.Address))
+	fmt.Println()
 
-// WalletAddress returns just the wallet address (useful for scripting)
-func WalletAddress() error {
-	config, err := LoadConfig()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
+	fmt.Println("Deposit Options:")
+	fmt.Println()
 
-	if config.Wallet.Address == "" {
-		return fmt.Errorf("no wallet configured")
-	}
+	fmt.Println(accountInfoStyle.Render("1. Dashboard (Recommended)"))
+	fmt.Println(accountInfoStyle.Render("   Visit: https://dashboard.stronghold.security"))
+	fmt.Println(accountInfoStyle.Render("   - Pay with card via Stripe"))
+	fmt.Println(accountInfoStyle.Render("   - Coinbase Pay"))
+	fmt.Println(accountInfoStyle.Render("   - Moonpay"))
+	fmt.Println()
 
-	fmt.Println(config.Wallet.Address)
-	return nil
-}
+	fmt.Println(accountInfoStyle.Render("2. Direct Deposit"))
+	fmt.Println(accountInfoStyle.Render("   Send USDC on Base network to your Account ID above"))
+	fmt.Println()
 
-// WalletBalance returns just the balance (useful for scripting)
-func WalletBalance() error {
-	config, err := LoadConfig()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
+	fmt.Println(accountWarningStyle.Render("Important:"))
+	fmt.Println(accountInfoStyle.Render("  - Only send USDC on Base network"))
+	fmt.Println(accountInfoStyle.Render("  - Deposits typically arrive in 1-2 minutes"))
+	fmt.Println(accountInfoStyle.Render("  - Dashboard provides the best experience"))
 
-	if config.Wallet.Address == "" {
-		return fmt.Errorf("no wallet configured")
-	}
-
-	w, err := wallet.New(wallet.Config{
-		UserID:  config.Auth.UserID,
-		Network: config.Wallet.Network,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to load wallet: %w", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	balance, err := w.GetBalanceHuman(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get balance: %w", err)
-	}
-
-	fmt.Printf("%.6f\n", balance)
 	return nil
 }
 

@@ -62,9 +62,8 @@ Run `stronghold doctor` to verify your system meets all requirements.
 | `stronghold disable` | Stop proxy and restore direct access | Yes |
 | `stronghold status` | Show proxy status and statistics | No |
 | `stronghold logs` | View proxy logs | No |
-| `stronghold wallet show` | Display wallet address and balance | No |
-| `stronghold wallet address` | Show wallet address (for scripts) | No |
-| `stronghold wallet balance` | Show wallet balance (for scripts) | No |
+| `stronghold account balance` | Check your account balance | No |
+| `stronghold account deposit` | Show deposit options | No |
 | `stronghold uninstall` | Remove Stronghold from system | Yes |
 
 ### How It Works
@@ -96,35 +95,29 @@ The transparent proxy uses **iptables/nftables** (Linux) or **pf** (macOS) to in
 - Adds `X-Stronghold-Decision` headers to responses
 - Blocks malicious content before agents see it
 
-### Wallet Management
+### Account Management
 
-Stronghold creates an Ethereum wallet during installation to pay for API scanning via the x402 protocol. Your private key is stored securely in your operating system's keyring.
+Stronghold creates an account during installation to pay for API scanning. Your payment credentials are stored securely in your operating system's keyring.
 
-**View your wallet:**
+**Check your balance:**
 ```bash
-stronghold wallet show
+stronghold account balance
 ```
 
-**Check balance (script-friendly):**
+**Add funds:**
 ```bash
-stronghold wallet balance
+stronghold account deposit
 ```
 
-**Get address (script-friendly):**
-```bash
-stronghold wallet address
-```
-
-**Adding Funds:**
-1. Visit https://dashboard.stronghold.security
-2. Sign in with your account
-3. Use Stripe on-ramp or send USDC directly to your wallet address
+This shows options to deposit via:
+- **Dashboard**: Stripe, Coinbase Pay, or Moonpay (recommended)
+- **Direct**: Send USDC to your account ID
 
 **Security Notes:**
 - Private keys never leave your device
-- Keys are stored in OS-native keyring (macOS Keychain, Linux Secret Service/KWallet/pass, Windows Credential)
-- Only your wallet address is shared with the backend for account linking
-- Low balance warnings appear in `wallet show` when below 1 USDC
+- Credentials stored in OS-native keyring (macOS Keychain, Linux Secret Service/KWallet/pass, Windows Credential)
+- Only your account ID is shared with the backend for linking
+- Low balance warnings appear when below 1 USDC
 
 ### Architecture Overview
 

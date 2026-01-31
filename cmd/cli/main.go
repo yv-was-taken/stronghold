@@ -161,7 +161,7 @@ Your wallet balance will be preserved unless you explicitly delete your account.
 			if config.Auth.LoggedIn {
 				fmt.Printf("User: %s\n", config.Auth.Email)
 				if config.Wallet.Address != "" {
-					fmt.Printf("Wallet: %s\n", config.Wallet.Address)
+					fmt.Printf("Account: %s\n", config.Wallet.Address)
 				}
 			}
 			return nil
@@ -170,38 +170,36 @@ Your wallet balance will be preserved unless you explicitly delete your account.
 
 	configCmd.AddCommand(configGetCmd)
 
-	// Wallet command
-	walletCmd := &cobra.Command{
-		Use:   "wallet",
-		Short: "Manage your Stronghold wallet",
-		Long:  `View wallet address, check balance, and manage your USDC funds.`,
+	// Account command
+	accountCmd := &cobra.Command{
+		Use:   "account",
+		Short: "Manage your Stronghold account",
+		Long:  `View balance, deposit funds, and manage your account.`,
 	}
 
-	walletShowCmd := &cobra.Command{
-		Use:   "show",
-		Short: "Display wallet information",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return cli.WalletShow()
-		},
-	}
-
-	walletAddressCmd := &cobra.Command{
-		Use:   "address",
-		Short: "Show wallet address only (for scripts)",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return cli.WalletAddress()
-		},
-	}
-
-	walletBalanceCmd := &cobra.Command{
+	accountBalanceCmd := &cobra.Command{
 		Use:   "balance",
-		Short: "Show wallet balance only (for scripts)",
+		Short: "Check your account balance",
+		Long:  `Display your current balance and account status.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return cli.WalletBalance()
+			return cli.AccountBalance()
 		},
 	}
 
-	walletCmd.AddCommand(walletShowCmd, walletAddressCmd, walletBalanceCmd)
+	accountDepositCmd := &cobra.Command{
+		Use:   "deposit",
+		Short: "Add funds to your account",
+		Long: `Show deposit options to add funds to your account.
+
+You can deposit via:
+  - Dashboard: Use Stripe, Coinbase Pay, or Moonpay (recommended)
+  - Direct: Send USDC directly to your account address`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cli.AccountDeposit()
+		},
+	}
+
+	accountCmd.AddCommand(accountBalanceCmd, accountDepositCmd)
 
 	// Doctor command
 	doctorCmd := &cobra.Command{
@@ -233,7 +231,7 @@ Run this before 'stronghold install' to catch issues early.`,
 		uninstallCmd,
 		logsCmd,
 		configCmd,
-		walletCmd,
+		accountCmd,
 		doctorCmd,
 	)
 
