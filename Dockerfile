@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.23-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o citadel-api ./cmd/api/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o stronghold-api ./cmd/api/main.go
 
 # Final stage
 FROM alpine:latest
@@ -25,7 +25,7 @@ WORKDIR /app
 RUN apk --no-cache add ca-certificates
 
 # Copy binary from builder
-COPY --from=builder /app/citadel-api .
+COPY --from=builder /app/stronghold-api .
 
 # Copy any model files if they exist
 COPY --from=builder /app/models ./models
@@ -34,4 +34,4 @@ COPY --from=builder /app/models ./models
 EXPOSE 8080
 
 # Run the binary
-CMD ["./citadel-api"]
+CMD ["./stronghold-api"]
