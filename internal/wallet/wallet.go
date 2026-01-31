@@ -383,15 +383,14 @@ func CheckKeyringAvailability() (available bool, backend string, err error) {
 	case "darwin":
 		backend = "keychain"
 	case "linux":
-		// Check which backends are available
+		// Check which backend was successfully opened
+		// We only reach here if openKeyring() succeeded
 		if hasSecretService() {
 			backend = "secret-service"
 		} else if hasKWallet() {
 			backend = "kwallet"
-		} else if hasPass() {
-			backend = "pass"
 		} else {
-			backend = "file"
+			backend = "pass"
 		}
 	case "windows":
 		backend = "wincred"

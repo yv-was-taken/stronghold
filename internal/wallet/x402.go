@@ -2,6 +2,7 @@
 package wallet
 
 import (
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -84,7 +85,10 @@ func (w *Wallet) CreateX402Payment(req *PaymentRequirements) (string, error) {
 	}
 
 	// Create payment payload
-	nonce := generateNonce()
+	nonce, err := generateNonce()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate payment nonce: %w", err)
+	}
 	payload := X402Payload{
 		Network:      x402Config.Network,
 		Scheme:       "x402",
@@ -256,13 +260,13 @@ func ParseX402Payment(paymentHeader string) (*X402Payload, error) {
 
 // Helper functions
 
-func generateNonce() string {
-	// Generate a random nonce
+func generateNonce() (string, error) {
+	// Generate a cryptographically secure random nonce
 	b := make([]byte, 16)
-	for i := range b {
-		b[i] = byte(time.Now().UnixNano() & 0xff)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("failed to generate nonce: %w", err)
 	}
-	return fmt.Sprintf("%x", b)
+	return fmt.Sprintf("%x", b), nil
 }
 
 func getChainID(network string) int {
