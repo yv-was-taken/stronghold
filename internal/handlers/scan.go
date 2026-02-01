@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"stronghold/internal/db"
 	"stronghold/internal/middleware"
 	"stronghold/internal/stronghold"
 
@@ -11,6 +12,7 @@ import (
 type ScanHandler struct {
 	scanner *stronghold.Scanner
 	x402    *middleware.X402Middleware
+	db      *db.DB
 }
 
 // NewScanHandler creates a new scan handler
@@ -18,6 +20,15 @@ func NewScanHandler(scanner *stronghold.Scanner, x402 *middleware.X402Middleware
 	return &ScanHandler{
 		scanner: scanner,
 		x402:    x402,
+	}
+}
+
+// NewScanHandlerWithDB creates a new scan handler with database support
+func NewScanHandlerWithDB(scanner *stronghold.Scanner, x402 *middleware.X402Middleware, database *db.DB) *ScanHandler {
+	return &ScanHandler{
+		scanner: scanner,
+		x402:    x402,
+		db:      database,
 	}
 }
 
@@ -52,20 +63,31 @@ type ScanMultiturnRequest struct {
 func (h *ScanHandler) RegisterRoutes(app *fiber.App) {
 	group := app.Group("/v1/scan")
 
-	// Content scanning - for external content (websites, files, APIs) - $0.001
-	group.Post("/content", h.x402.RequirePayment(0.001), h.ScanContent)
+	// Use AtomicPayment for atomic settlement when database is available
+	// This ensures service is only delivered when payment is confirmed
+	if h.db != nil {
+		// Content scanning - for external content (websites, files, APIs) - $0.001
+		group.Post("/content", h.x402.AtomicPayment(0.001), h.ScanContent)
 
-	// Output scanning - for LLM/agent output credential leak detection - $0.001
-	group.Post("/output", h.x402.RequirePayment(0.001), h.ScanOutput)
+		// Output scanning - for LLM/agent output credential leak detection - $0.001
+		group.Post("/output", h.x402.AtomicPayment(0.001), h.ScanOutput)
 
-	// Unified scanning - $0.002
-	group.Post("/", h.x402.RequirePayment(0.002), h.ScanUnified)
+		// Unified scanning - $0.002
+		group.Post("/", h.x402.AtomicPayment(0.002), h.ScanUnified)
 
-	// Multi-turn scanning - $0.005
-	group.Post("/multiturn", h.x402.RequirePayment(0.005), h.ScanMultiturn)
+		// Multi-turn scanning - $0.005
+		group.Post("/multiturn", h.x402.AtomicPayment(0.005), h.ScanMultiturn)
 
-	// Deprecated: /input endpoint - redirects to /content for backward compatibility
-	group.Post("/input", h.x402.RequirePayment(0.001), h.ScanContent)
+		// Deprecated: /input endpoint - redirects to /content for backward compatibility
+		group.Post("/input", h.x402.AtomicPayment(0.001), h.ScanContent)
+	} else {
+		// Fallback to non-atomic payment (original behavior)
+		group.Post("/content", h.x402.RequirePayment(0.001), h.ScanContent)
+		group.Post("/output", h.x402.RequirePayment(0.001), h.ScanOutput)
+		group.Post("/", h.x402.RequirePayment(0.002), h.ScanUnified)
+		group.Post("/multiturn", h.x402.RequirePayment(0.005), h.ScanMultiturn)
+		group.Post("/input", h.x402.RequirePayment(0.001), h.ScanContent)
+	}
 }
 
 // ScanContent handles external content scanning for prompt injection
@@ -115,6 +137,10 @@ func (h *ScanHandler) ScanContent(c fiber.Ctx) error {
 	result.Metadata["file_path"] = req.FilePath
 
 	result.RequestID = requestID
+
+	// Record execution result in payment transaction for idempotent replay
+	h.recordExecutionResult(c, result)
+
 	h.x402.PaymentResponse(c, result.RequestID)
 
 	return c.JSON(result)
@@ -158,6 +184,10 @@ func (h *ScanHandler) ScanOutput(c fiber.Ctx) error {
 	}
 
 	result.RequestID = requestID
+
+	// Record execution result in payment transaction for idempotent replay
+	h.recordExecutionResult(c, result)
+
 	h.x402.PaymentResponse(c, result.RequestID)
 
 	return c.JSON(result)
@@ -213,6 +243,10 @@ func (h *ScanHandler) ScanUnified(c fiber.Ctx) error {
 	}
 
 	result.RequestID = requestID
+
+	// Record execution result in payment transaction for idempotent replay
+	h.recordExecutionResult(c, result)
+
 	h.x402.PaymentResponse(c, result.RequestID)
 
 	return c.JSON(result)
@@ -263,7 +297,42 @@ func (h *ScanHandler) ScanMultiturn(c fiber.Ctx) error {
 	}
 
 	result.RequestID = requestID
+
+	// Record execution result in payment transaction for idempotent replay
+	h.recordExecutionResult(c, result)
+
 	h.x402.PaymentResponse(c, result.RequestID)
 
 	return c.JSON(result)
+}
+
+// recordExecutionResult stores the scan result in the payment transaction for idempotent replay
+func (h *ScanHandler) recordExecutionResult(c fiber.Ctx, result *stronghold.ScanResult) {
+	if h.db == nil {
+		return
+	}
+
+	tx := middleware.GetPaymentTransaction(c)
+	if tx == nil {
+		return
+	}
+
+	// Convert result to map for storage
+	resultMap := map[string]interface{}{
+		"request_id":         result.RequestID,
+		"decision":           result.Decision,
+		"scores":             result.Scores,
+		"reason":             result.Reason,
+		"latency_ms":         result.LatencyMs,
+		"metadata":           result.Metadata,
+		"sanitized_text":     result.SanitizedText,
+		"threats_found":      result.ThreatsFound,
+		"recommended_action": result.RecommendedAction,
+	}
+
+	if err := h.db.RecordExecution(c.Context(), tx.ID, resultMap); err != nil {
+		// Log but don't fail - the result was already computed
+		// The middleware will still attempt settlement
+		_ = err
+	}
 }

@@ -22,9 +22,12 @@ func main() {
 		log.Fatalf("Failed to create server: %v", err)
 	}
 
-	// Start server in a goroutine
+	// Create a context that will be cancelled on shutdown signal
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Start server in a goroutine (includes settlement worker)
 	go func() {
-		if err := srv.Start(); err != nil {
+		if err := srv.Start(ctx); err != nil {
 			log.Fatalf("Server error: %v", err)
 		}
 	}()
@@ -36,11 +39,14 @@ func main() {
 
 	log.Println("Shutting down...")
 
-	// Graceful shutdown with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	// Cancel context to signal workers to stop
+	cancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
+	// Graceful shutdown with timeout
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 
