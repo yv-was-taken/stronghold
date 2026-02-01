@@ -14,29 +14,11 @@ This document tracks the remaining work needed to launch Stronghold in productio
 - [ ] **Fix JWT_SECRET dev fallback** - `internal/handlers/auth.go:31` falls back to insecure default
   - Change to `log.Fatal()` if `JWT_SECRET` env var is not set in production
 
-- [ ] **Add rate limiting** - No rate limiting exists anywhere
-  - Protect `/v1/auth/login` from brute force
-  - Add Fiber limiter middleware to sensitive endpoints
-
-- [x] **Move tokens to httpOnly cookies** - `web/components/providers/AuthProvider.tsx:118` stores tokens in localStorage
-  - Vulnerable to XSS attacks
-  - Implement secure cookie-based auth flow
-
-- [ ] **Make payment settlement atomic** - `internal/middleware/x402.go:332-338`
-  - Response is sent before payment settlement is confirmed
-  - Risk: service delivered without payment captured
-
 ## High Priority
 
 - [ ] **Add structured logging** - Currently using basic `log` package
   - Switch to `log/slog` or `zap` with JSON output
-  - ~~Add request ID to all log entries~~ (done - request IDs now included in logs)
   - Resolve TODO at `internal/handlers/auth.go:196`
-
-- [ ] **Fix health endpoint** - `internal/handlers/health.go:73` returns hardcoded "up"
-  - `/health/ready` should check DB connectivity
-  - Should verify x402 facilitator is reachable
-  - Resolve TODO: "Check actual dependencies"
 
 - [ ] **Add CI/CD test step** - `.github/workflows/deploy.yml` and `fly-deploy.yml` deploy without testing
   - Add `go test ./...` step
@@ -49,10 +31,6 @@ This document tracks the remaining work needed to launch Stronghold in productio
   - [ ] Real Stripe checkout integration (currently placeholder at `internal/handlers/account.go:298`)
   - [ ] Error boundaries for React components
   - [ ] Better loading states
-
-- [x] **Add request ID tracking** - Missing distributed tracing
-  - Generate UUID per request
-  - Include in all log entries and error responses
 
 ## Medium Priority
 
@@ -95,9 +73,9 @@ Before going live:
 - [ ] `DB_PASSWORD` changed from default
 - [ ] Database migrations executed
 - [ ] CORS origins configured for production domain
-- [ ] Rate limiting enabled
+- [x] Rate limiting enabled
 - [ ] Structured logging verified
-- [ ] Health checks returning accurate status
+- [x] Health checks returning accurate status
 - [ ] No secrets in git history
 - [ ] SSL/TLS certificates configured
 - [ ] Database backups configured
@@ -107,7 +85,7 @@ Before going live:
 
 Current state:
 - **Core scanning**: Functional with 4-layer detection (heuristics, ML, semantic, LLM)
-- **Payment flow**: x402 integration works but settlement is fire-and-forget
+- **Payment flow**: x402 integration with atomic settlement (reserve-commit pattern)
 - **Database**: Well-structured schema with proper indexes and constraints
 - **CLI/Proxy**: Transparent proxy implementation complete
 - **Docker/Deployment**: Good configuration with health checks and resource limits
