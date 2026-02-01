@@ -3,7 +3,6 @@ package handlers
 import (
 	"fmt"
 	"net"
-	"os"
 	"strings"
 	"time"
 
@@ -29,23 +28,6 @@ type AuthConfig struct {
 	DashboardURL    string
 	AllowedOrigins  []string
 	Cookie          CookieConfig
-}
-
-// LoadAuthConfig loads auth configuration from environment
-func LoadAuthConfig() *AuthConfig {
-	secret := getEnv("JWT_SECRET", "")
-	if secret == "" {
-		// In production, this should fail hard
-		secret = "development-secret-do-not-use-in-production"
-	}
-
-	return &AuthConfig{
-		JWTSecret:       secret,
-		AccessTokenTTL:  getDuration("ACCESS_TOKEN_TTL", 15*time.Minute),
-		RefreshTokenTTL: getDuration("REFRESH_TOKEN_TTL", 90*24*time.Hour), // 90 days
-		DashboardURL:    getEnv("DASHBOARD_URL", "http://localhost:3000"),
-		AllowedOrigins:  strings.Split(getEnv("DASHBOARD_ALLOWED_ORIGINS", "http://localhost:3000"), ","),
-	}
 }
 
 // AuthHandler handles authentication endpoints
@@ -572,19 +554,3 @@ This file was generated automatically. Do not modify its contents.
 `, accountNumber, accountID, time.Now().UTC().Format(time.RFC3339), accountNumber)
 }
 
-// Helper functions
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
-
-func getDuration(key string, defaultValue time.Duration) time.Duration {
-	if value := os.Getenv(key); value != "" {
-		if d, err := time.ParseDuration(value); err == nil {
-			return d
-		}
-	}
-	return defaultValue
-}

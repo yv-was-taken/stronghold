@@ -16,6 +16,11 @@ func main() {
 	// Load configuration
 	cfg := config.Load()
 
+	// Validate configuration - fails in production if critical values are missing
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("Configuration error: %v", err)
+	}
+
 	// Create server
 	srv, err := server.New(cfg)
 	if err != nil {

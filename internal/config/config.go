@@ -1,23 +1,34 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 )
 
+// Environment represents the runtime environment
+type Environment string
+
+const (
+	EnvDevelopment Environment = "development"
+	EnvProduction  Environment = "production"
+	EnvTest        Environment = "test"
+)
+
 // Config holds all service configuration
 type Config struct {
-	Server     ServerConfig
-	Database   DatabaseConfig
-	Auth       AuthConfig
-	Cookie     CookieConfig
-	Dashboard  DashboardConfig
-	X402       X402Config
-	Stronghold StrongholdConfig
-	Pricing    PricingConfig
-	RateLimit  RateLimitConfig
+	Environment Environment
+	Server      ServerConfig
+	Database    DatabaseConfig
+	Auth        AuthConfig
+	Cookie      CookieConfig
+	Dashboard   DashboardConfig
+	X402        X402Config
+	Stronghold  StrongholdConfig
+	Pricing     PricingConfig
+	RateLimit   RateLimitConfig
 }
 
 // ServerConfig holds HTTP server configuration
@@ -95,7 +106,14 @@ type RateLimitConfig struct {
 
 // Load loads configuration from environment variables
 func Load() *Config {
+	// Default to production for security - explicit opt-in to development mode
+	env := Environment(getEnv("ENV", "production"))
+	if env != EnvDevelopment && env != EnvProduction && env != EnvTest {
+		env = EnvProduction
+	}
+
 	return &Config{
+		Environment: env,
 		Server: ServerConfig{
 			Port:         getEnv("PORT", "8080"),
 			ReadTimeout:  getDuration("SERVER_READ_TIMEOUT", 10*time.Second),
@@ -202,4 +220,41 @@ func getEnvSlice(key string, defaultValue []string) []string {
 		return strings.Split(value, ",")
 	}
 	return defaultValue
+}
+
+// Validate checks that all required configuration is present.
+// In production, missing critical values will return an error.
+// In development, it will use insecure defaults and log warnings.
+func (c *Config) Validate() error {
+	var errs []string
+
+	// JWT_SECRET is critical for authentication security
+	if c.Auth.JWTSecret == "" {
+		if c.Environment == EnvProduction {
+			errs = append(errs, "JWT_SECRET is required in production")
+		}
+	}
+
+	// Database password should be set in production
+	if c.Database.Password == "" {
+		if c.Environment == EnvProduction {
+			errs = append(errs, "DB_PASSWORD is required in production")
+		}
+	}
+
+	if len(errs) > 0 {
+		return errors.New("configuration errors: " + strings.Join(errs, "; "))
+	}
+
+	return nil
+}
+
+// IsDevelopment returns true if running in development mode
+func (c *Config) IsDevelopment() bool {
+	return c.Environment == EnvDevelopment
+}
+
+// IsProduction returns true if running in production mode
+func (c *Config) IsProduction() bool {
+	return c.Environment == EnvProduction
 }

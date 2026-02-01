@@ -11,8 +11,10 @@ This document tracks the remaining work needed to launch Stronghold in productio
   - [x] Integration tests for API endpoints (`internal/server/server_integration_test.go`)
   - [x] Frontend component tests (Button, AuthProvider, Login page, utils)
 
-- [ ] **Fix JWT_SECRET dev fallback** - `internal/handlers/auth.go:31` falls back to insecure default
-  - Change to `log.Fatal()` if `JWT_SECRET` env var is not set in production
+- [x] **Fix JWT_SECRET dev fallback** - Now validates at startup
+  - Added `ENV` environment variable (`development`/`production`/`test`)
+  - Added `Config.Validate()` that fails if `JWT_SECRET` or `DB_PASSWORD` missing in production
+  - Removed insecure fallback from `internal/handlers/auth.go`
 
 ## High Priority
 
@@ -69,7 +71,7 @@ This document tracks the remaining work needed to launch Stronghold in productio
 Before going live:
 
 - [x] All tests passing
-- [ ] `JWT_SECRET` configured (not using default)
+- [x] `JWT_SECRET` configured (validated at startup in production)
 - [ ] `DB_PASSWORD` changed from default
 - [ ] Database migrations executed
 - [ ] CORS origins configured for production domain
