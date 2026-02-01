@@ -87,6 +87,11 @@ func (db *DB) Pool() *pgxpool.Pool {
 	return db.pool
 }
 
+// Ping checks database connectivity
+func (db *DB) Ping(ctx context.Context) error {
+	return db.pool.Ping(ctx)
+}
+
 // BeginTx starts a new transaction
 func (db *DB) BeginTx(ctx context.Context) (pgx.Tx, error) {
 	return db.pool.Begin(ctx)

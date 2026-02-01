@@ -124,7 +124,7 @@ func (s *Server) setupRoutes() {
 	x402 := middleware.NewX402Middleware(&s.config.X402, &s.config.Pricing)
 
 	// Health handler (no payment required)
-	healthHandler := handlers.NewHealthHandler()
+	healthHandler := handlers.NewHealthHandler(s.database, s.config)
 	healthHandler.RegisterRoutes(s.app)
 
 	// Pricing handler (no payment required)
