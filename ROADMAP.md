@@ -30,9 +30,12 @@ This document tracks the remaining work needed to launch Stronghold in productio
 
 - [x] **Complete dashboard** - `web/app/dashboard/main/`
   - [x] Billing/usage history page with stats, usage logs, and deposits tables
-  - [ ] Real Stripe checkout integration (currently placeholder at `internal/handlers/account.go:298`)
   - [x] Error boundaries for React components
   - [x] Better loading states with skeleton placeholders
+
+- [ ] **Stripe checkout integration** - Currently placeholder at `internal/handlers/account.go:298`
+  - Deposit flow works but returns fake checkout URL
+  - Direct crypto deposits work without Stripe
 
 ## Medium Priority
 
