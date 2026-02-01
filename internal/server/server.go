@@ -10,6 +10,7 @@ import (
 	"stronghold/internal/db"
 	"stronghold/internal/handlers"
 	"stronghold/internal/middleware"
+	"stronghold/internal/settlement"
 	"stronghold/internal/stronghold"
 
 	"github.com/gofiber/fiber/v3"
@@ -20,11 +21,12 @@ import (
 
 // Server represents the HTTP server
 type Server struct {
-	app       *fiber.App
-	config    *config.Config
-	scanner   *stronghold.Scanner
-	database  *db.DB
-	authHandler *handlers.AuthHandler
+	app              *fiber.App
+	config           *config.Config
+	scanner          *stronghold.Scanner
+	database         *db.DB
+	authHandler      *handlers.AuthHandler
+	settlementWorker *settlement.Worker
 }
 
 // New creates a new server instance
@@ -71,22 +73,23 @@ func New(cfg *config.Config) (*Server, error) {
 		ErrorHandler: errorHandler,
 	})
 
+	// Create settlement worker for background retry of failed settlements
+	settlementWorker := settlement.NewWorker(database, &cfg.X402, nil)
+
 	s := &Server{
-		app:         app,
-		config:      cfg,
-		scanner:     scanner,
-		database:    database,
-		authHandler: authHandler,
+		app:              app,
+		config:           cfg,
+		scanner:          scanner,
+		database:         database,
+		authHandler:      authHandler,
+		settlementWorker: settlementWorker,
 	}
 
 	// Setup middleware
 	s.setupMiddleware()
 
-	// Setup routes
+	// Setup routes (now uses atomic payment middleware)
 	s.setupRoutes()
-
-	// Setup post-route middleware (for payment settlement)
-	s.setupPostMiddleware()
 
 	return s, nil
 }
@@ -118,22 +121,15 @@ func (s *Server) setupMiddleware() {
 		MaxAge:           300,
 	}))
 
-	// x402 payment middleware (applied to all routes except auth)
-	x402 := middleware.NewX402Middleware(&s.config.X402, &s.config.Pricing)
-	s.app.Use(x402.Middleware())
-}
-
-// setupPostMiddleware configures middleware that runs after routes
-func (s *Server) setupPostMiddleware() {
-	// x402 settlement middleware (settles payments after successful responses)
-	x402 := middleware.NewX402Middleware(&s.config.X402, &s.config.Pricing)
-	s.app.Use(x402.SettleAfterHandler())
+	// Note: x402 payment middleware is now applied per-route via AtomicPayment
+	// for atomic settlement. This removes the global Middleware() and SettleAfterHandler()
+	// which had the race condition where settlement could fail after service delivery.
 }
 
 // setupRoutes configures all routes
 func (s *Server) setupRoutes() {
-	// Initialize x402 middleware for handlers
-	x402 := middleware.NewX402Middleware(&s.config.X402, &s.config.Pricing)
+	// Initialize x402 middleware with database for atomic payments
+	x402 := middleware.NewX402MiddlewareWithDB(&s.config.X402, &s.config.Pricing, s.database)
 
 	// Initialize rate limiter for auth routes
 	rateLimiter := middleware.NewRateLimitMiddleware(&s.config.RateLimit)
@@ -164,8 +160,8 @@ func (s *Server) setupRoutes() {
 	})
 	accountHandler.RegisterRoutes(s.app, s.authHandler)
 
-	// Scan handlers (payment required)
-	scanHandler := handlers.NewScanHandler(s.scanner, x402)
+	// Scan handlers (payment required - now uses AtomicPayment for atomic settlement)
+	scanHandler := handlers.NewScanHandlerWithDB(s.scanner, x402, s.database)
 	scanHandler.RegisterRoutes(s.app)
 
 	// 404 handler
@@ -179,8 +175,13 @@ func (s *Server) setupRoutes() {
 	})
 }
 
-// Start starts the HTTP server
-func (s *Server) Start() error {
+// Start starts the HTTP server and background workers
+func (s *Server) Start(ctx context.Context) error {
+	// Start settlement worker for background retry of failed settlements
+	if s.settlementWorker != nil {
+		s.settlementWorker.Start(ctx)
+	}
+
 	addr := fmt.Sprintf(":%s", s.config.Server.Port)
 	log.Printf("Starting Stronghold API server on %s", addr)
 	return s.app.Listen(addr)
@@ -189,6 +190,11 @@ func (s *Server) Start() error {
 // Shutdown gracefully shuts down the server
 func (s *Server) Shutdown(ctx context.Context) error {
 	log.Println("Shutting down server...")
+
+	// Stop settlement worker first to prevent new retries
+	if s.settlementWorker != nil {
+		s.settlementWorker.Stop()
+	}
 
 	// Close database connection
 	if s.database != nil {
