@@ -102,6 +102,9 @@ func (s *Server) setupMiddleware() {
 	// Request ID middleware - must be early to ensure ID is available for logging
 	s.app.Use(middleware.RequestID())
 
+	// Security headers middleware - sets CSP, X-Frame-Options, etc.
+	s.app.Use(middleware.SecurityHeaders())
+
 	// Logger middleware - includes request ID
 	s.app.Use(logger.New(logger.Config{
 		Format: "[${time}] ${status} - ${method} ${path} ${latency} [${locals:request_id}]\n",

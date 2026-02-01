@@ -13,6 +13,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// DefaultQueryTimeout is the maximum time allowed for database queries.
+// This prevents hanging queries from causing outages.
+const DefaultQueryTimeout = 30 * time.Second
+
 // DB wraps a PostgreSQL connection pool
 type DB struct {
 	pool *pgxpool.Pool
@@ -92,24 +96,31 @@ func (db *DB) Ping(ctx context.Context) error {
 	return db.pool.Ping(ctx)
 }
 
-// BeginTx starts a new transaction
+// BeginTx starts a new transaction.
+// Note: Callers are responsible for managing transaction timeouts via the provided context.
 func (db *DB) BeginTx(ctx context.Context) (pgx.Tx, error) {
 	return db.pool.Begin(ctx)
 }
 
 // Exec executes a query without returning rows
 func (db *DB) Exec(ctx context.Context, sql string, args ...interface{}) error {
+	ctx, cancel := context.WithTimeout(ctx, DefaultQueryTimeout)
+	defer cancel()
 	_, err := db.pool.Exec(ctx, sql, args...)
 	return err
 }
 
 // QueryRow executes a query that returns a single row
 func (db *DB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+	ctx, cancel := context.WithTimeout(ctx, DefaultQueryTimeout)
+	defer cancel()
 	return db.pool.QueryRow(ctx, sql, args...)
 }
 
 // Query executes a query that returns multiple rows
 func (db *DB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	ctx, cancel := context.WithTimeout(ctx, DefaultQueryTimeout)
+	defer cancel()
 	return db.pool.Query(ctx, sql, args...)
 }
 
