@@ -26,13 +26,13 @@ This document tracks the remaining work needed to launch Stronghold in productio
   - [x] `go test -race ./...` with coverage reporting
   - [x] `golangci-lint` for code quality
   - [x] Frontend tests with Vitest (`bun run test:run`)
-  - [ ] Consider consolidating duplicate workflow files
+  - [x] Removed duplicate `fly-deploy.yml` (was targeting wrong branch)
 
-- [ ] **Complete dashboard** - `web/app/dashboard/main/`
-  - [ ] Billing/usage history page (missing entirely)
+- [x] **Complete dashboard** - `web/app/dashboard/main/`
+  - [x] Billing/usage history page with stats, usage logs, and deposits tables
   - [ ] Real Stripe checkout integration (currently placeholder at `internal/handlers/account.go:298`)
-  - [ ] Error boundaries for React components
-  - [ ] Better loading states
+  - [x] Error boundaries for React components
+  - [x] Better loading states with skeleton placeholders
 
 ## Medium Priority
 
