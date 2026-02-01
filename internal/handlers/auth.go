@@ -138,7 +138,17 @@ func (h *AuthHandler) parseSameSite() string {
 
 // RegisterRoutes registers auth routes
 func (h *AuthHandler) RegisterRoutes(app *fiber.App) {
+	h.RegisterRoutesWithMiddleware(app)
+}
+
+// RegisterRoutesWithMiddleware registers auth routes with optional middleware
+func (h *AuthHandler) RegisterRoutesWithMiddleware(app *fiber.App, middlewares ...fiber.Handler) {
 	group := app.Group("/v1/auth")
+
+	// Apply any provided middleware to the group
+	for _, mw := range middlewares {
+		group.Use(mw)
+	}
 
 	group.Post("/account", h.CreateAccount)
 	group.Post("/login", h.Login)

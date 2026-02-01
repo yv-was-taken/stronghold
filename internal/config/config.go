@@ -17,6 +17,7 @@ type Config struct {
 	X402       X402Config
 	Stronghold StrongholdConfig
 	Pricing    PricingConfig
+	RateLimit  RateLimitConfig
 }
 
 // ServerConfig holds HTTP server configuration
@@ -82,6 +83,16 @@ type PricingConfig struct {
 	ScanMultiturn float64
 }
 
+// RateLimitConfig holds rate limiting configuration
+type RateLimitConfig struct {
+	Enabled       bool
+	WindowSeconds int
+	MaxRequests   int
+	LoginMax      int
+	AccountMax    int
+	RefreshMax    int
+}
+
 // Load loads configuration from environment variables
 func Load() *Config {
 	return &Config{
@@ -132,6 +143,14 @@ func Load() *Config {
 			ScanUnified:   getFloat("PRICE_SCAN_UNIFIED", 0.002),
 			ScanMultiturn: getFloat("PRICE_SCAN_MULTITURN", 0.005),
 		},
+		RateLimit: RateLimitConfig{
+			Enabled:       getBool("RATE_LIMIT_ENABLED", true),
+			WindowSeconds: getInt("RATE_LIMIT_WINDOW_SECONDS", 60),
+			MaxRequests:   getInt("RATE_LIMIT_MAX_REQUESTS", 100),
+			LoginMax:      getInt("RATE_LIMIT_LOGIN_MAX", 5),
+			AccountMax:    getInt("RATE_LIMIT_ACCOUNT_MAX", 3),
+			RefreshMax:    getInt("RATE_LIMIT_REFRESH_MAX", 10),
+		},
 	}
 }
 
@@ -155,6 +174,15 @@ func getFloat(key string, defaultValue float64) float64 {
 	if value := os.Getenv(key); value != "" {
 		if f, err := strconv.ParseFloat(value, 64); err == nil {
 			return f
+		}
+	}
+	return defaultValue
+}
+
+func getInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if i, err := strconv.Atoi(value); err == nil {
+			return i
 		}
 	}
 	return defaultValue

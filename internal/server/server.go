@@ -104,6 +104,10 @@ func (s *Server) setupMiddleware() {
 		Format: "[${time}] ${status} - ${method} ${path} ${latency} [${locals:request_id}]\n",
 	}))
 
+	// Rate limiting middleware (general limits)
+	rateLimiter := middleware.NewRateLimitMiddleware(&s.config.RateLimit)
+	s.app.Use(rateLimiter.Middleware())
+
 	// CORS middleware - configured for dashboard, x402 headers, and request tracking
 	s.app.Use(cors.New(cors.Config{
 		AllowOrigins:     s.config.Dashboard.AllowedOrigins,
@@ -131,6 +135,9 @@ func (s *Server) setupRoutes() {
 	// Initialize x402 middleware for handlers
 	x402 := middleware.NewX402Middleware(&s.config.X402, &s.config.Pricing)
 
+	// Initialize rate limiter for auth routes
+	rateLimiter := middleware.NewRateLimitMiddleware(&s.config.RateLimit)
+
 	// Health handler (no payment required)
 	healthHandler := handlers.NewHealthHandler(s.database, s.config)
 	healthHandler.RegisterRoutes(s.app)
@@ -139,8 +146,8 @@ func (s *Server) setupRoutes() {
 	pricingHandler := handlers.NewPricingHandler(x402)
 	pricingHandler.RegisterRoutes(s.app)
 
-	// Auth handlers (no payment required)
-	s.authHandler.RegisterRoutes(s.app)
+	// Auth handlers with stricter rate limiting
+	s.authHandler.RegisterRoutesWithMiddleware(s.app, rateLimiter.AuthLimiter())
 
 	// Account handlers (no payment required for account management)
 	accountHandler := handlers.NewAccountHandler(s.database, &handlers.AuthConfig{
