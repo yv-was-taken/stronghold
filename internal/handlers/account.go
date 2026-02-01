@@ -46,6 +46,15 @@ func (h *AccountHandler) RegisterRoutes(app *fiber.App, authHandler *AuthHandler
 }
 
 // GetAccount returns the current account details
+// @Summary Get account details
+// @Description Returns the authenticated user's account details including balance and deposit stats
+// @Tags account
+// @Produce json
+// @Success 200 {object} map[string]interface{} "Account details"
+// @Failure 401 {object} map[string]string "Not authenticated"
+// @Failure 404 {object} map[string]string "Account not found"
+// @Security CookieAuth
+// @Router /v1/account [get]
 func (h *AccountHandler) GetAccount(c fiber.Ctx) error {
 	accountIDStr := c.Locals("account_id")
 	if accountIDStr == nil {
@@ -97,6 +106,17 @@ type GetUsageRequest struct {
 }
 
 // GetUsage returns usage logs for the account
+// @Summary Get usage logs
+// @Description Returns paginated usage logs for the authenticated account
+// @Tags account
+// @Produce json
+// @Param limit query int false "Number of records to return (default 50)"
+// @Param offset query int false "Number of records to skip (default 0)"
+// @Success 200 {object} map[string]interface{} "Usage logs with pagination"
+// @Failure 401 {object} map[string]string "Not authenticated"
+// @Failure 500 {object} map[string]string "Server error"
+// @Security CookieAuth
+// @Router /v1/account/usage [get]
 func (h *AccountHandler) GetUsage(c fiber.Ctx) error {
 	accountIDStr := c.Locals("account_id")
 	if accountIDStr == nil {
@@ -140,6 +160,16 @@ type GetUsageStatsRequest struct {
 }
 
 // GetUsageStats returns aggregated usage statistics for the account
+// @Summary Get usage statistics
+// @Description Returns aggregated usage statistics including daily breakdown and endpoint stats
+// @Tags account
+// @Produce json
+// @Param days query int false "Number of days to include (default 30, max 365)"
+// @Success 200 {object} map[string]interface{} "Usage statistics"
+// @Failure 401 {object} map[string]string "Not authenticated"
+// @Failure 500 {object} map[string]string "Server error"
+// @Security CookieAuth
+// @Router /v1/account/usage/stats [get]
 func (h *AccountHandler) GetUsageStats(c fiber.Ctx) error {
 	accountIDStr := c.Locals("account_id")
 	if accountIDStr == nil {
@@ -224,6 +254,18 @@ type InitiateDepositResponse struct {
 }
 
 // InitiateDeposit initiates a new deposit
+// @Summary Initiate a deposit
+// @Description Start a deposit via Stripe (requires linked wallet) or direct crypto transfer
+// @Tags account
+// @Accept json
+// @Produce json
+// @Param request body InitiateDepositRequest true "Deposit details"
+// @Success 201 {object} InitiateDepositResponse
+// @Failure 400 {object} map[string]string "Invalid request or no wallet linked"
+// @Failure 401 {object} map[string]string "Not authenticated"
+// @Failure 500 {object} map[string]string "Server error"
+// @Security CookieAuth
+// @Router /v1/account/deposit [post]
 func (h *AccountHandler) InitiateDeposit(c fiber.Ctx) error {
 	accountIDStr := c.Locals("account_id")
 	if accountIDStr == nil {
@@ -352,6 +394,17 @@ type GetDepositsRequest struct {
 }
 
 // GetDeposits returns deposit history for the account
+// @Summary Get deposit history
+// @Description Returns paginated deposit history for the authenticated account
+// @Tags account
+// @Produce json
+// @Param limit query int false "Number of records to return (default 50)"
+// @Param offset query int false "Number of records to skip (default 0)"
+// @Success 200 {object} map[string]interface{} "Deposits with pagination"
+// @Failure 401 {object} map[string]string "Not authenticated"
+// @Failure 500 {object} map[string]string "Server error"
+// @Security CookieAuth
+// @Router /v1/account/deposits [get]
 func (h *AccountHandler) GetDeposits(c fiber.Ctx) error {
 	accountIDStr := c.Locals("account_id")
 	if accountIDStr == nil {
@@ -395,6 +448,17 @@ type LinkWalletRequest struct {
 }
 
 // LinkWallet links a wallet address to the account
+// @Summary Link a wallet address
+// @Description Links an Ethereum wallet address to the account for receiving crypto
+// @Tags account
+// @Accept json
+// @Produce json
+// @Param request body LinkWalletRequest true "Wallet address (0x...)"
+// @Success 200 {object} map[string]string "Wallet linked successfully"
+// @Failure 400 {object} map[string]string "Invalid wallet address or already linked"
+// @Failure 401 {object} map[string]string "Not authenticated"
+// @Security CookieAuth
+// @Router /v1/account/wallet [put]
 func (h *AccountHandler) LinkWallet(c fiber.Ctx) error {
 	accountIDStr := c.Locals("account_id")
 	if accountIDStr == nil {

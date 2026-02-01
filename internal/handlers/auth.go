@@ -160,6 +160,16 @@ type CreateAccountResponse struct {
 }
 
 // CreateAccount creates a new account with a generated account number
+// @Summary Create a new account
+// @Description Creates a new account with a generated account number. Optionally link a wallet address.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body CreateAccountRequest false "Optional wallet address"
+// @Success 201 {object} CreateAccountResponse
+// @Failure 400 {object} map[string]string "Invalid request"
+// @Failure 500 {object} map[string]string "Server error"
+// @Router /v1/auth/account [post]
 func (h *AuthHandler) CreateAccount(c fiber.Ctx) error {
 	var req CreateAccountRequest
 	if err := c.Bind().Body(&req); err != nil {
@@ -229,6 +239,17 @@ type LoginResponse struct {
 }
 
 // Login authenticates an account by account number
+// @Summary Login to an account
+// @Description Authenticates using account number and sets httpOnly auth cookies
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body LoginRequest true "Account number"
+// @Success 200 {object} LoginResponse
+// @Failure 400 {object} map[string]string "Invalid request"
+// @Failure 401 {object} map[string]string "Invalid credentials"
+// @Failure 403 {object} map[string]string "Account not active"
+// @Router /v1/auth/login [post]
 func (h *AuthHandler) Login(c fiber.Ctx) error {
 	var req LoginRequest
 	if err := c.Bind().Body(&req); err != nil {
@@ -307,6 +328,14 @@ type RefreshTokenResponse struct {
 }
 
 // RefreshToken refreshes an access token using a refresh token
+// @Summary Refresh access token
+// @Description Uses the refresh token cookie to get a new access token
+// @Tags auth
+// @Produce json
+// @Success 200 {object} RefreshTokenResponse
+// @Failure 401 {object} map[string]string "Invalid or expired refresh token"
+// @Failure 403 {object} map[string]string "Account not active"
+// @Router /v1/auth/refresh [post]
 func (h *AuthHandler) RefreshToken(c fiber.Ctx) error {
 	// Read refresh token from httpOnly cookie
 	refreshToken := c.Cookies(RefreshTokenCookie)
@@ -361,6 +390,14 @@ func (h *AuthHandler) RefreshToken(c fiber.Ctx) error {
 }
 
 // Logout logs out the current session
+// @Summary Logout
+// @Description Logs out from all sessions and clears auth cookies
+// @Tags auth
+// @Produce json
+// @Success 200 {object} map[string]string "Logged out successfully"
+// @Failure 401 {object} map[string]string "Not authenticated"
+// @Security CookieAuth
+// @Router /v1/auth/logout [post]
 func (h *AuthHandler) Logout(c fiber.Ctx) error {
 	// Get account ID from context (set by AuthMiddleware)
 	accountIDStr := c.Locals("account_id")
@@ -396,6 +433,14 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 }
 
 // GetMe returns the current account information
+// @Summary Get current user
+// @Description Returns the authenticated user's account information
+// @Tags auth
+// @Produce json
+// @Success 200 {object} map[string]interface{} "Account info with id, account_number, wallet_address, balance_usdc, status"
+// @Failure 401 {object} map[string]string "Not authenticated"
+// @Security CookieAuth
+// @Router /v1/auth/me [get]
 func (h *AuthHandler) GetMe(c fiber.Ctx) error {
 	accountIDStr := c.Locals("account_id")
 	if accountIDStr == nil {

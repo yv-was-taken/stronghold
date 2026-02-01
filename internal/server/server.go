@@ -168,6 +168,10 @@ func (s *Server) setupRoutes() {
 	scanHandler := handlers.NewScanHandlerWithDB(s.scanner, x402, s.database)
 	scanHandler.RegisterRoutes(s.app)
 
+	// API documentation
+	docsHandler := handlers.NewDocsHandler()
+	docsHandler.RegisterRoutes(s.app)
+
 	// 404 handler
 	s.app.Use(func(c fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
