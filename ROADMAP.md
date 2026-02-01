@@ -33,9 +33,10 @@ This document tracks the remaining work needed to launch Stronghold in productio
   - [x] Error boundaries for React components
   - [x] Better loading states with skeleton placeholders
 
-- [ ] **Stripe checkout integration** - Currently placeholder at `internal/handlers/account.go:298`
-  - Deposit flow works but returns fake checkout URL
-  - Direct crypto deposits work without Stripe
+- [x] **Stripe Crypto Onramp integration** - `internal/handlers/account.go`, `stripe_webhook.go`
+  - Users can purchase USDC via credit card through Stripe
+  - Webhook handler processes `crypto.onramp_session.updated` events
+  - Automatic balance credit on fulfillment, idempotent handling
 
 ## Medium Priority
 
@@ -75,6 +76,7 @@ Before going live:
 - [x] All tests passing
 - [x] `JWT_SECRET` configured (validated at startup in production)
 - [x] `DB_PASSWORD` changed from default (validated at startup in production)
+- [ ] Stripe keys configured (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PUBLISHABLE_KEY`)
 - [ ] Database migrations executed
 - [ ] CORS origins configured for production domain
 - [x] Rate limiting enabled
