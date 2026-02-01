@@ -66,6 +66,11 @@ func (m *X402Middleware) GetRoutes() []PriceRoute {
 	}
 }
 
+// GetNetwork returns the configured payment network
+func (m *X402Middleware) GetNetwork() string {
+	return m.config.Network
+}
+
 // RequirePayment returns middleware that requires x402 payment
 func (m *X402Middleware) RequirePayment(price float64) fiber.Handler {
 	return func(c fiber.Ctx) error {

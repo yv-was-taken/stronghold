@@ -72,7 +72,7 @@ func (h *PricingHandler) GetPricing(c fiber.Ctx) error {
 
 	return c.JSON(PricingResponse{
 		Currency: "USDC",
-		Network:  "base-sepolia", // TODO: Get from config
+		Network:  h.x402.GetNetwork(),
 		Routes:   routePrices,
 	})
 }

@@ -36,8 +36,7 @@ This document tracks the remaining work needed to launch Stronghold in productio
 
 ## Medium Priority
 
-- [ ] **Fix hardcoded pricing network** - `internal/handlers/pricing.go:75`
-  - TODO: "Get from config" - currently hardcodes "base-sepolia"
+- [x] **Fix hardcoded pricing network** - Now uses `X402Middleware.GetNetwork()`
 
 - [ ] **Add database migration tooling** - Only raw SQL file exists
   - Implement proper migration versioning (golang-migrate, Flyway, etc.)
