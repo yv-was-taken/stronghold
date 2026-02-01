@@ -14,7 +14,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-REPO_URL="https://github.com/strongholdsecurity/stronghold"
+REPO_URL="https://github.com/yv-was-taken/stronghold"
 INSTALL_DIR="/usr/local/bin"
 VERSION="${VERSION:-latest}"
 
