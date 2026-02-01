@@ -4,12 +4,12 @@ This document tracks the remaining work needed to launch Stronghold in productio
 
 ## Critical (Must Fix Before Launch)
 
-- [ ] **Add test coverage** - No test files exist for Go backend or React frontend
-  - [ ] Unit tests for `internal/handlers/` (auth, scan, account)
-  - [ ] Unit tests for `internal/db/` (accounts, sessions, deposits, usage)
-  - [ ] Unit tests for `internal/middleware/x402.go` (payment verification)
-  - [ ] Integration tests for API endpoints
-  - [ ] Frontend component tests
+- [x] **Add test coverage** - Comprehensive test suite added
+  - [x] Unit tests for `internal/handlers/` (auth, scan, account, health, pricing)
+  - [x] Unit tests for `internal/db/` (accounts, sessions, deposits, usage)
+  - [x] Unit tests for `internal/middleware/` (x402, ratelimit, requestid)
+  - [x] Integration tests for API endpoints (`internal/server/server_integration_test.go`)
+  - [x] Frontend component tests (Button, AuthProvider, Login page, utils)
 
 - [ ] **Fix JWT_SECRET dev fallback** - `internal/handlers/auth.go:31` falls back to insecure default
   - Change to `log.Fatal()` if `JWT_SECRET` env var is not set in production
@@ -20,11 +20,11 @@ This document tracks the remaining work needed to launch Stronghold in productio
   - Switch to `log/slog` or `zap` with JSON output
   - Resolve TODO at `internal/handlers/auth.go:196`
 
-- [ ] **Add CI/CD test step** - `.github/workflows/deploy.yml` and `fly-deploy.yml` deploy without testing
-  - Add `go test ./...` step
-  - Add `go vet` and `golangci-lint`
-  - Add frontend `npm run build && npm run lint`
-  - Consider consolidating duplicate workflow files
+- [x] **Add CI/CD test step** - Added `.github/workflows/test.yml`
+  - [x] `go test -race ./...` with coverage reporting
+  - [x] `golangci-lint` for code quality
+  - [x] Frontend tests with Vitest (`bun run test:run`)
+  - [ ] Consider consolidating duplicate workflow files
 
 - [ ] **Complete dashboard** - `web/app/dashboard/main/`
   - [ ] Billing/usage history page (missing entirely)
@@ -68,7 +68,7 @@ This document tracks the remaining work needed to launch Stronghold in productio
 
 Before going live:
 
-- [ ] All tests passing
+- [x] All tests passing
 - [ ] `JWT_SECRET` configured (not using default)
 - [ ] `DB_PASSWORD` changed from default
 - [ ] Database migrations executed

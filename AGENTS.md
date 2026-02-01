@@ -25,10 +25,11 @@ go test ./...
 # Run a specific test
 go test ./internal/handlers -run TestScanInput
 
-# Frontend (in web/ directory)
-cd web && npm run dev     # Development server
-cd web && npm run build   # Build for production
-cd web && npm run lint    # Lint TypeScript/React
+# Frontend (in web/ directory) - USE BUN, NOT NPM
+cd web && bun run dev     # Development server
+cd web && bun run build   # Build for production
+cd web && bun run lint    # Lint TypeScript/React
+cd web && bun run test    # Run tests
 ```
 
 ## Development Environment

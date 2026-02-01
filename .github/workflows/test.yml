@@ -1,0 +1,129 @@
+name: Tests
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: stronghold
+          POSTGRES_PASSWORD: stronghold
+          POSTGRES_DB: stronghold_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Run tests with race detector
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: stronghold
+          DB_PASSWORD: stronghold
+          DB_NAME: stronghold_test
+          JWT_SECRET: test-jwt-secret-for-ci
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.out
+          fail_ci_if_error: false
+          verbose: true
+
+      - name: Generate coverage report
+        run: |
+          go tool cover -func=coverage.out | tail -1
+          echo "---"
+          echo "Coverage by package:"
+          go tool cover -func=coverage.out | grep -E "^stronghold/(internal/(handlers|middleware|db)/|total)" || true
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m
+
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: Build API
+        run: go build -o stronghold-api ./cmd/api
+
+      - name: Build CLI
+        run: go build -o stronghold ./cmd/cli
+
+      - name: Build Proxy
+        run: go build -o stronghold-proxy ./cmd/proxy
+
+  frontend-test:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run tests
+        run: bun run test:run
+
+      - name: Build frontend
+        run: bun run build
