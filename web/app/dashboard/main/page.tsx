@@ -10,11 +10,17 @@ import {
   LogOut,
   ChevronRight,
   AlertTriangle,
+  FileText,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { formatUSDC, truncateAddress } from '@/lib/utils';
+
+const API_URL =
+  process.env.NODE_ENV === 'development'
+    ? 'http://localhost:8080'
+    : process.env.NEXT_PUBLIC_API_URL;
 
 export default function DashboardPage() {
   const { account, isAuthenticated, isLoading, logout } = useAuth();
@@ -147,6 +153,17 @@ export default function DashboardPage() {
                 {account.account_number}
               </div>
             </div>
+            {API_URL && (
+              <a
+                href={`${API_URL}/docs`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 text-gray-400 hover:text-white transition-colors"
+                title="API Docs"
+              >
+                <FileText className="w-5 h-5" />
+              </a>
+            )}
             <button
               onClick={handleLogout}
               className="p-2 text-gray-400 hover:text-white transition-colors"
