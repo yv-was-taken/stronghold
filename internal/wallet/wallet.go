@@ -399,30 +399,53 @@ func CheckKeyringAvailability() (available bool, backend string, err error) {
 	return true, backend, nil
 }
 
+// GetKeyringHelp returns help text for setting up keyring on the current OS
+func GetKeyringHelp() string {
+	if runtime.GOOS == "darwin" {
+		return `macOS Keychain:
+
+Stronghold uses the macOS Keychain to securely store wallet private keys.
+No setup required - it works automatically.
+`
+	}
+	return GetLinuxKeyringHelp()
+}
+
 // GetLinuxKeyringHelp returns help text for setting up keyring on Linux
 func GetLinuxKeyringHelp() string {
-	return `Linux Keyring Setup:
+	return fmt.Sprintf(`Linux Keyring Setup:
 
 Stronghold uses your system's keyring to securely store wallet private keys.
 
-Supported options (in order of preference):
+Supported backends: Secret Service (GNOME Keyring), KWallet, pass
 
-1. GNOME Keyring / Secret Service (most common):
-   sudo apt install gnome-keyring
+Recommended: Install gnome-keyring and libsecret using your package manager.
 
-   Or if using a headless server:
-   sudo apt install dbus-x11 gnome-keyring
+%s
+`, getDistroInstallHint())
+}
 
-2. KWallet (KDE users):
-   Usually pre-installed with KDE Plasma
+func getDistroInstallHint() string {
+	data, err := os.ReadFile("/etc/os-release")
+	if err != nil {
+		return "Example: sudo apt install gnome-keyring libsecret-1-0"
+	}
+	content := strings.ToLower(string(data))
 
-3. pass (password-store):
-   sudo apt install pass
-   gpg --gen-key  # if you don't have a GPG key
-   pass init <your-gpg-email>
-
-A secure keyring is required. Without one, your wallet keys cannot be safely stored.
-`
+	switch {
+	case strings.Contains(content, "arch") || strings.Contains(content, "manjaro") || strings.Contains(content, "endeavour"):
+		return "sudo pacman -S gnome-keyring libsecret"
+	case strings.Contains(content, "fedora") || strings.Contains(content, "rhel") || strings.Contains(content, "centos") || strings.Contains(content, "rocky"):
+		return "sudo dnf install gnome-keyring libsecret"
+	case strings.Contains(content, "opensuse") || strings.Contains(content, "suse"):
+		return "sudo zypper install gnome-keyring libsecret"
+	case strings.Contains(content, "void"):
+		return "sudo xbps-install gnome-keyring libsecret"
+	case strings.Contains(content, "alpine"):
+		return "sudo apk add gnome-keyring libsecret"
+	default:
+		return "sudo apt install gnome-keyring libsecret-1-0"
+	}
 }
 
 // hasSecretService checks if D-Bus Secret Service is available
