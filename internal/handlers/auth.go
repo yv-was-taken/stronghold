@@ -15,8 +15,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// accountNumberRegex validates 16-digit numeric account numbers
-var accountNumberRegex = regexp.MustCompile(`^\d{16}$`)
+// accountNumberRegex validates account numbers in either format:
+// - 16 consecutive digits: 1234567890123456
+// - With dashes: 1234-5678-9012-3456
+var accountNumberRegex = regexp.MustCompile(`^(\d{16}|\d{4}-\d{4}-\d{4}-\d{4})$`)
 
 // CookieConfig holds httpOnly cookie configuration
 type CookieConfig struct {

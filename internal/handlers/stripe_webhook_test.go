@@ -109,8 +109,8 @@ func TestStripeWebhook_UnhandledEventType(t *testing.T) {
 	defer testDB.Close(t)
 	defer database.Close()
 
-	payload := []byte(`{"id":"evt_test","type":"payment_intent.created","data":{"object":{}}}`)
 	timestamp := time.Now().Unix()
+	payload := []byte(fmt.Sprintf(`{"id":"evt_test","type":"payment_intent.created","created":%d,"data":{"object":{}}}`, timestamp))
 	signature := generateStripeSignature(payload, testWebhookSecret, timestamp)
 
 	req := httptest.NewRequest("POST", "/webhooks/stripe", bytes.NewBuffer(payload))
@@ -150,9 +150,11 @@ func TestStripeWebhook_FulfillmentComplete(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create webhook event payload
+	timestamp := time.Now().Unix()
 	payload := []byte(fmt.Sprintf(`{
 		"id": "evt_test_fulfillment",
 		"type": "crypto.onramp_session.updated",
+		"created": %d,
 		"data": {
 			"object": {
 				"id": "cos_test_session",
@@ -162,9 +164,7 @@ func TestStripeWebhook_FulfillmentComplete(t *testing.T) {
 				}
 			}
 		}
-	}`, deposit.ID.String()))
-
-	timestamp := time.Now().Unix()
+	}`, timestamp, deposit.ID.String()))
 	signature := generateStripeSignature(payload, testWebhookSecret, timestamp)
 
 	req := httptest.NewRequest("POST", "/webhooks/stripe", bytes.NewBuffer(payload))
@@ -224,9 +224,11 @@ func TestStripeWebhook_Idempotency(t *testing.T) {
 	initialBalance := account1.BalanceUSDC
 
 	// Send webhook for already-completed deposit
+	timestamp := time.Now().Unix()
 	payload := []byte(fmt.Sprintf(`{
 		"id": "evt_test_duplicate",
 		"type": "crypto.onramp_session.updated",
+		"created": %d,
 		"data": {
 			"object": {
 				"id": "cos_test_session",
@@ -236,9 +238,7 @@ func TestStripeWebhook_Idempotency(t *testing.T) {
 				}
 			}
 		}
-	}`, deposit.ID.String()))
-
-	timestamp := time.Now().Unix()
+	}`, timestamp, deposit.ID.String()))
 	signature := generateStripeSignature(payload, testWebhookSecret, timestamp)
 
 	req := httptest.NewRequest("POST", "/webhooks/stripe", bytes.NewBuffer(payload))
@@ -284,9 +284,11 @@ func TestStripeWebhook_Rejected(t *testing.T) {
 	require.NoError(t, err)
 
 	// Send rejected webhook
+	timestamp := time.Now().Unix()
 	payload := []byte(fmt.Sprintf(`{
 		"id": "evt_test_rejected",
 		"type": "crypto.onramp_session.updated",
+		"created": %d,
 		"data": {
 			"object": {
 				"id": "cos_test_session",
@@ -296,9 +298,7 @@ func TestStripeWebhook_Rejected(t *testing.T) {
 				}
 			}
 		}
-	}`, deposit.ID.String()))
-
-	timestamp := time.Now().Unix()
+	}`, timestamp, deposit.ID.String()))
 	signature := generateStripeSignature(payload, testWebhookSecret, timestamp)
 
 	req := httptest.NewRequest("POST", "/webhooks/stripe", bytes.NewBuffer(payload))
@@ -351,9 +351,11 @@ func TestStripeWebhook_IntermediateStatus(t *testing.T) {
 
 	for _, status := range intermediateStatuses {
 		t.Run(status, func(t *testing.T) {
+			timestamp := time.Now().Unix()
 			payload := []byte(fmt.Sprintf(`{
 				"id": "evt_test_%s",
 				"type": "crypto.onramp_session.updated",
+				"created": %d,
 				"data": {
 					"object": {
 						"id": "cos_test_session",
@@ -363,9 +365,8 @@ func TestStripeWebhook_IntermediateStatus(t *testing.T) {
 						}
 					}
 				}
-			}`, status, status, deposit.ID.String()))
+			}`, status, timestamp, status, deposit.ID.String()))
 
-			timestamp := time.Now().Unix()
 			signature := generateStripeSignature(payload, testWebhookSecret, timestamp)
 
 			req := httptest.NewRequest("POST", "/webhooks/stripe", bytes.NewBuffer(payload))
@@ -397,9 +398,11 @@ func TestStripeWebhook_MissingDepositID(t *testing.T) {
 	defer database.Close()
 
 	// Webhook without deposit_id in metadata
-	payload := []byte(`{
+	timestamp := time.Now().Unix()
+	payload := []byte(fmt.Sprintf(`{
 		"id": "evt_test_no_deposit_id",
 		"type": "crypto.onramp_session.updated",
+		"created": %d,
 		"data": {
 			"object": {
 				"id": "cos_test_session",
@@ -407,9 +410,7 @@ func TestStripeWebhook_MissingDepositID(t *testing.T) {
 				"metadata": {}
 			}
 		}
-	}`)
-
-	timestamp := time.Now().Unix()
+	}`, timestamp))
 	signature := generateStripeSignature(payload, testWebhookSecret, timestamp)
 
 	req := httptest.NewRequest("POST", "/webhooks/stripe", bytes.NewBuffer(payload))
@@ -435,9 +436,11 @@ func TestStripeWebhook_InvalidDepositID(t *testing.T) {
 	defer database.Close()
 
 	// Webhook with invalid deposit_id format
-	payload := []byte(`{
+	timestamp := time.Now().Unix()
+	payload := []byte(fmt.Sprintf(`{
 		"id": "evt_test_invalid_id",
 		"type": "crypto.onramp_session.updated",
+		"created": %d,
 		"data": {
 			"object": {
 				"id": "cos_test_session",
@@ -447,9 +450,7 @@ func TestStripeWebhook_InvalidDepositID(t *testing.T) {
 				}
 			}
 		}
-	}`)
-
-	timestamp := time.Now().Unix()
+	}`, timestamp))
 	signature := generateStripeSignature(payload, testWebhookSecret, timestamp)
 
 	req := httptest.NewRequest("POST", "/webhooks/stripe", bytes.NewBuffer(payload))
