@@ -43,7 +43,8 @@ func (h *AccountHandler) RegisterRoutes(app *fiber.App, authHandler *AuthHandler
 	group.Get("/usage/stats", authHandler.AuthMiddleware(), h.GetUsageStats)
 	group.Post("/deposit", authHandler.AuthMiddleware(), h.InitiateDeposit)
 	group.Get("/deposits", authHandler.AuthMiddleware(), h.GetDeposits)
-	group.Put("/wallet", authHandler.AuthMiddleware(), h.LinkWallet)
+	// NOTE: Wallet linking removed - wallets are generated server-side with KMS encryption.
+	// Changing wallet requires providing the private key (via CLI only).
 }
 
 // GetAccount returns the current account details

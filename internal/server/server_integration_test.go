@@ -421,19 +421,7 @@ func TestIntegration_AccountManagement(t *testing.T) {
 	})
 
 	t.Run("link wallet", func(t *testing.T) {
-		wallet := "0xabcdef1234567890abcdef1234567890abcdef12"
-		reqBody := map[string]string{"wallet_address": wallet}
-		bodyJSON, _ := json.Marshal(reqBody)
-
-		req := httptest.NewRequest("PUT", "/v1/account/wallet", bytes.NewBuffer(bodyJSON))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Cookie", handlers.AccessTokenCookie+"="+accessToken)
-
-		resp, err := app.Test(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-
-		assert.Equal(t, 200, resp.StatusCode)
+		t.Skip("Wallet linking endpoint removed - wallets are generated server-side with KMS")
 	})
 }
 

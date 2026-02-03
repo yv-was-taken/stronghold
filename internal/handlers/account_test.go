@@ -120,63 +120,11 @@ func TestGetAccount_ReturnsStats(t *testing.T) {
 }
 
 func TestLinkWallet_Success(t *testing.T) {
-	app, _, _, testDB, database := setupAccountTest(t)
-	defer testDB.Close(t)
-	defer database.Close()
-
-	_, accessToken := createAuthenticatedAccount(t, app)
-
-	wallet := "0xabcdef1234567890abcdef1234567890abcdef12"
-	reqBody := map[string]string{"wallet_address": wallet}
-	bodyJSON, _ := json.Marshal(reqBody)
-
-	req := httptest.NewRequest("PUT", "/v1/account/wallet", bytes.NewBuffer(bodyJSON))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Cookie", AccessTokenCookie+"="+accessToken)
-
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, 200, resp.StatusCode)
-
-	var body map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&body)
-
-	assert.Contains(t, body["message"], "Wallet linked successfully")
-	assert.Equal(t, wallet, body["wallet_address"])
+	t.Skip("Wallet linking endpoint removed - wallets are generated server-side with KMS")
 }
 
 func TestLinkWallet_InvalidFormat(t *testing.T) {
-	app, _, _, testDB, database := setupAccountTest(t)
-	defer testDB.Close(t)
-	defer database.Close()
-
-	_, accessToken := createAuthenticatedAccount(t, app)
-
-	invalidAddresses := []string{
-		"not-a-wallet",
-		"0x123", // too short
-		"0xGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", // invalid chars
-		"1234567890abcdef1234567890abcdef12345678",   // missing 0x
-	}
-
-	for _, addr := range invalidAddresses {
-		t.Run(addr, func(t *testing.T) {
-			reqBody := map[string]string{"wallet_address": addr}
-			bodyJSON, _ := json.Marshal(reqBody)
-
-			req := httptest.NewRequest("PUT", "/v1/account/wallet", bytes.NewBuffer(bodyJSON))
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Cookie", AccessTokenCookie+"="+accessToken)
-
-			resp, err := app.Test(req)
-			require.NoError(t, err)
-			resp.Body.Close()
-
-			assert.Equal(t, 400, resp.StatusCode)
-		})
-	}
+	t.Skip("Wallet linking endpoint removed - wallets are generated server-side with KMS")
 }
 
 func TestGetUsageStats_DateRange(t *testing.T) {
@@ -415,7 +363,6 @@ func TestAccount_NotAuthenticated(t *testing.T) {
 		{"GET", "/v1/account/usage/stats"},
 		{"POST", "/v1/account/deposit"},
 		{"GET", "/v1/account/deposits"},
-		{"PUT", "/v1/account/wallet"},
 	}
 
 	for _, ep := range endpoints {
@@ -493,40 +440,5 @@ func TestGetAccount_WithDeposits(t *testing.T) {
 }
 
 func TestLinkWallet_AlreadyLinked(t *testing.T) {
-	app, _, _, testDB, database := setupAccountTest(t)
-	defer testDB.Close(t)
-	defer database.Close()
-
-	// Create first account with wallet
-	_, accessToken1 := createAuthenticatedAccount(t, app)
-	wallet := "0xabcdef1234567890abcdef1234567890abcdef12"
-
-	reqBody := map[string]string{"wallet_address": wallet}
-	bodyJSON, _ := json.Marshal(reqBody)
-
-	req := httptest.NewRequest("PUT", "/v1/account/wallet", bytes.NewBuffer(bodyJSON))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Cookie", AccessTokenCookie+"="+accessToken1)
-
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	resp.Body.Close()
-	require.Equal(t, 200, resp.StatusCode)
-
-	// Create second account and try to link same wallet
-	_, accessToken2 := createAuthenticatedAccount(t, app)
-
-	req = httptest.NewRequest("PUT", "/v1/account/wallet", bytes.NewBuffer(bodyJSON))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Cookie", AccessTokenCookie+"="+accessToken2)
-
-	resp, err = app.Test(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, 400, resp.StatusCode)
-
-	var body map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&body)
-	assert.Contains(t, body["error"], "already linked")
+	t.Skip("Wallet linking endpoint removed - wallets are generated server-side with KMS")
 }
