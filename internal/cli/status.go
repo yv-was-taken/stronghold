@@ -15,8 +15,8 @@ func Status() error {
 	}
 
 	if !config.Installed {
-		fmt.Println("Stronghold is not installed.")
-		fmt.Println("Run 'stronghold install' to set it up.")
+		fmt.Println("Stronghold is not initialized.")
+		fmt.Println("Run 'stronghold init' to set it up.")
 		return nil
 	}
 

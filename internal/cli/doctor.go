@@ -102,10 +102,10 @@ func Doctor() error {
 		fmt.Println("Please fix the failed checks above and run 'stronghold doctor' again.")
 	} else if warnCount > 0 {
 		fmt.Println(warningStyle.Render("System is ready but has warnings."))
-		fmt.Println("You can proceed with installation, but review the warnings above.")
+		fmt.Println("You can proceed with initialization, but review the warnings above.")
 	} else {
 		fmt.Println(successStyle.Render("System is ready for Stronghold!"))
-		fmt.Println("Run 'stronghold install' to get started.")
+		fmt.Println("Run 'stronghold init' to get started.")
 	}
 
 	return nil
@@ -141,7 +141,7 @@ func checkRoot() CheckResult {
 	} else {
 		result.Status = CheckWarn
 		result.Message = "Not running as root"
-		result.Fix = "Use 'sudo stronghold install' and 'sudo stronghold enable'. Other commands work without root."
+		result.Fix = "Use 'sudo stronghold init' and 'sudo stronghold enable'. Other commands work without root."
 	}
 
 	return result
@@ -191,7 +191,7 @@ func checkPortAvailable() CheckResult {
 	} else {
 		result.Status = CheckWarn
 		result.Message = fmt.Sprintf("Port %d is in use", config.Proxy.Port)
-		result.Fix = fmt.Sprintf("Run 'stronghold install' to use an alternative port, or stop the process using port %d", config.Proxy.Port)
+		result.Fix = fmt.Sprintf("Run 'stronghold init' to use an alternative port, or stop the process using port %d", config.Proxy.Port)
 	}
 
 	return result
@@ -264,7 +264,7 @@ func checkProxyBinary() CheckResult {
 
 	result.Status = CheckFail
 	result.Message = "stronghold-proxy binary not found"
-	result.Fix = "Run 'stronghold install' to install"
+	result.Fix = "Run 'stronghold init' to install"
 
 	return result
 }

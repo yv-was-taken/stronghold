@@ -13,7 +13,7 @@ func Enable() error {
 	}
 
 	if !config.Installed {
-		return fmt.Errorf("stronghold is not installed. Run 'stronghold install' first")
+		return fmt.Errorf("stronghold is not initialized. Run 'stronghold init' first")
 	}
 
 	// Check if transparent proxy is available
