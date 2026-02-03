@@ -56,79 +56,83 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
-// CreateAccount creates a new account via the API
-func (c *APIClient) CreateAccount(req *CreateAccountRequest) (*CreateAccountResponse, error) {
-	body, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+// doRequest performs an HTTP request with JSON marshaling/unmarshaling
+func (c *APIClient) doRequest(method, endpoint string, expectedStatus int, reqBody interface{}, respBody interface{}) error {
+	var body io.Reader
+	if reqBody != nil {
+		data, err := json.Marshal(reqBody)
+		if err != nil {
+			return fmt.Errorf("failed to marshal request: %w", err)
+		}
+		body = bytes.NewReader(data)
 	}
 
-	resp, err := c.httpClient.Post(
-		c.baseURL+"/v1/auth/account",
-		"application/json",
-		bytes.NewReader(body),
-	)
+	req, err := http.NewRequest(method, c.baseURL+endpoint, body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create account: %w", err)
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respData, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return fmt.Errorf("failed to read response: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusCreated {
+	if resp.StatusCode != expectedStatus {
 		var errResp ErrorResponse
-		if err := json.Unmarshal(respBody, &errResp); err == nil && errResp.Error != "" {
-			return nil, fmt.Errorf("API error: %s", errResp.Error)
+		if json.Unmarshal(respData, &errResp) == nil && errResp.Error != "" {
+			return fmt.Errorf("API error (%d %s %s): %s",
+				resp.StatusCode, method, endpoint, errResp.Error)
 		}
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		// Include truncated response body for debugging
+		bodyPreview := string(respData)
+		if len(bodyPreview) > 200 {
+			bodyPreview = bodyPreview[:200] + "..."
+		}
+		return fmt.Errorf("unexpected status %d from %s %s: %s",
+			resp.StatusCode, method, endpoint, bodyPreview)
 	}
 
+	if respBody != nil {
+		if err := json.Unmarshal(respData, respBody); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
+	}
+	return nil
+}
+
+// CreateAccount creates a new account via the API
+func (c *APIClient) CreateAccount(req *CreateAccountRequest) (*CreateAccountResponse, error) {
 	var result CreateAccountResponse
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	if err := c.doRequest(http.MethodPost, "/v1/auth/account", http.StatusCreated, req, &result); err != nil {
+		return nil, err
 	}
-
 	return &result, nil
 }
 
 // Login authenticates with the API and returns account info including decrypted wallet key
 func (c *APIClient) Login(accountNumber string) (*LoginResponse, error) {
 	req := LoginRequest{AccountNumber: accountNumber}
-	body, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	resp, err := c.httpClient.Post(
-		c.baseURL+"/v1/auth/login",
-		"application/json",
-		bytes.NewReader(body),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to login: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		var errResp ErrorResponse
-		if err := json.Unmarshal(respBody, &errResp); err == nil && errResp.Error != "" {
-			return nil, fmt.Errorf("API error: %s", errResp.Error)
-		}
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
 	var result LoginResponse
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	if err := c.doRequest(http.MethodPost, "/v1/auth/login", http.StatusOK, req, &result); err != nil {
+		return nil, err
 	}
-
 	return &result, nil
+}
+
+// UpdateWalletRequest represents a request to update wallet
+type UpdateWalletRequest struct {
+	PrivateKey string `json:"private_key"`
+}
+
+// UpdateWallet updates the wallet for the current account
+func (c *APIClient) UpdateWallet(privateKey string) error {
+	req := UpdateWalletRequest{PrivateKey: privateKey}
+	return c.doRequest(http.MethodPut, "/v1/auth/wallet", http.StatusOK, req, nil)
 }

@@ -40,11 +40,15 @@ type InstallModel struct {
 	confirmWarning bool
 
 	// Account step
-	accountChoice int // 0 = create, 1 = existing, 2 = skip
-	accountNumber string
-	walletAddress string
-	authToken     string
-	loggedIn      bool
+	accountChoice   int // 0 = create, 1 = create with existing wallet, 2 = existing account, 3 = skip
+	accountNumber   string
+	walletAddress   string
+	authToken       string
+	loggedIn        bool
+	importKeyInput  textinput.Model
+	loginInput      textinput.Model
+	awaitingKeyInput bool
+	awaitingLoginInput bool
 
 	// Payment step
 	paymentMethod int // 0 = stripe, 1 = wallet
@@ -61,7 +65,7 @@ type InstallModel struct {
 	errorMsg    string
 }
 
-// Styles
+// Styles - exported styles have capitalized names
 var (
 	titleStyle = lipgloss.NewStyle().
 		Bold(true).
@@ -75,8 +79,10 @@ var (
 	successStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#00D4AA"))
 
-	warningStyle = lipgloss.NewStyle().
+	// WarningStyle is exported for use in main.go
+	WarningStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#FFA500"))
+	warningStyle = WarningStyle // internal alias
 
 	errorStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#FF4444"))
@@ -96,22 +102,36 @@ var (
 func NewInstallModel() *InstallModel {
 	portInput := textinput.New()
 	portInput.Placeholder = "8402"
-	portInput.CharLimit = 5
+	portInput.CharLimit = PortInputCharLimit
 	portInput.Width = 10
 
 	apiInput := textinput.New()
-	apiInput.Placeholder = "https://api.stronghold.security"
-	apiInput.CharLimit = 100
-	apiInput.Width = 50
+	apiInput.Placeholder = DefaultAPIEndpoint
+	apiInput.CharLimit = APIInputCharLimit
+	apiInput.Width = APIInputWidth
+
+	importKeyInput := textinput.New()
+	importKeyInput.Placeholder = "Enter private key (hex)"
+	importKeyInput.CharLimit = PrivateKeyInputCharLimit
+	importKeyInput.Width = PrivateKeyInputWidth
+	importKeyInput.EchoMode = textinput.EchoPassword
+	importKeyInput.EchoCharacter = '*'
+
+	loginInput := textinput.New()
+	loginInput.Placeholder = "XXXX-XXXX-XXXX-XXXX"
+	loginInput.CharLimit = AccountNumberInputCharLimit
+	loginInput.Width = AccountNumberInputWidth
 
 	return &InstallModel{
-		state:         StateWarning,
-		config:        DefaultConfig(),
-		portInput:     portInput,
-		apiInput:      apiInput,
-		configPort:    8402,
-		configAPI:     "https://api.stronghold.security",
-		progress:      []string{},
+		state:          StateWarning,
+		config:         DefaultConfig(),
+		portInput:      portInput,
+		apiInput:       apiInput,
+		importKeyInput: importKeyInput,
+		loginInput:     loginInput,
+		configPort:     DefaultProxyPort,
+		configAPI:      DefaultAPIEndpoint,
+		progress:       []string{},
 	}
 }
 
@@ -129,7 +149,23 @@ func (m *InstallModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "esc":
+		case "ctrl+c":
+			return m, tea.Quit
+
+		case "esc":
+			// Handle escape in input modes
+			if m.state == StateAccount && m.awaitingKeyInput {
+				m.awaitingKeyInput = false
+				m.importKeyInput.SetValue("") // Clear sensitive data
+				m.importKeyInput.Blur()
+				return m, nil
+			}
+			if m.state == StateAccount && m.awaitingLoginInput {
+				m.awaitingLoginInput = false
+				m.loginInput.SetValue("") // Clear for cleaner re-entry
+				m.loginInput.Blur()
+				return m, nil
+			}
 			return m, tea.Quit
 
 		case "enter":
@@ -161,6 +197,12 @@ func (m *InstallModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Update text inputs
 	var cmd tea.Cmd
 	switch m.state {
+	case StateAccount:
+		if m.awaitingKeyInput {
+			m.importKeyInput, cmd = m.importKeyInput.Update(msg)
+		} else if m.awaitingLoginInput {
+			m.loginInput, cmd = m.loginInput.Update(msg)
+		}
 	case StateConfig:
 		if m.portInput.Focused() {
 			m.portInput, cmd = m.portInput.Update(msg)
@@ -204,7 +246,91 @@ func (m *InstallModel) handleEnter() (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case StateAccount:
-		if m.accountChoice == 0 { // Create new account
+		// Handle key input submission
+		if m.awaitingKeyInput {
+			privateKey := m.importKeyInput.Value()
+			if privateKey == "" {
+				return m, nil
+			}
+			// Import the provided private key
+			userID := generateUserID()
+			m.config.Auth.UserID = userID
+			address, err := ImportWallet(userID, DefaultBlockchain, privateKey)
+			if err != nil {
+				m.progress = append(m.progress, errorStyle.Render(fmt.Sprintf("✗ Invalid private key: %v", err)))
+				m.importKeyInput.SetValue("") // Clear invalid key
+				m.awaitingKeyInput = false
+				return m, nil
+			}
+			m.config.Wallet.Address = address
+			m.config.Wallet.Network = DefaultBlockchain
+			m.walletAddress = address
+			m.progress = append(m.progress, successStyle.Render(fmt.Sprintf("✓ Wallet imported: %s", address)))
+
+			// Create account via API with this wallet
+			apiClient := NewAPIClient(m.config.API.Endpoint)
+			resp, err := apiClient.CreateAccount(&CreateAccountRequest{WalletAddress: &address})
+			if err != nil {
+				m.progress = append(m.progress, warningStyle.Render(fmt.Sprintf("⚠ API unavailable: %v", err)))
+				m.accountNumber = generateSimulatedAccountNumber()
+			} else {
+				m.accountNumber = resp.AccountNumber
+				m.progress = append(m.progress, successStyle.Render("✓ Account created via API"))
+			}
+			m.config.Auth.AccountNumber = m.accountNumber
+			m.config.Auth.LoggedIn = true
+			m.loggedIn = true
+			m.awaitingKeyInput = false
+			m.state = StatePayment
+			return m, nil
+		}
+
+		// Handle login input submission
+		if m.awaitingLoginInput {
+			accountNum := m.loginInput.Value()
+			if accountNum == "" {
+				return m, nil
+			}
+			apiClient := NewAPIClient(m.config.API.Endpoint)
+			loginResp, err := apiClient.Login(accountNum)
+			if err != nil {
+				m.progress = append(m.progress, errorStyle.Render(fmt.Sprintf("✗ Login failed: %v", err)))
+				m.loginInput.SetValue("") // Clear invalid account number
+				m.awaitingLoginInput = false
+				return m, nil
+			}
+			m.accountNumber = loginResp.AccountNumber
+			m.config.Auth.AccountNumber = loginResp.AccountNumber
+			m.config.Auth.LoggedIn = true
+			m.loggedIn = true
+			m.progress = append(m.progress, successStyle.Render(fmt.Sprintf("✓ Logged in as %s", loginResp.AccountNumber)))
+
+			// Import wallet key if returned
+			if loginResp.PrivateKey != nil && loginResp.WalletAddress != nil {
+				userID := generateUserID()
+				m.config.Auth.UserID = userID
+				address, err := ImportWallet(userID, DefaultBlockchain, *loginResp.PrivateKey)
+				// Zero the private key after use
+				ZeroString(loginResp.PrivateKey)
+				if err != nil {
+					m.progress = append(m.progress, warningStyle.Render(fmt.Sprintf("⚠ Wallet import failed: %v", err)))
+				} else {
+					m.config.Wallet.Address = address
+					m.config.Wallet.Network = DefaultBlockchain
+					m.walletAddress = address
+					m.progress = append(m.progress, successStyle.Render("✓ Wallet synced"))
+				}
+			} else if loginResp.WalletAddress != nil {
+				m.config.Wallet.Address = *loginResp.WalletAddress
+				m.config.Wallet.Network = DefaultBlockchain
+				m.walletAddress = *loginResp.WalletAddress
+			}
+			m.awaitingLoginInput = false
+			m.state = StatePayment
+			return m, nil
+		}
+
+		if m.accountChoice == AccountChoiceCreate { // Create new account
 			// Try to create account via API
 			apiClient := NewAPIClient(m.config.API.Endpoint)
 			resp, err := apiClient.CreateAccount(&CreateAccountRequest{})
@@ -222,7 +348,7 @@ func (m *InstallModel) handleEnter() (tea.Model, tea.Cmd) {
 					m.progress = append(m.progress, errorStyle.Render(fmt.Sprintf("✗ Wallet setup failed: %v", err)))
 				} else {
 					m.config.Wallet.Address = walletAddress
-					m.config.Wallet.Network = "base"
+					m.config.Wallet.Network = DefaultBlockchain
 					m.walletAddress = walletAddress
 					m.progress = append(m.progress, successStyle.Render("✓ Wallet created locally"))
 				}
@@ -249,29 +375,34 @@ func (m *InstallModel) handleEnter() (tea.Model, tea.Cmd) {
 					userID := generateUserID()
 					m.config.Auth.UserID = userID
 
-					address, err := ImportWallet(userID, "base", *loginResp.PrivateKey)
+					address, err := ImportWallet(userID, DefaultBlockchain, *loginResp.PrivateKey)
+					// Zero the private key after use
+					ZeroString(loginResp.PrivateKey)
 					if err != nil {
 						m.progress = append(m.progress, errorStyle.Render(fmt.Sprintf("✗ Wallet import failed: %v", err)))
 					} else {
 						m.config.Wallet.Address = address
-						m.config.Wallet.Network = "base"
+						m.config.Wallet.Network = DefaultBlockchain
 						m.walletAddress = address
 						m.progress = append(m.progress, successStyle.Render("✓ Wallet synced from server"))
 					}
 				} else if loginResp.WalletAddress != nil {
 					// Server has wallet address but no KMS key (legacy account)
 					m.config.Wallet.Address = *loginResp.WalletAddress
-					m.config.Wallet.Network = "base"
+					m.config.Wallet.Network = DefaultBlockchain
 					m.walletAddress = *loginResp.WalletAddress
 				}
 			}
 
 			m.state = StatePayment
-		} else if m.accountChoice == 1 { // Use existing account
-			// User would enter their account number - for now, prompt and try login
-			// In a full implementation, this would show a text input for account number
-			// For now, skip to payment and user can login later
-			m.state = StatePayment
+		} else if m.accountChoice == AccountChoiceCreateWithKey { // Create new account with existing wallet
+			m.awaitingKeyInput = true
+			m.importKeyInput.Focus()
+			return m, nil
+		} else if m.accountChoice == AccountChoiceExistingAccount { // Use existing account (login)
+			m.awaitingLoginInput = true
+			m.loginInput.Focus()
+			return m, nil
 		} else { // Skip
 			m.state = StatePayment
 		}
@@ -311,7 +442,7 @@ func (m *InstallModel) handleEnter() (tea.Model, tea.Cmd) {
 func (m *InstallModel) handleUp() {
 	switch m.state {
 	case StateAccount:
-		if m.accountChoice > 0 {
+		if !m.awaitingKeyInput && !m.awaitingLoginInput && m.accountChoice > 0 {
 			m.accountChoice--
 		}
 	case StatePayment:
@@ -325,7 +456,7 @@ func (m *InstallModel) handleUp() {
 func (m *InstallModel) handleDown() {
 	switch m.state {
 	case StateAccount:
-		if m.accountChoice < 2 {
+		if !m.awaitingKeyInput && !m.awaitingLoginInput && m.accountChoice < MaxAccountChoices-1 {
 			m.accountChoice++
 		}
 	case StatePayment:
@@ -392,13 +523,36 @@ func (m *InstallModel) viewAccount() string {
 	b.WriteString(headerStyle.Render("Account Setup"))
 	b.WriteString("\n\n")
 
+	// Show key input if awaiting
+	if m.awaitingKeyInput {
+		b.WriteString("Enter your private key (hex):\n")
+		b.WriteString(m.importKeyInput.View())
+		b.WriteString("\n\n")
+		b.WriteString(infoStyle.Render("Press Enter to continue, Esc to go back"))
+		return b.String()
+	}
+
+	// Show account number input if awaiting
+	if m.awaitingLoginInput {
+		b.WriteString("Enter your account number:\n")
+		b.WriteString(m.loginInput.View())
+		b.WriteString("\n\n")
+		b.WriteString(infoStyle.Render("Press Enter to continue, Esc to go back"))
+		return b.String()
+	}
+
 	b.WriteString("Stronghold uses Mullvad-style authentication:\n")
 	b.WriteString("• No email or password required\n")
 	b.WriteString("• 16-digit account number (XXXX-XXXX-XXXX-XXXX)\n")
 	b.WriteString("• Account number is your only credential\n\n")
 
-	// Account choices
-	choices := []string{"Create new account", "I have an existing account", "Skip for now"}
+	// Account choices - updated to 4 options
+	choices := []string{
+		"Create new account",
+		"Create new account with existing wallet",
+		"I have an existing account",
+		"Skip for now",
+	}
 	for i, choice := range choices {
 		if i == m.accountChoice {
 			b.WriteString(selectedStyle.Render(fmt.Sprintf("▸ %s", choice)))
@@ -537,7 +691,7 @@ func (m *InstallModel) viewError() string {
 // runChecks runs system checks
 func (m *InstallModel) runChecks() tea.Cmd {
 	return func() tea.Msg {
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(SystemCheckDelay)
 
 		// Check platform
 		if !IsSupportedPlatform() {
@@ -548,7 +702,7 @@ func (m *InstallModel) runChecks() tea.Cmd {
 		}
 		m.progress = append(m.progress, successStyle.Render("✓ "+runtime.GOOS+" detected"))
 
-		time.Sleep(300 * time.Millisecond)
+		time.Sleep(PostCheckDelay)
 
 		// Check port availability
 		if !m.config.IsPortAvailable() {
@@ -596,7 +750,7 @@ func (m *InstallModel) runInstallation() tea.Cmd {
 			}
 			// Replace the "→" with "✓"
 			m.progress[len(m.progress)-1] = successStyle.Render(fmt.Sprintf("    ✓ %s", step.name))
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(InstallStepDelay)
 		}
 
 		m.config.Installed = true
@@ -696,7 +850,9 @@ func RunInstall() error {
 }
 
 // RunInstallNonInteractive runs a non-interactive installation
-func RunInstallNonInteractive() error {
+// privateKey: optional hex private key to import (for pre-funded wallets)
+// accountNumber: optional account number to login to existing account
+func RunInstallNonInteractive(privateKey, accountNumber string) error {
 	config := DefaultConfig()
 
 	// Check platform
@@ -712,6 +868,91 @@ func RunInstallNonInteractive() error {
 		}
 		config.Proxy.Port = newPort
 		fmt.Printf("Port %d in use, using port %d\n", config.Proxy.Port, newPort)
+	}
+
+	// Handle account setup
+	apiClient := NewAPIClient(config.API.Endpoint)
+	userID := generateUserID()
+	config.Auth.UserID = userID
+
+	if accountNumber != "" {
+		// Login to existing account
+		fmt.Println("→ Logging into existing account...")
+		loginResp, err := apiClient.Login(accountNumber)
+		if err != nil {
+			return fmt.Errorf("failed to login: %w", err)
+		}
+		config.Auth.AccountNumber = loginResp.AccountNumber
+		config.Auth.LoggedIn = true
+
+		// Import wallet key if returned from server
+		if loginResp.PrivateKey != nil && loginResp.WalletAddress != nil {
+			address, err := ImportWallet(userID, DefaultBlockchain, *loginResp.PrivateKey)
+			// Zero the private key after use
+			ZeroString(loginResp.PrivateKey)
+			if err != nil {
+				return fmt.Errorf("failed to import wallet: %w", err)
+			}
+			config.Wallet.Address = address
+			config.Wallet.Network = DefaultBlockchain
+			fmt.Printf("✓ Wallet synced: %s\n", address)
+		} else if loginResp.WalletAddress != nil {
+			config.Wallet.Address = *loginResp.WalletAddress
+			config.Wallet.Network = DefaultBlockchain
+		}
+		fmt.Printf("✓ Logged in as %s\n", loginResp.AccountNumber)
+	} else {
+		// Create new account
+		fmt.Println("→ Creating account...")
+		req := &CreateAccountRequest{}
+
+		// If private key provided, we'll set up wallet locally and pass address to API
+		if privateKey != "" {
+			// Validate and import the private key locally first
+			address, err := ImportWallet(userID, DefaultBlockchain, privateKey)
+			if err != nil {
+				return fmt.Errorf("failed to import private key: %w", err)
+			}
+			config.Wallet.Address = address
+			config.Wallet.Network = DefaultBlockchain
+			req.WalletAddress = &address
+			fmt.Printf("✓ Wallet imported: %s\n", address)
+		}
+
+		resp, err := apiClient.CreateAccount(req)
+		if err != nil {
+			fmt.Printf("⚠ API unavailable: %v\n", err)
+			// Fallback to local wallet creation if no private key provided
+			if privateKey == "" {
+				walletAddress, err := SetupWallet(userID, "base")
+				if err != nil {
+					return fmt.Errorf("failed to create wallet: %w", err)
+				}
+				config.Wallet.Address = walletAddress
+				config.Wallet.Network = DefaultBlockchain
+				fmt.Printf("✓ Wallet created: %s\n", walletAddress)
+			}
+			config.Auth.AccountNumber = generateSimulatedAccountNumber()
+		} else {
+			config.Auth.AccountNumber = resp.AccountNumber
+
+			// If we didn't import a key, sync wallet from server
+			if privateKey == "" {
+				loginResp, err := apiClient.Login(resp.AccountNumber)
+				if err == nil && loginResp.PrivateKey != nil {
+					address, err := ImportWallet(userID, DefaultBlockchain, *loginResp.PrivateKey)
+					// Zero the private key after use
+					ZeroString(loginResp.PrivateKey)
+					if err == nil {
+						config.Wallet.Address = address
+						config.Wallet.Network = DefaultBlockchain
+						fmt.Printf("✓ Wallet synced: %s\n", address)
+					}
+				}
+			}
+		}
+		config.Auth.LoggedIn = true
+		fmt.Printf("✓ Account: %s\n", config.Auth.AccountNumber)
 	}
 
 	// Save config
@@ -758,7 +999,7 @@ func RunInstallNonInteractive() error {
 	config.InstallDate = time.Now().Format(time.RFC3339)
 	config.Save()
 
-	fmt.Println("✓ Installation complete!")
+	fmt.Println("✓ Initialization complete!")
 	fmt.Printf("Proxy running on %s (transparent mode)\n", config.GetProxyAddr())
 
 	return nil

@@ -81,6 +81,18 @@ internal/
 - `/v1/scan/content` - Prompt injection detection ($0.001)
 - `/v1/scan/output` - Credential leak detection ($0.001)
 
+## Payment Architecture
+
+**IMPORTANT: All payments use x402 protocol exclusively.**
+
+- Every API request requiring payment uses x402 with the embedded wallet
+- The wallet is stored in the OS keyring and signs payment headers automatically
+- Stripe integration is **only** for wallet top-up (crypto on-ramp) - NOT a separate payment method
+- Users fund their wallet via:
+  1. Stripe on-ramp through the dashboard (converts fiat → USDC)
+  2. Direct USDC transfer to their wallet address on Base
+- There is no "Stripe payment method" vs "wallet payment method" - x402 is the only payment method
+
 ## Testing Requirements
 
 **CRITICAL: All tests must actually run and pass before considering work complete.**
