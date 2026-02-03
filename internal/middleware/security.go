@@ -8,9 +8,9 @@ import (
 // to protect against common web vulnerabilities like XSS, clickjacking, and MIME-sniffing.
 func SecurityHeaders() fiber.Handler {
 	// Build CSP policy
-	// Note: unpkg.com is needed for Swagger UI docs
+	// Note: unpkg.com and unsafe-inline needed for Swagger UI docs page
 	csp := "default-src 'self'; " +
-		"script-src 'self' https://unpkg.com; " +
+		"script-src 'self' 'unsafe-inline' https://unpkg.com; " +
 		"style-src 'self' 'unsafe-inline' https://unpkg.com; " +
 		"img-src 'self' data: https:; " +
 		"font-src 'self'; " +
