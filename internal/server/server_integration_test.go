@@ -66,7 +66,7 @@ func createTestApp(t *testing.T, testDB *testutil.TestDB) (*fiber.App, *db.DB) {
 			SameSite: "Lax",
 		},
 	}
-	authHandler := handlers.NewAuthHandler(database, authConfig)
+	authHandler := handlers.NewAuthHandler(database, authConfig, nil)
 
 	// Health handler
 	serverConfig := &config.Config{
