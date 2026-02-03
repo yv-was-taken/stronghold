@@ -11,6 +11,14 @@ Stronghold is a pay-per-request AI security scanning platform with three compone
 
 The platform provides 4-layer security scanning: heuristics, ML classification (Citadel/Hugot), semantic similarity, and optional LLM classification.
 
+## Temporary Files
+
+**IMPORTANT: Never create temporary or working files in the project directory.**
+
+- Review documents, scratch notes, analysis outputs → `/tmp/` or the scratchpad directory
+- Only production code, tests, and essential documentation belong in the repo
+- If you need to write intermediate results, use `/tmp/` not the project root
+
 ## Build Commands
 
 ```bash
@@ -80,6 +88,18 @@ internal/
 - `/v1/pricing` - Endpoint pricing (no auth)
 - `/v1/scan/content` - Prompt injection detection ($0.001)
 - `/v1/scan/output` - Credential leak detection ($0.001)
+
+## Payment Architecture
+
+**IMPORTANT: All payments use x402 protocol exclusively.**
+
+- Every API request requiring payment uses x402 with the embedded wallet
+- The wallet is stored in the OS keyring and signs payment headers automatically
+- Stripe integration is **only** for wallet top-up (crypto on-ramp) - NOT a separate payment method
+- Users fund their wallet via:
+  1. Stripe on-ramp through the dashboard (converts fiat → USDC)
+  2. Direct USDC transfer to their wallet address on Base
+- There is no "Stripe payment method" vs "wallet payment method" - x402 is the only payment method
 
 ## Testing Requirements
 

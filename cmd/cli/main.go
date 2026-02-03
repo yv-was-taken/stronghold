@@ -26,7 +26,7 @@ Designed for isolated machines running AI agents. Not recommended for daily-use
 workstations as it intercepts ALL system traffic.
 
 Quick Start:
-  stronghold install    # Interactive installation
+  stronghold init       # Initialize Stronghold proxy and account
   stronghold status     # Check proxy status
   stronghold enable     # Enable protection
   stronghold disable    # Disable protection
@@ -35,16 +35,16 @@ For more information, visit https://stronghold.security`,
 		Version: fmt.Sprintf("%s (commit: %s, built: %s)", version, commit, date),
 	}
 
-	// Install command
-	installCmd := &cobra.Command{
-		Use:   "install",
-		Short: "Install Stronghold proxy",
-		Long: `Install Stronghold proxy with interactive setup.
+	// Init command
+	initCmd := &cobra.Command{
+		Use:   "init",
+		Short: "Initialize Stronghold proxy and account",
+		Long: `Initialize Stronghold proxy with interactive setup.
 
 This command will:
   1. Check system compatibility
-  2. Authenticate with Stronghold
-  3. Set up payment method
+  2. Create or login to your Stronghold account
+  3. Set up your wallet (new or imported)
   4. Configure proxy settings
   5. Install system service
   6. Start the proxy
@@ -53,13 +53,21 @@ WARNING: This sets up a system-wide proxy that will route ALL traffic
 through Stronghold's scanning service. Intended for isolated machines only.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nonInteractive, _ := cmd.Flags().GetBool("yes")
+			privateKey, _ := cmd.Flags().GetString("private-key")
+			accountNumber, _ := cmd.Flags().GetString("account-number")
+			if !nonInteractive && (privateKey != "" || accountNumber != "") {
+				fmt.Println(cli.WarningStyle.Render("Warning:"), "--private-key and --account-number require --yes flag")
+				fmt.Println("Running interactive mode instead. Use --yes for non-interactive.")
+			}
 			if nonInteractive {
-				return cli.RunInstallNonInteractive()
+				return cli.RunInstallNonInteractive(privateKey, accountNumber)
 			}
 			return cli.RunInstall()
 		},
 	}
-	installCmd.Flags().BoolP("yes", "y", false, "Non-interactive mode")
+	initCmd.Flags().BoolP("yes", "y", false, "Non-interactive mode (skips prompts, uses defaults)")
+	initCmd.Flags().String("private-key", "", "Import wallet from private key (hex) - requires --yes")
+	initCmd.Flags().String("account-number", "", "Login to existing account - requires --yes")
 
 	// Enable command
 	enableCmd := &cobra.Command{
@@ -238,15 +246,49 @@ This command checks:
   - Configuration permissions
   - Binary installations
 
-Run this before 'stronghold install' to catch issues early.`,
+Run this before 'stronghold init' to catch issues early.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cli.Doctor()
 		},
 	}
 
+	// Wallet command group
+	walletCmd := &cobra.Command{
+		Use:   "wallet",
+		Short: "Manage wallet",
+		Long:  `View and manage your Stronghold wallet.`,
+	}
+
+	walletReplaceCmd := &cobra.Command{
+		Use:   "replace",
+		Short: "Replace wallet with a new private key",
+		Long: `Replace your current wallet with a new one.
+
+Reads the private key from (in order of precedence):
+  1. stdin (if piped)
+  2. STRONGHOLD_PRIVATE_KEY environment variable
+  3. --file flag
+  4. Interactive prompt (if terminal)
+
+Example:
+  echo $KEY | stronghold wallet replace --yes
+  STRONGHOLD_PRIVATE_KEY=xxx stronghold wallet replace --yes
+  stronghold wallet replace --file /path/to/key.txt
+  stronghold wallet replace  # interactive prompt`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fileFlag, _ := cmd.Flags().GetString("file")
+			yesFlag, _ := cmd.Flags().GetBool("yes")
+			return cli.WalletReplace(fileFlag, yesFlag)
+		},
+	}
+	walletReplaceCmd.Flags().StringP("file", "f", "", "Read private key from file")
+	walletReplaceCmd.Flags().BoolP("yes", "y", false, "Skip warnings and confirmations")
+
+	walletCmd.AddCommand(walletReplaceCmd)
+
 	// Add all commands
 	rootCmd.AddCommand(
-		installCmd,
+		initCmd,
 		enableCmd,
 		disableCmd,
 		statusCmd,

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
 	"log/slog"
@@ -149,6 +150,7 @@ func (h *AuthHandler) RegisterRoutesWithMiddleware(app *fiber.App, middlewares .
 	group.Post("/refresh", h.RefreshToken)
 	group.Post("/logout", h.AuthMiddleware(), h.Logout)
 	group.Get("/me", h.AuthMiddleware(), h.GetMe)
+	group.Put("/wallet", h.AuthMiddleware(), h.UpdateWallet)
 }
 
 // JWTClaims represents JWT claims
@@ -162,6 +164,7 @@ type JWTClaims struct {
 // CreateAccountRequest represents a request to create a new account
 type CreateAccountRequest struct {
 	WalletAddress *string `json:"wallet_address,omitempty"`
+	PrivateKey    *string `json:"private_key,omitempty"` // hex-encoded, used to import existing wallet
 }
 
 // CreateAccountResponse represents the response after creating an account
@@ -174,11 +177,11 @@ type CreateAccountResponse struct {
 
 // CreateAccount creates a new account with a generated account number
 // @Summary Create a new account
-// @Description Creates a new account with a generated account number and server-side wallet.
+// @Description Creates a new account with a generated account number and server-side wallet. Optionally accepts a private key to import an existing wallet.
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Param request body CreateAccountRequest false "Optional wallet address (ignored if KMS is configured)"
+// @Param request body CreateAccountRequest false "Optional wallet address or private key"
 // @Success 201 {object} CreateAccountResponse
 // @Failure 400 {object} map[string]string "Invalid request"
 // @Failure 500 {object} map[string]string "Server error"
@@ -195,23 +198,38 @@ func (h *AuthHandler) CreateAccount(c fiber.Ctx) error {
 
 	var walletAddress *string
 
-	// If KMS is configured, generate wallet server-side and encrypt the key
+	// If KMS is configured, handle wallet creation/import server-side
 	if h.kmsClient != nil {
-		// Generate new key pair
-		privateKey, err := crypto.GenerateKey()
-		if err != nil {
-			slog.Error("failed to generate wallet key", "error", err)
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Failed to create wallet",
-			})
+		var privateKeyHex string
+		var privateKey *ecdsa.PrivateKey
+		var err error
+
+		// Check if a private key was provided for import
+		if req.PrivateKey != nil && *req.PrivateKey != "" {
+			// Validate and parse the provided private key
+			privateKey, err = crypto.HexToECDSA(strings.TrimPrefix(*req.PrivateKey, "0x"))
+			if err != nil {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "Invalid private key format",
+				})
+			}
+			privateKeyHex = hex.EncodeToString(crypto.FromECDSA(privateKey))
+			slog.Info("importing user-provided wallet key")
+		} else {
+			// Generate new key pair
+			privateKey, err = crypto.GenerateKey()
+			if err != nil {
+				slog.Error("failed to generate wallet key", "error", err)
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to create wallet",
+				})
+			}
+			privateKeyHex = hex.EncodeToString(crypto.FromECDSA(privateKey))
 		}
 
 		// Get wallet address from public key
 		address := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
 		walletAddress = &address
-
-		// Convert private key to hex for encryption
-		privateKeyHex := hex.EncodeToString(crypto.FromECDSA(privateKey))
 
 		// Encrypt via KMS
 		encryptedKey, err := h.kmsClient.Encrypt(ctx, privateKeyHex)
@@ -270,6 +288,7 @@ func (h *AuthHandler) CreateAccount(c fiber.Ctx) error {
 		slog.Info("account created with KMS-encrypted wallet",
 			"account_id", account.ID,
 			"wallet_address", address,
+			"imported", req.PrivateKey != nil,
 		)
 
 		return c.Status(fiber.StatusCreated).JSON(CreateAccountResponse{
@@ -727,6 +746,113 @@ func (h *AuthHandler) AuthMiddleware() fiber.Handler {
 
 		return c.Next()
 	}
+}
+
+// UpdateWalletRequest represents a request to update wallet
+type UpdateWalletRequest struct {
+	PrivateKey string `json:"private_key"` // hex-encoded
+}
+
+// UpdateWalletResponse represents the response from updating wallet
+type UpdateWalletResponse struct {
+	WalletAddress string `json:"wallet_address"`
+}
+
+// UpdateWallet updates the wallet for the authenticated account
+// @Summary Update wallet
+// @Description Replace the wallet for the authenticated account with a new private key
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body UpdateWalletRequest true "New private key (hex-encoded)"
+// @Success 200 {object} UpdateWalletResponse
+// @Failure 400 {object} map[string]string "Invalid request"
+// @Failure 401 {object} map[string]string "Not authenticated"
+// @Failure 500 {object} map[string]string "Server error"
+// @Security CookieAuth
+// @Router /v1/auth/wallet [put]
+func (h *AuthHandler) UpdateWallet(c fiber.Ctx) error {
+	var req UpdateWalletRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	if req.PrivateKey == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Private key is required",
+		})
+	}
+
+	// Get account ID from context (set by AuthMiddleware)
+	accountIDStr := c.Locals("account_id")
+	if accountIDStr == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Not authenticated",
+		})
+	}
+
+	accountID, err := uuid.Parse(accountIDStr.(string))
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid account ID",
+		})
+	}
+
+	ctx := c.Context()
+
+	// Validate and parse the private key
+	privateKey, err := crypto.HexToECDSA(strings.TrimPrefix(req.PrivateKey, "0x"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid private key format",
+		})
+	}
+
+	// Get wallet address from public key
+	address := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
+
+	// If KMS is configured, encrypt and store the key
+	if h.kmsClient != nil {
+		privateKeyHex := hex.EncodeToString(crypto.FromECDSA(privateKey))
+
+		// Encrypt via KMS
+		encryptedKey, err := h.kmsClient.Encrypt(ctx, privateKeyHex)
+		if err != nil {
+			slog.Error("failed to encrypt wallet key", "error", err)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to secure wallet",
+			})
+		}
+
+		// Store encrypted key in DB
+		if err := h.db.StoreEncryptedKey(ctx, accountID, encryptedKey, h.kmsClient.KeyID()); err != nil {
+			slog.Error("failed to store encrypted key", "error", err, "account_id", accountID)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to store wallet key",
+			})
+		}
+	}
+
+	// Zero out the private key from memory
+	privateKey.D.SetUint64(0)
+
+	// Update wallet address in DB
+	if err := h.db.UpdateWalletAddress(ctx, accountID, address); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to update wallet address",
+		})
+	}
+
+	slog.Info("wallet updated",
+		"account_id", accountID,
+		"wallet_address", address,
+	)
+
+	return c.JSON(UpdateWalletResponse{
+		WalletAddress: address,
+	})
 }
 
 // isValidWalletAddress checks if a wallet address is valid

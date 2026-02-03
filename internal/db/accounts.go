@@ -381,3 +381,18 @@ func (db *DB) HasEncryptedKey(ctx context.Context, accountID uuid.UUID) (bool, e
 
 	return hasKey, nil
 }
+
+// UpdateWalletAddress updates the wallet address for an account
+func (db *DB) UpdateWalletAddress(ctx context.Context, accountID uuid.UUID, walletAddress string) error {
+	_, err := db.pool.Exec(ctx, `
+		UPDATE accounts
+		SET wallet_address = $1, updated_at = $2
+		WHERE id = $3
+	`, walletAddress, time.Now().UTC(), accountID)
+
+	if err != nil {
+		return fmt.Errorf("failed to update wallet address: %w", err)
+	}
+
+	return nil
+}

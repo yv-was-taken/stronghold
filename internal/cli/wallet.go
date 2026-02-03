@@ -43,13 +43,13 @@ func AccountBalance() error {
 
 	if !config.Auth.LoggedIn {
 		fmt.Println(accountErrorStyle.Render("✗ Not logged in"))
-		fmt.Println(accountInfoStyle.Render("Run 'stronghold install' to set up your account"))
+		fmt.Println(accountInfoStyle.Render("Run 'stronghold init' to set up your account"))
 		return nil
 	}
 
 	if config.Wallet.Address == "" {
 		fmt.Println(accountWarningStyle.Render("⚠ Account not fully set up"))
-		fmt.Println(accountInfoStyle.Render("Run 'stronghold install' to complete account setup"))
+		fmt.Println(accountInfoStyle.Render("Run 'stronghold init' to complete account setup"))
 		return nil
 	}
 
@@ -99,7 +99,7 @@ func AccountDeposit() error {
 
 	if !config.Auth.LoggedIn {
 		fmt.Println(accountErrorStyle.Render("✗ Not logged in"))
-		fmt.Println(accountInfoStyle.Render("Run 'stronghold install' to set up your account"))
+		fmt.Println(accountInfoStyle.Render("Run 'stronghold init' to set up your account"))
 		return nil
 	}
 
