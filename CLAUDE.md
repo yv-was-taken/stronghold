@@ -117,9 +117,12 @@ PostgreSQL 16 with auto-migrations in `internal/db/migrations/`. Tables: account
 
 ## Deployment
 
-- **Fly.io**: `fly deploy` (configured in fly.toml)
-- **Docker Compose**: `docker-compose up -d`
+- **API (Fly.io)**: `fly deploy` (configured in fly.toml)
+- **Frontend (Cloudflare Pages)**: Builds automatically on push to master - hosted at `stronghold-bhj.pages.dev`
+- **Docker Compose**: `docker-compose up -d` (local development only)
 - Caddy provides auto HTTPS with Let's Encrypt
+
+**IMPORTANT: Do NOT build frontend locally** (`bun run build`) unless debugging a remote build failure. Cloudflare Pages builds on push, so just commit and push frontend changes. Local builds are slow and unnecessary.
 
 ## Releases
 
