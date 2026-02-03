@@ -20,10 +20,8 @@ func TestGetPricing_ReturnsAllRoutes(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricingCfg := &config.PricingConfig{
-		ScanInput:     0.001,
-		ScanOutput:    0.001,
-		ScanUnified:   0.002,
-		ScanMultiturn: 0.005,
+		ScanContent:  0.001,
+		ScanOutput: 0.001,
 	}
 
 	x402 := middleware.NewX402Middleware(x402cfg, pricingCfg)
@@ -58,10 +56,8 @@ func TestGetPricing_ReturnsAllRoutes(t *testing.T) {
 
 	// These endpoints should be in the pricing
 	expectedPaths := []string{
-		"/v1/scan/input",
+		"/v1/scan/content",
 		"/v1/scan/output",
-		"/v1/scan",
-		"/v1/scan/multiturn",
 	}
 
 	for _, path := range expectedPaths {
@@ -76,10 +72,8 @@ func TestGetPricing_HasDescriptions(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricingCfg := &config.PricingConfig{
-		ScanInput:     0.001,
-		ScanOutput:    0.001,
-		ScanUnified:   0.002,
-		ScanMultiturn: 0.005,
+		ScanContent:  0.001,
+		ScanOutput: 0.001,
 	}
 
 	x402 := middleware.NewX402Middleware(x402cfg, pricingCfg)
@@ -103,10 +97,8 @@ func TestGetPricing_HasDescriptions(t *testing.T) {
 		descriptionsByPath[route.Path] = route.Description
 	}
 
-	assert.Contains(t, descriptionsByPath["/v1/scan/input"], "prompt injection")
+	assert.Contains(t, descriptionsByPath["/v1/scan/content"], "prompt injection")
 	assert.Contains(t, descriptionsByPath["/v1/scan/output"], "credential leak")
-	assert.Contains(t, descriptionsByPath["/v1/scan"], "Unified")
-	assert.Contains(t, descriptionsByPath["/v1/scan/multiturn"], "Multi-turn")
 }
 
 func TestGetPricing_CorrectPrices(t *testing.T) {
@@ -116,10 +108,8 @@ func TestGetPricing_CorrectPrices(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricingCfg := &config.PricingConfig{
-		ScanInput:     0.001,
-		ScanOutput:    0.001,
-		ScanUnified:   0.002,
-		ScanMultiturn: 0.005,
+		ScanContent:  0.001,
+		ScanOutput: 0.001,
 	}
 
 	x402 := middleware.NewX402Middleware(x402cfg, pricingCfg)
@@ -143,15 +133,9 @@ func TestGetPricing_CorrectPrices(t *testing.T) {
 		pricesByPath[route.Path] = route.Price
 	}
 
-	// Verify expected prices from CLAUDE.md:
-	// /v1/scan/input - $0.001
-	// /v1/scan/output - $0.001
-	// /v1/scan - $0.002
-	// /v1/scan/multiturn - $0.005
-	assert.Equal(t, 0.001, pricesByPath["/v1/scan/input"])
+	// Verify expected prices - all endpoints are $0.001
+	assert.Equal(t, 0.001, pricesByPath["/v1/scan/content"])
 	assert.Equal(t, 0.001, pricesByPath["/v1/scan/output"])
-	assert.Equal(t, 0.002, pricesByPath["/v1/scan"])
-	assert.Equal(t, 0.005, pricesByPath["/v1/scan/multiturn"])
 }
 
 func TestGetPricing_JSONContentType(t *testing.T) {
@@ -161,10 +145,8 @@ func TestGetPricing_JSONContentType(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricingCfg := &config.PricingConfig{
-		ScanInput:     0.001,
-		ScanOutput:    0.001,
-		ScanUnified:   0.002,
-		ScanMultiturn: 0.005,
+		ScanContent:  0.001,
+		ScanOutput: 0.001,
 	}
 
 	x402 := middleware.NewX402Middleware(x402cfg, pricingCfg)
@@ -188,10 +170,8 @@ func TestGetPricing_AllRoutesHaveMethod(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricingCfg := &config.PricingConfig{
-		ScanInput:     0.001,
-		ScanOutput:    0.001,
-		ScanUnified:   0.002,
-		ScanMultiturn: 0.005,
+		ScanContent:  0.001,
+		ScanOutput: 0.001,
 	}
 
 	x402 := middleware.NewX402Middleware(x402cfg, pricingCfg)

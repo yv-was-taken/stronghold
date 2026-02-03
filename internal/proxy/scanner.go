@@ -82,7 +82,7 @@ func (c *ScannerClient) SetWallet(w *wallet.Wallet) {
 	c.wallet = w
 }
 
-// ScanContent scans content for prompt injection attacks
+// ScanContent scans external content for prompt injection attacks
 func (c *ScannerClient) ScanContent(ctx context.Context, content []byte, sourceURL, contentType string) (*ScanResult, error) {
 	req := ScanRequest{
 		Text:        string(content),
@@ -92,16 +92,6 @@ func (c *ScannerClient) ScanContent(ctx context.Context, content []byte, sourceU
 	}
 
 	return c.scanWithPayment(ctx, "/v1/scan/content", req)
-}
-
-// Scan scans content using the unified endpoint
-func (c *ScannerClient) Scan(ctx context.Context, content []byte, mode string) (*ScanResult, error) {
-	reqBody := map[string]interface{}{
-		"text": content,
-		"mode": mode,
-	}
-
-	return c.scanWithPayment(ctx, "/v1/scan", reqBody)
 }
 
 // scanWithPayment performs a scan request with automatic x402 payment handling

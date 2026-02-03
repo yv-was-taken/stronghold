@@ -6,7 +6,7 @@ import type { UsageLog } from '@/lib/hooks/useUsage'
 const mockLogs: UsageLog[] = [
   {
     id: '1',
-    endpoint: '/v1/scan/input',
+    endpoint: '/v1/scan/content',
     cost_usdc: 0.001,
     status: 'success',
     threat_detected: false,
@@ -59,7 +59,7 @@ describe('UsageTable', () => {
     )
 
     // Endpoint labels
-    expect(screen.getByText('Input Scan')).toBeInTheDocument()
+    expect(screen.getByText('Content Scan')).toBeInTheDocument()
     expect(screen.getByText('Output Scan')).toBeInTheDocument()
 
     // Status badges

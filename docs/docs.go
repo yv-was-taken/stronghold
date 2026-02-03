@@ -62,7 +62,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.HealthResponse"
+                            "$ref": "#/definitions/handlers.HealthResponse"
                         }
                     }
                 }
@@ -192,7 +192,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.InitiateDepositRequest"
+                            "$ref": "#/definitions/handlers.InitiateDepositRequest"
                         }
                     }
                 ],
@@ -200,7 +200,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.InitiateDepositResponse"
+                            "$ref": "#/definitions/handlers.InitiateDepositResponse"
                         }
                     },
                     "400": {
@@ -426,7 +426,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.LinkWalletRequest"
+                            "$ref": "#/definitions/handlers.LinkWalletRequest"
                         }
                     }
                 ],
@@ -463,7 +463,7 @@ const docTemplate = `{
         },
         "/v1/auth/account": {
             "post": {
-                "description": "Creates a new account with a generated account number. Optionally link a wallet address.",
+                "description": "Creates a new account with a generated account number and server-side wallet.",
                 "consumes": [
                     "application/json"
                 ],
@@ -476,11 +476,11 @@ const docTemplate = `{
                 "summary": "Create a new account",
                 "parameters": [
                     {
-                        "description": "Optional wallet address",
+                        "description": "Optional wallet address (ignored if KMS is configured)",
                         "name": "request",
                         "in": "body",
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.CreateAccountRequest"
+                            "$ref": "#/definitions/handlers.CreateAccountRequest"
                         }
                     }
                 ],
@@ -488,7 +488,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.CreateAccountResponse"
+                            "$ref": "#/definitions/handlers.CreateAccountResponse"
                         }
                     },
                     "400": {
@@ -514,7 +514,7 @@ const docTemplate = `{
         },
         "/v1/auth/login": {
             "post": {
-                "description": "Authenticates using account number and sets httpOnly auth cookies",
+                "description": "Authenticates using account number and sets httpOnly auth cookies. Returns decrypted wallet key if KMS-encrypted key exists.",
                 "consumes": [
                     "application/json"
                 ],
@@ -532,7 +532,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.LoginRequest"
+                            "$ref": "#/definitions/handlers.LoginRequest"
                         }
                     }
                 ],
@@ -540,7 +540,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.LoginResponse"
+                            "$ref": "#/definitions/handlers.LoginResponse"
                         }
                     },
                     "400": {
@@ -659,7 +659,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.RefreshTokenResponse"
+                            "$ref": "#/definitions/handlers.RefreshTokenResponse"
                         }
                     },
                     "401": {
@@ -697,57 +697,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.PricingResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/scan": {
-            "post": {
-                "description": "Scans content for both input and output threats based on mode",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "scan"
-                ],
-                "summary": "Unified content scanning",
-                "parameters": [
-                    {
-                        "description": "Unified scan request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handlers.ScanUnifiedRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/stronghold_internal_stronghold.ScanResult"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "402": {
-                        "description": "Payment Required",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/handlers.PricingResponse"
                         }
                     }
                 }
@@ -773,7 +723,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.ScanContentRequest"
+                            "$ref": "#/definitions/handlers.ScanContentRequest"
                         }
                     }
                 ],
@@ -781,57 +731,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/stronghold_internal_stronghold.ScanResult"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "402": {
-                        "description": "Payment Required",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/scan/multiturn": {
-            "post": {
-                "description": "Scans conversation history for context-aware attacks",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "scan"
-                ],
-                "summary": "Scan multi-turn conversations",
-                "parameters": [
-                    {
-                        "description": "Multi-turn scan request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handlers.ScanMultiturnRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/stronghold_internal_stronghold.ScanResult"
+                            "$ref": "#/definitions/stronghold.ScanResult"
                         }
                     },
                     "400": {
@@ -873,7 +773,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.ScanOutputRequest"
+                            "$ref": "#/definitions/handlers.ScanOutputRequest"
                         }
                     }
                 ],
@@ -881,7 +781,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/stronghold_internal_stronghold.ScanResult"
+                            "$ref": "#/definitions/stronghold.ScanResult"
                         }
                     },
                     "400": {
@@ -905,7 +805,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "internal_handlers.CreateAccountRequest": {
+        "handlers.CreateAccountRequest": {
             "type": "object",
             "properties": {
                 "wallet_address": {
@@ -913,7 +813,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handlers.CreateAccountResponse": {
+        "handlers.CreateAccountResponse": {
             "type": "object",
             "properties": {
                 "account_number": {
@@ -924,10 +824,13 @@ const docTemplate = `{
                 },
                 "recovery_file": {
                     "type": "string"
+                },
+                "wallet_address": {
+                    "type": "string"
                 }
             }
         },
-        "internal_handlers.HealthResponse": {
+        "handlers.HealthResponse": {
             "type": "object",
             "properties": {
                 "services": {
@@ -947,7 +850,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handlers.InitiateDepositRequest": {
+        "handlers.InitiateDepositRequest": {
             "type": "object",
             "properties": {
                 "amount_usdc": {
@@ -958,7 +861,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handlers.InitiateDepositResponse": {
+        "handlers.InitiateDepositResponse": {
             "type": "object",
             "properties": {
                 "amount_usdc": {
@@ -990,7 +893,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handlers.LinkWalletRequest": {
+        "handlers.LinkWalletRequest": {
             "type": "object",
             "properties": {
                 "wallet_address": {
@@ -998,7 +901,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handlers.LoginRequest": {
+        "handlers.LoginRequest": {
             "type": "object",
             "properties": {
                 "account_number": {
@@ -1006,7 +909,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handlers.LoginResponse": {
+        "handlers.LoginResponse": {
             "type": "object",
             "properties": {
                 "account_number": {
@@ -1014,10 +917,17 @@ const docTemplate = `{
                 },
                 "expires_at": {
                     "type": "string"
+                },
+                "private_key": {
+                    "description": "Only returned over TLS when KMS-encrypted key exists",
+                    "type": "string"
+                },
+                "wallet_address": {
+                    "type": "string"
                 }
             }
         },
-        "internal_handlers.PricingResponse": {
+        "handlers.PricingResponse": {
             "type": "object",
             "properties": {
                 "currency": {
@@ -1029,12 +939,12 @@ const docTemplate = `{
                 "routes": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/internal_handlers.RoutePrice"
+                        "$ref": "#/definitions/handlers.RoutePrice"
                     }
                 }
             }
         },
-        "internal_handlers.RefreshTokenResponse": {
+        "handlers.RefreshTokenResponse": {
             "type": "object",
             "properties": {
                 "expires_at": {
@@ -1042,7 +952,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handlers.RoutePrice": {
+        "handlers.RoutePrice": {
             "type": "object",
             "properties": {
                 "description": {
@@ -1059,7 +969,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handlers.ScanContentRequest": {
+        "handlers.ScanContentRequest": {
             "type": "object",
             "properties": {
                 "content_type": {
@@ -1068,10 +978,6 @@ const docTemplate = `{
                 },
                 "file_path": {
                     "description": "For file reads, e.g., \"README.md\"",
-                    "type": "string"
-                },
-                "session_id": {
-                    "description": "For multi-turn context",
                     "type": "string"
                 },
                 "source_type": {
@@ -1087,21 +993,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handlers.ScanMultiturnRequest": {
-            "type": "object",
-            "properties": {
-                "session_id": {
-                    "type": "string"
-                },
-                "turns": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/stronghold_internal_stronghold.Turn"
-                    }
-                }
-            }
-        },
-        "internal_handlers.ScanOutputRequest": {
+        "handlers.ScanOutputRequest": {
             "type": "object",
             "properties": {
                 "text": {
@@ -1109,19 +1001,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_handlers.ScanUnifiedRequest": {
-            "type": "object",
-            "properties": {
-                "mode": {
-                    "description": "\"input\", \"output\", or \"both\"",
-                    "type": "string"
-                },
-                "text": {
-                    "type": "string"
-                }
-            }
-        },
-        "stronghold_internal_stronghold.Decision": {
+        "stronghold.Decision": {
             "type": "string",
             "enum": [
                 "ALLOW",
@@ -1134,11 +1014,11 @@ const docTemplate = `{
                 "DecisionBlock"
             ]
         },
-        "stronghold_internal_stronghold.ScanResult": {
+        "stronghold.ScanResult": {
             "type": "object",
             "properties": {
                 "decision": {
-                    "$ref": "#/definitions/stronghold_internal_stronghold.Decision"
+                    "$ref": "#/definitions/stronghold.Decision"
                 },
                 "latency_ms": {
                     "type": "integer"
@@ -1172,12 +1052,12 @@ const docTemplate = `{
                     "description": "Detailed threat info",
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/stronghold_internal_stronghold.Threat"
+                        "$ref": "#/definitions/stronghold.Threat"
                     }
                 }
             }
         },
-        "stronghold_internal_stronghold.Threat": {
+        "stronghold.Threat": {
             "type": "object",
             "properties": {
                 "category": {
@@ -1198,17 +1078,6 @@ const docTemplate = `{
                 },
                 "severity": {
                     "description": "\"high\", \"medium\", \"low\"",
-                    "type": "string"
-                }
-            }
-        },
-        "stronghold_internal_stronghold.Turn": {
-            "type": "object",
-            "properties": {
-                "content": {
-                    "type": "string"
-                },
-                "role": {
                     "type": "string"
                 }
             }

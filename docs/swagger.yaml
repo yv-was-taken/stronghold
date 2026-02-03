@@ -1,11 +1,11 @@
 basePath: /
 definitions:
-  internal_handlers.CreateAccountRequest:
+  handlers.CreateAccountRequest:
     properties:
       wallet_address:
         type: string
     type: object
-  internal_handlers.CreateAccountResponse:
+  handlers.CreateAccountResponse:
     properties:
       account_number:
         type: string
@@ -13,8 +13,10 @@ definitions:
         type: string
       recovery_file:
         type: string
+      wallet_address:
+        type: string
     type: object
-  internal_handlers.HealthResponse:
+  handlers.HealthResponse:
     properties:
       services:
         additionalProperties:
@@ -27,14 +29,14 @@ definitions:
       version:
         type: string
     type: object
-  internal_handlers.InitiateDepositRequest:
+  handlers.InitiateDepositRequest:
     properties:
       amount_usdc:
         type: number
       provider:
         type: string
     type: object
-  internal_handlers.InitiateDepositResponse:
+  handlers.InitiateDepositResponse:
     properties:
       amount_usdc:
         type: number
@@ -55,24 +57,29 @@ definitions:
       wallet_address:
         type: string
     type: object
-  internal_handlers.LinkWalletRequest:
+  handlers.LinkWalletRequest:
     properties:
       wallet_address:
         type: string
     type: object
-  internal_handlers.LoginRequest:
+  handlers.LoginRequest:
     properties:
       account_number:
         type: string
     type: object
-  internal_handlers.LoginResponse:
+  handlers.LoginResponse:
     properties:
       account_number:
         type: string
       expires_at:
         type: string
+      private_key:
+        description: Only returned over TLS when KMS-encrypted key exists
+        type: string
+      wallet_address:
+        type: string
     type: object
-  internal_handlers.PricingResponse:
+  handlers.PricingResponse:
     properties:
       currency:
         type: string
@@ -80,15 +87,15 @@ definitions:
         type: string
       routes:
         items:
-          $ref: '#/definitions/internal_handlers.RoutePrice'
+          $ref: '#/definitions/handlers.RoutePrice'
         type: array
     type: object
-  internal_handlers.RefreshTokenResponse:
+  handlers.RefreshTokenResponse:
     properties:
       expires_at:
         type: string
     type: object
-  internal_handlers.RoutePrice:
+  handlers.RoutePrice:
     properties:
       description:
         type: string
@@ -99,16 +106,13 @@ definitions:
       price_usd:
         type: number
     type: object
-  internal_handlers.ScanContentRequest:
+  handlers.ScanContentRequest:
     properties:
       content_type:
         description: '"html", "markdown", "json", "text", "code"'
         type: string
       file_path:
         description: For file reads, e.g., "README.md"
-        type: string
-      session_id:
-        description: For multi-turn context
         type: string
       source_type:
         description: '"web_page", "file", "api_response", "code_repo"'
@@ -119,29 +123,12 @@ definitions:
       text:
         type: string
     type: object
-  internal_handlers.ScanMultiturnRequest:
-    properties:
-      session_id:
-        type: string
-      turns:
-        items:
-          $ref: '#/definitions/stronghold_internal_stronghold.Turn'
-        type: array
-    type: object
-  internal_handlers.ScanOutputRequest:
+  handlers.ScanOutputRequest:
     properties:
       text:
         type: string
     type: object
-  internal_handlers.ScanUnifiedRequest:
-    properties:
-      mode:
-        description: '"input", "output", or "both"'
-        type: string
-      text:
-        type: string
-    type: object
-  stronghold_internal_stronghold.Decision:
+  stronghold.Decision:
     enum:
     - ALLOW
     - WARN
@@ -151,10 +138,10 @@ definitions:
     - DecisionAllow
     - DecisionWarn
     - DecisionBlock
-  stronghold_internal_stronghold.ScanResult:
+  stronghold.ScanResult:
     properties:
       decision:
-        $ref: '#/definitions/stronghold_internal_stronghold.Decision'
+        $ref: '#/definitions/stronghold.Decision'
       latency_ms:
         type: integer
       metadata:
@@ -178,10 +165,10 @@ definitions:
       threats_found:
         description: Detailed threat info
         items:
-          $ref: '#/definitions/stronghold_internal_stronghold.Threat'
+          $ref: '#/definitions/stronghold.Threat'
         type: array
     type: object
-  stronghold_internal_stronghold.Threat:
+  stronghold.Threat:
     properties:
       category:
         description: 'Broad category: "prompt_injection", "credential_leak"'
@@ -197,13 +184,6 @@ definitions:
         type: string
       severity:
         description: '"high", "medium", "low"'
-        type: string
-    type: object
-  stronghold_internal_stronghold.Turn:
-    properties:
-      content:
-        type: string
-      role:
         type: string
     type: object
 host: localhost:8080
@@ -254,7 +234,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handlers.HealthResponse'
+            $ref: '#/definitions/handlers.HealthResponse'
       summary: Health check
       tags:
       - health
@@ -335,14 +315,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handlers.InitiateDepositRequest'
+          $ref: '#/definitions/handlers.InitiateDepositRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/internal_handlers.InitiateDepositResponse'
+            $ref: '#/definitions/handlers.InitiateDepositResponse'
         "400":
           description: Invalid request or no wallet linked
           schema:
@@ -485,7 +465,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handlers.LinkWalletRequest'
+          $ref: '#/definitions/handlers.LinkWalletRequest'
       produces:
       - application/json
       responses:
@@ -516,21 +496,21 @@ paths:
     post:
       consumes:
       - application/json
-      description: Creates a new account with a generated account number. Optionally
-        link a wallet address.
+      description: Creates a new account with a generated account number and server-side
+        wallet.
       parameters:
-      - description: Optional wallet address
+      - description: Optional wallet address (ignored if KMS is configured)
         in: body
         name: request
         schema:
-          $ref: '#/definitions/internal_handlers.CreateAccountRequest'
+          $ref: '#/definitions/handlers.CreateAccountRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/internal_handlers.CreateAccountResponse'
+            $ref: '#/definitions/handlers.CreateAccountResponse'
         "400":
           description: Invalid request
           schema:
@@ -550,21 +530,22 @@ paths:
     post:
       consumes:
       - application/json
-      description: Authenticates using account number and sets httpOnly auth cookies
+      description: Authenticates using account number and sets httpOnly auth cookies.
+        Returns decrypted wallet key if KMS-encrypted key exists.
       parameters:
       - description: Account number
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handlers.LoginRequest'
+          $ref: '#/definitions/handlers.LoginRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handlers.LoginResponse'
+            $ref: '#/definitions/handlers.LoginResponse'
         "400":
           description: Invalid request
           schema:
@@ -641,7 +622,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handlers.RefreshTokenResponse'
+            $ref: '#/definitions/handlers.RefreshTokenResponse'
         "401":
           description: Invalid or expired refresh token
           schema:
@@ -666,43 +647,10 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handlers.PricingResponse'
+            $ref: '#/definitions/handlers.PricingResponse'
       summary: Get pricing information
       tags:
       - pricing
-  /v1/scan:
-    post:
-      consumes:
-      - application/json
-      description: Scans content for both input and output threats based on mode
-      parameters:
-      - description: Unified scan request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/internal_handlers.ScanUnifiedRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/stronghold_internal_stronghold.ScanResult'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "402":
-          description: Payment Required
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Unified content scanning
-      tags:
-      - scan
   /v1/scan/content:
     post:
       consumes:
@@ -715,14 +663,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handlers.ScanContentRequest'
+          $ref: '#/definitions/handlers.ScanContentRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/stronghold_internal_stronghold.ScanResult'
+            $ref: '#/definitions/stronghold.ScanResult'
         "400":
           description: Bad Request
           schema:
@@ -737,39 +685,6 @@ paths:
       summary: Scan external content for prompt injection
       tags:
       - scan
-  /v1/scan/multiturn:
-    post:
-      consumes:
-      - application/json
-      description: Scans conversation history for context-aware attacks
-      parameters:
-      - description: Multi-turn scan request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/internal_handlers.ScanMultiturnRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/stronghold_internal_stronghold.ScanResult'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "402":
-          description: Payment Required
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Scan multi-turn conversations
-      tags:
-      - scan
   /v1/scan/output:
     post:
       consumes:
@@ -781,14 +696,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handlers.ScanOutputRequest'
+          $ref: '#/definitions/handlers.ScanOutputRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/stronghold_internal_stronghold.ScanResult'
+            $ref: '#/definitions/stronghold.ScanResult'
         "400":
           description: Bad Request
           schema:

@@ -23,7 +23,7 @@ go build -o stronghold-proxy ./cmd/proxy
 go test ./...
 
 # Run a specific test
-go test ./internal/handlers -run TestScanInput
+go test ./internal/handlers -run TestScanContent
 
 # Frontend (in web/ directory) - USE BUN, NOT NPM
 cd web && bun run dev     # Development server
@@ -78,10 +78,8 @@ internal/
 
 - `/health`, `/health/live`, `/health/ready` - Health checks (no auth)
 - `/v1/pricing` - Endpoint pricing (no auth)
-- `/v1/scan/input` - Prompt injection detection ($0.001)
+- `/v1/scan/content` - Prompt injection detection ($0.001)
 - `/v1/scan/output` - Credential leak detection ($0.001)
-- `/v1/scan` - Unified scanning ($0.002)
-- `/v1/scan/multiturn` - Multi-turn conversation protection ($0.005)
 
 ## Testing Requirements
 

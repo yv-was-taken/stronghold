@@ -29,7 +29,7 @@ func TestAtomicPayment_DevModeBypass(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricing := &config.PricingConfig{
-		ScanInput:  0.001,
+		ScanContent:  0.001,
 		ScanOutput: 0.001,
 	}
 
@@ -58,7 +58,7 @@ func TestAtomicPayment_MissingHeader(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricing := &config.PricingConfig{
-		ScanInput: 0.001,
+		ScanContent: 0.001,
 	}
 
 	m := NewX402Middleware(cfg, pricing)
@@ -99,7 +99,7 @@ func TestRequirePayment_DevModeBypass(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricing := &config.PricingConfig{
-		ScanInput: 0.001,
+		ScanContent: 0.001,
 	}
 
 	m := NewX402Middleware(cfg, pricing)
@@ -155,16 +155,14 @@ func TestGetRoutes(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricing := &config.PricingConfig{
-		ScanInput:     0.001,
-		ScanOutput:    0.001,
-		ScanUnified:   0.002,
-		ScanMultiturn: 0.005,
+		ScanContent: 0.001,
+		ScanOutput:  0.001,
 	}
 
 	m := NewX402Middleware(cfg, pricing)
 	routes := m.GetRoutes()
 
-	assert.Len(t, routes, 4)
+	assert.Len(t, routes, 2)
 
 	// Verify route pricing
 	routeMap := make(map[string]float64)
@@ -172,10 +170,8 @@ func TestGetRoutes(t *testing.T) {
 		routeMap[r.Path] = r.Price
 	}
 
-	assert.Equal(t, 0.001, routeMap["/v1/scan/input"])
+	assert.Equal(t, 0.001, routeMap["/v1/scan/content"])
 	assert.Equal(t, 0.001, routeMap["/v1/scan/output"])
-	assert.Equal(t, 0.002, routeMap["/v1/scan"])
-	assert.Equal(t, 0.005, routeMap["/v1/scan/multiturn"])
 }
 
 func TestFloat64ToWei(t *testing.T) {
@@ -237,7 +233,7 @@ func TestAtomicPayment_WithDB_IdempotencyCache(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricing := &config.PricingConfig{
-		ScanInput: 0.001,
+		ScanContent: 0.001,
 	}
 
 	// Create middleware with database
@@ -265,13 +261,13 @@ func TestAtomicPayment_WithDB_IdempotencyCache(t *testing.T) {
 
 	app := fiber.New()
 	callCount := 0
-	app.Post("/v1/scan/input", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/content", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
 		callCount++
 		return c.JSON(fiber.Map{"status": "ok", "call": callCount})
 	})
 
 	// First request - should succeed and store result
-	req := httptest.NewRequest("POST", "/v1/scan/input", bytes.NewBufferString(`{"text":"test"}`))
+	req := httptest.NewRequest("POST", "/v1/scan/content", bytes.NewBufferString(`{"text":"test"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Payment", paymentHeader)
 
@@ -285,7 +281,7 @@ func TestAtomicPayment_WithDB_IdempotencyCache(t *testing.T) {
 	// Second request with SAME payment - should return cached result (conflict since in progress)
 	// Note: In real scenario, the first request would complete and subsequent
 	// requests would get the cached completed result. Here we test the conflict case.
-	req2 := httptest.NewRequest("POST", "/v1/scan/input", bytes.NewBufferString(`{"text":"test"}`))
+	req2 := httptest.NewRequest("POST", "/v1/scan/content", bytes.NewBufferString(`{"text":"test"}`))
 	req2.Header.Set("Content-Type", "application/json")
 	req2.Header.Set("X-Payment", paymentHeader)
 
@@ -313,7 +309,7 @@ func TestAtomicPayment_DuplicateInProgress(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricing := &config.PricingConfig{
-		ScanInput: 0.001,
+		ScanContent: 0.001,
 	}
 
 	m := NewX402MiddlewareWithDB(cfg, pricing, db.NewFromPool(testDB.Pool))
@@ -339,7 +335,7 @@ func TestAtomicPayment_DuplicateInProgress(t *testing.T) {
 	require.NoError(t, err)
 
 	app := fiber.New()
-	app.Post("/v1/scan/input", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/content", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
 		time.Sleep(50 * time.Millisecond) // Simulate some work
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
@@ -352,7 +348,7 @@ func TestAtomicPayment_DuplicateInProgress(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			req := httptest.NewRequest("POST", "/v1/scan/input", bytes.NewBufferString(`{"text":"test"}`))
+			req := httptest.NewRequest("POST", "/v1/scan/content", bytes.NewBufferString(`{"text":"test"}`))
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("X-Payment", paymentHeader)
 
@@ -398,7 +394,7 @@ func TestAtomicPayment_SettlementFailure(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricing := &config.PricingConfig{
-		ScanInput: 0.001,
+		ScanContent: 0.001,
 	}
 
 	m := NewX402MiddlewareWithDB(cfg, pricing, db.NewFromPool(testDB.Pool))
@@ -423,12 +419,12 @@ func TestAtomicPayment_SettlementFailure(t *testing.T) {
 
 	handlerCalled := false
 	app := fiber.New()
-	app.Post("/v1/scan/input", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/content", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
 		handlerCalled = true
 		return c.JSON(fiber.Map{"status": "ok", "result": "should not be returned"})
 	})
 
-	req := httptest.NewRequest("POST", "/v1/scan/input", bytes.NewBufferString(`{"text":"test"}`))
+	req := httptest.NewRequest("POST", "/v1/scan/content", bytes.NewBufferString(`{"text":"test"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Payment", paymentHeader)
 
@@ -465,7 +461,7 @@ func TestAtomicPayment_HandlerError(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricing := &config.PricingConfig{
-		ScanInput: 0.001,
+		ScanContent: 0.001,
 	}
 
 	m := NewX402MiddlewareWithDB(cfg, pricing, db.NewFromPool(testDB.Pool))
@@ -492,12 +488,12 @@ func TestAtomicPayment_HandlerError(t *testing.T) {
 	require.NoError(t, err)
 
 	app := fiber.New()
-	app.Post("/v1/scan/input", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/content", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
 		// Handler returns an error status
 		return c.Status(500).JSON(fiber.Map{"error": "internal error"})
 	})
 
-	req := httptest.NewRequest("POST", "/v1/scan/input", bytes.NewBufferString(`{"text":"test"}`))
+	req := httptest.NewRequest("POST", "/v1/scan/content", bytes.NewBufferString(`{"text":"test"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Payment", paymentHeader)
 
@@ -519,7 +515,7 @@ func TestMiddleware_SkipsFreeRoutes(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricing := &config.PricingConfig{
-		ScanInput: 0.001,
+		ScanContent: 0.001,
 	}
 
 	m := NewX402Middleware(cfg, pricing)
@@ -637,7 +633,7 @@ func TestNewX402MiddlewareWithDB(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricing := &config.PricingConfig{
-		ScanInput: 0.001,
+		ScanContent: 0.001,
 	}
 
 	// This test just verifies the constructor works
@@ -678,7 +674,7 @@ func TestAtomicPayment_FullFlow_Integration(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricing := &config.PricingConfig{
-		ScanInput: 0.001,
+		ScanContent: 0.001,
 	}
 
 	database := db.NewFromPool(testDB.Pool)
@@ -701,7 +697,7 @@ func TestAtomicPayment_FullFlow_Integration(t *testing.T) {
 	require.NoError(t, err)
 
 	app := fiber.New()
-	app.Post("/v1/scan/input", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/content", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
 		// Verify we have access to the payment transaction
 		tx := GetPaymentTransaction(c)
 		if tx == nil {
@@ -715,7 +711,7 @@ func TestAtomicPayment_FullFlow_Integration(t *testing.T) {
 		})
 	})
 
-	req := httptest.NewRequest("POST", "/v1/scan/input", bytes.NewBufferString(`{"text":"test"}`))
+	req := httptest.NewRequest("POST", "/v1/scan/content", bytes.NewBufferString(`{"text":"test"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Payment", paymentHeader)
 
@@ -765,7 +761,7 @@ func TestAtomicPayment_InvalidAmountFormat(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricing := &config.PricingConfig{
-		ScanInput: 0.001,
+		ScanContent: 0.001,
 	}
 
 	m := NewX402MiddlewareWithDB(cfg, pricing, db.NewFromPool(testDB.Pool))
@@ -784,11 +780,11 @@ func TestAtomicPayment_InvalidAmountFormat(t *testing.T) {
 	require.NoError(t, err)
 
 	app := fiber.New()
-	app.Post("/v1/scan/input", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/content", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
 
-	req := httptest.NewRequest("POST", "/v1/scan/input", bytes.NewBufferString(`{"text":"test"}`))
+	req := httptest.NewRequest("POST", "/v1/scan/content", bytes.NewBufferString(`{"text":"test"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Payment", paymentHeader)
 
@@ -815,7 +811,7 @@ func TestVerifyPayment_AddressNormalization(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricing := &config.PricingConfig{
-		ScanInput: 0.001,
+		ScanContent: 0.001,
 	}
 
 	m := NewX402Middleware(cfg, pricing)
@@ -842,11 +838,11 @@ func TestVerifyPayment_AddressNormalization(t *testing.T) {
 	require.NoError(t, err)
 
 	app := fiber.New()
-	app.Post("/v1/scan/input", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/content", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
 
-	req := httptest.NewRequest("POST", "/v1/scan/input", bytes.NewBufferString(`{"text":"test"}`))
+	req := httptest.NewRequest("POST", "/v1/scan/content", bytes.NewBufferString(`{"text":"test"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Payment", paymentHeader)
 

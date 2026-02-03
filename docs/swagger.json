@@ -60,7 +60,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.HealthResponse"
+                            "$ref": "#/definitions/handlers.HealthResponse"
                         }
                     }
                 }
@@ -190,7 +190,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.InitiateDepositRequest"
+                            "$ref": "#/definitions/handlers.InitiateDepositRequest"
                         }
                     }
                 ],
@@ -198,7 +198,7 @@
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.InitiateDepositResponse"
+                            "$ref": "#/definitions/handlers.InitiateDepositResponse"
                         }
                     },
                     "400": {
@@ -424,7 +424,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.LinkWalletRequest"
+                            "$ref": "#/definitions/handlers.LinkWalletRequest"
                         }
                     }
                 ],
@@ -461,7 +461,7 @@
         },
         "/v1/auth/account": {
             "post": {
-                "description": "Creates a new account with a generated account number. Optionally link a wallet address.",
+                "description": "Creates a new account with a generated account number and server-side wallet.",
                 "consumes": [
                     "application/json"
                 ],
@@ -474,11 +474,11 @@
                 "summary": "Create a new account",
                 "parameters": [
                     {
-                        "description": "Optional wallet address",
+                        "description": "Optional wallet address (ignored if KMS is configured)",
                         "name": "request",
                         "in": "body",
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.CreateAccountRequest"
+                            "$ref": "#/definitions/handlers.CreateAccountRequest"
                         }
                     }
                 ],
@@ -486,7 +486,7 @@
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.CreateAccountResponse"
+                            "$ref": "#/definitions/handlers.CreateAccountResponse"
                         }
                     },
                     "400": {
@@ -512,7 +512,7 @@
         },
         "/v1/auth/login": {
             "post": {
-                "description": "Authenticates using account number and sets httpOnly auth cookies",
+                "description": "Authenticates using account number and sets httpOnly auth cookies. Returns decrypted wallet key if KMS-encrypted key exists.",
                 "consumes": [
                     "application/json"
                 ],
@@ -530,7 +530,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.LoginRequest"
+                            "$ref": "#/definitions/handlers.LoginRequest"
                         }
                     }
                 ],
@@ -538,7 +538,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.LoginResponse"
+                            "$ref": "#/definitions/handlers.LoginResponse"
                         }
                     },
                     "400": {
@@ -657,7 +657,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.RefreshTokenResponse"
+                            "$ref": "#/definitions/handlers.RefreshTokenResponse"
                         }
                     },
                     "401": {
@@ -695,57 +695,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.PricingResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/scan": {
-            "post": {
-                "description": "Scans content for both input and output threats based on mode",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "scan"
-                ],
-                "summary": "Unified content scanning",
-                "parameters": [
-                    {
-                        "description": "Unified scan request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handlers.ScanUnifiedRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/stronghold_internal_stronghold.ScanResult"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "402": {
-                        "description": "Payment Required",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/handlers.PricingResponse"
                         }
                     }
                 }
@@ -771,7 +721,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.ScanContentRequest"
+                            "$ref": "#/definitions/handlers.ScanContentRequest"
                         }
                     }
                 ],
@@ -779,57 +729,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/stronghold_internal_stronghold.ScanResult"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "402": {
-                        "description": "Payment Required",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/scan/multiturn": {
-            "post": {
-                "description": "Scans conversation history for context-aware attacks",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "scan"
-                ],
-                "summary": "Scan multi-turn conversations",
-                "parameters": [
-                    {
-                        "description": "Multi-turn scan request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_handlers.ScanMultiturnRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/stronghold_internal_stronghold.ScanResult"
+                            "$ref": "#/definitions/stronghold.ScanResult"
                         }
                     },
                     "400": {
@@ -871,7 +771,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.ScanOutputRequest"
+                            "$ref": "#/definitions/handlers.ScanOutputRequest"
                         }
                     }
                 ],
@@ -879,7 +779,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/stronghold_internal_stronghold.ScanResult"
+                            "$ref": "#/definitions/stronghold.ScanResult"
                         }
                     },
                     "400": {
@@ -903,7 +803,7 @@
         }
     },
     "definitions": {
-        "internal_handlers.CreateAccountRequest": {
+        "handlers.CreateAccountRequest": {
             "type": "object",
             "properties": {
                 "wallet_address": {
@@ -911,7 +811,7 @@
                 }
             }
         },
-        "internal_handlers.CreateAccountResponse": {
+        "handlers.CreateAccountResponse": {
             "type": "object",
             "properties": {
                 "account_number": {
@@ -922,10 +822,13 @@
                 },
                 "recovery_file": {
                     "type": "string"
+                },
+                "wallet_address": {
+                    "type": "string"
                 }
             }
         },
-        "internal_handlers.HealthResponse": {
+        "handlers.HealthResponse": {
             "type": "object",
             "properties": {
                 "services": {
@@ -945,7 +848,7 @@
                 }
             }
         },
-        "internal_handlers.InitiateDepositRequest": {
+        "handlers.InitiateDepositRequest": {
             "type": "object",
             "properties": {
                 "amount_usdc": {
@@ -956,7 +859,7 @@
                 }
             }
         },
-        "internal_handlers.InitiateDepositResponse": {
+        "handlers.InitiateDepositResponse": {
             "type": "object",
             "properties": {
                 "amount_usdc": {
@@ -988,7 +891,7 @@
                 }
             }
         },
-        "internal_handlers.LinkWalletRequest": {
+        "handlers.LinkWalletRequest": {
             "type": "object",
             "properties": {
                 "wallet_address": {
@@ -996,7 +899,7 @@
                 }
             }
         },
-        "internal_handlers.LoginRequest": {
+        "handlers.LoginRequest": {
             "type": "object",
             "properties": {
                 "account_number": {
@@ -1004,7 +907,7 @@
                 }
             }
         },
-        "internal_handlers.LoginResponse": {
+        "handlers.LoginResponse": {
             "type": "object",
             "properties": {
                 "account_number": {
@@ -1012,10 +915,17 @@
                 },
                 "expires_at": {
                     "type": "string"
+                },
+                "private_key": {
+                    "description": "Only returned over TLS when KMS-encrypted key exists",
+                    "type": "string"
+                },
+                "wallet_address": {
+                    "type": "string"
                 }
             }
         },
-        "internal_handlers.PricingResponse": {
+        "handlers.PricingResponse": {
             "type": "object",
             "properties": {
                 "currency": {
@@ -1027,12 +937,12 @@
                 "routes": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/internal_handlers.RoutePrice"
+                        "$ref": "#/definitions/handlers.RoutePrice"
                     }
                 }
             }
         },
-        "internal_handlers.RefreshTokenResponse": {
+        "handlers.RefreshTokenResponse": {
             "type": "object",
             "properties": {
                 "expires_at": {
@@ -1040,7 +950,7 @@
                 }
             }
         },
-        "internal_handlers.RoutePrice": {
+        "handlers.RoutePrice": {
             "type": "object",
             "properties": {
                 "description": {
@@ -1057,7 +967,7 @@
                 }
             }
         },
-        "internal_handlers.ScanContentRequest": {
+        "handlers.ScanContentRequest": {
             "type": "object",
             "properties": {
                 "content_type": {
@@ -1066,10 +976,6 @@
                 },
                 "file_path": {
                     "description": "For file reads, e.g., \"README.md\"",
-                    "type": "string"
-                },
-                "session_id": {
-                    "description": "For multi-turn context",
                     "type": "string"
                 },
                 "source_type": {
@@ -1085,21 +991,7 @@
                 }
             }
         },
-        "internal_handlers.ScanMultiturnRequest": {
-            "type": "object",
-            "properties": {
-                "session_id": {
-                    "type": "string"
-                },
-                "turns": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/stronghold_internal_stronghold.Turn"
-                    }
-                }
-            }
-        },
-        "internal_handlers.ScanOutputRequest": {
+        "handlers.ScanOutputRequest": {
             "type": "object",
             "properties": {
                 "text": {
@@ -1107,19 +999,7 @@
                 }
             }
         },
-        "internal_handlers.ScanUnifiedRequest": {
-            "type": "object",
-            "properties": {
-                "mode": {
-                    "description": "\"input\", \"output\", or \"both\"",
-                    "type": "string"
-                },
-                "text": {
-                    "type": "string"
-                }
-            }
-        },
-        "stronghold_internal_stronghold.Decision": {
+        "stronghold.Decision": {
             "type": "string",
             "enum": [
                 "ALLOW",
@@ -1132,11 +1012,11 @@
                 "DecisionBlock"
             ]
         },
-        "stronghold_internal_stronghold.ScanResult": {
+        "stronghold.ScanResult": {
             "type": "object",
             "properties": {
                 "decision": {
-                    "$ref": "#/definitions/stronghold_internal_stronghold.Decision"
+                    "$ref": "#/definitions/stronghold.Decision"
                 },
                 "latency_ms": {
                     "type": "integer"
@@ -1170,12 +1050,12 @@
                     "description": "Detailed threat info",
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/stronghold_internal_stronghold.Threat"
+                        "$ref": "#/definitions/stronghold.Threat"
                     }
                 }
             }
         },
-        "stronghold_internal_stronghold.Threat": {
+        "stronghold.Threat": {
             "type": "object",
             "properties": {
                 "category": {
@@ -1196,17 +1076,6 @@
                 },
                 "severity": {
                     "description": "\"high\", \"medium\", \"low\"",
-                    "type": "string"
-                }
-            }
-        },
-        "stronghold_internal_stronghold.Turn": {
-            "type": "object",
-            "properties": {
-                "content": {
-                    "type": "string"
-                },
-                "role": {
                     "type": "string"
                 }
             }

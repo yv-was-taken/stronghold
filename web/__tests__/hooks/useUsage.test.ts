@@ -5,7 +5,7 @@ import { useUsageLogs, useUsageStats } from '@/lib/hooks/useUsage'
 const mockUsageLogs = [
   {
     id: '1',
-    endpoint: '/v1/scan/input',
+    endpoint: '/v1/scan/content',
     cost_usdc: 0.001,
     status: 'success' as const,
     threat_detected: false,

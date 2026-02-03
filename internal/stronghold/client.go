@@ -207,11 +207,6 @@ func (s *Scanner) scanWithThreatScorer(text, sourceURL, sourceType, contentType 
 	}, nil
 }
 
-// ScanInput is deprecated - use ScanContent instead
-func (s *Scanner) ScanInput(ctx context.Context, text string) (*ScanResult, error) {
-	return s.ScanContent(ctx, text, "", "user_input", "text")
-}
-
 // ScanOutput scans LLM output for credential leaks using Citadel
 func (s *Scanner) ScanOutput(ctx context.Context, text string) (*ScanResult, error) {
 	start := time.Now()
@@ -254,77 +249,6 @@ func (s *Scanner) ScanOutput(ctx context.Context, text string) (*ScanResult, err
 			"categories":   result.ThreatCategories,
 		},
 	}, nil
-}
-
-// ScanUnified performs unified input/output scanning
-func (s *Scanner) ScanUnified(ctx context.Context, text string, mode string) (*ScanResult, error) {
-	if mode == "input" {
-		return s.ScanInput(ctx, text)
-	} else if mode == "output" {
-		return s.ScanOutput(ctx, text)
-	}
-
-	// Both: run input scan
-	return s.ScanInput(ctx, text)
-}
-
-// ScanMultiturn scans multi-turn conversations
-func (s *Scanner) ScanMultiturn(ctx context.Context, sessionID string, turns []Turn) (*ScanResult, error) {
-	start := time.Now()
-
-	// For multi-turn, analyze each turn and aggregate
-	var maxScore float64
-	var allThreats []Threat
-
-	for _, turn := range turns {
-		result, err := s.ScanContent(ctx, turn.Content, "", "conversation_turn", "text")
-		if err != nil {
-			continue
-		}
-
-		score := result.Scores["combined"]
-		if score == 0 {
-			score = result.Scores["heuristic"]
-		}
-
-		if score > maxScore {
-			maxScore = score
-		}
-		allThreats = append(allThreats, result.ThreatsFound...)
-	}
-
-	decision := DecisionAllow
-	reason := "No threats detected in conversation"
-	recommendedAction := "Proceed with processing"
-
-	if maxScore >= s.config.BlockThreshold {
-		decision = DecisionBlock
-		reason = "Critical: Conversation contains prompt injection attack"
-		recommendedAction = "DO NOT PROCEED - This conversation appears to contain an active prompt injection attempt. Terminate the session and do not continue processing."
-	} else if maxScore >= s.config.WarnThreshold {
-		decision = DecisionWarn
-		reason = "Elevated threat score in conversation"
-		recommendedAction = "Caution advised - Conversation contains suspicious patterns. Review context carefully before proceeding."
-	}
-
-	return &ScanResult{
-		Decision:          decision,
-		Scores:            map[string]float64{"combined": maxScore, "ml_confidence": 0.0, "semantic": 0.0},
-		Reason:            reason,
-		LatencyMs:         time.Since(start).Milliseconds(),
-		ThreatsFound:      allThreats,
-		RecommendedAction: recommendedAction,
-		Metadata: map[string]interface{}{
-			"turns_analyzed": len(turns),
-			"session_id":     sessionID,
-		},
-	}, nil
-}
-
-// Turn represents a single turn in a conversation
-type Turn struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
 }
 
 // sanitizeText sanitizes text based on detected threats

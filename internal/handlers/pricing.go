@@ -52,14 +52,10 @@ func (h *PricingHandler) GetPricing(c fiber.Ctx) error {
 	for _, route := range routes {
 		description := ""
 		switch route.Path {
-		case "/v1/scan/input":
-			description = "Input scanning for prompt injection detection"
+		case "/v1/scan/content":
+			description = "Content scanning for prompt injection detection"
 		case "/v1/scan/output":
 			description = "Output scanning for credential leak detection"
-		case "/v1/scan":
-			description = "Unified input/output scanning"
-		case "/v1/scan/multiturn":
-			description = "Multi-turn conversation protection"
 		}
 
 		routePrices = append(routePrices, RoutePrice{

@@ -97,10 +97,8 @@ type StrongholdConfig struct {
 
 // PricingConfig holds endpoint pricing in USD
 type PricingConfig struct {
-	ScanInput    float64
-	ScanOutput   float64
-	ScanUnified  float64
-	ScanMultiturn float64
+	ScanContent float64
+	ScanOutput  float64
 }
 
 // RateLimitConfig holds rate limiting configuration
@@ -176,10 +174,8 @@ func Load() *Config {
 			LLMAPIKey:       getEnv("STRONGHOLD_LLM_API_KEY", ""),
 		},
 		Pricing: PricingConfig{
-			ScanInput:     getFloat("PRICE_SCAN_INPUT", 0.001),
-			ScanOutput:    getFloat("PRICE_SCAN_OUTPUT", 0.001),
-			ScanUnified:   getFloat("PRICE_SCAN_UNIFIED", 0.002),
-			ScanMultiturn: getFloat("PRICE_SCAN_MULTITURN", 0.005),
+			ScanContent: getFloat("PRICE_SCAN_CONTENT", 0.001),
+			ScanOutput:  getFloat("PRICE_SCAN_OUTPUT", 0.001),
 		},
 		RateLimit: RateLimitConfig{
 			Enabled:       getBool("RATE_LIMIT_ENABLED", true),

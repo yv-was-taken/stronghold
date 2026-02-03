@@ -14,10 +14,8 @@ interface UsageTableProps {
 }
 
 const endpointLabels: Record<string, string> = {
-  '/v1/scan/input': 'Input Scan',
+  '/v1/scan/content': 'Content Scan',
   '/v1/scan/output': 'Output Scan',
-  '/v1/scan': 'Unified Scan',
-  '/v1/scan/multiturn': 'Multi-turn',
 };
 
 export function UsageTable({ logs, loading, hasMore, onLoadMore }: UsageTableProps) {

@@ -59,10 +59,8 @@ type PriceRoute struct {
 // GetRoutes returns all priced routes
 func (m *X402Middleware) GetRoutes() []PriceRoute {
 	return []PriceRoute{
-		{Path: "/v1/scan/input", Method: "POST", Price: m.pricing.ScanInput},
+		{Path: "/v1/scan/content", Method: "POST", Price: m.pricing.ScanContent},
 		{Path: "/v1/scan/output", Method: "POST", Price: m.pricing.ScanOutput},
-		{Path: "/v1/scan", Method: "POST", Price: m.pricing.ScanUnified},
-		{Path: "/v1/scan/multiturn", Method: "POST", Price: m.pricing.ScanMultiturn},
 	}
 }
 
