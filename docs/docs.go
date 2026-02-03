@@ -463,7 +463,7 @@ const docTemplate = `{
         },
         "/v1/auth/account": {
             "post": {
-                "description": "Creates a new account with a generated account number and server-side wallet.",
+                "description": "Creates a new account with a generated account number and server-side wallet. Optionally accepts a private key to import an existing wallet.",
                 "consumes": [
                     "application/json"
                 ],
@@ -476,7 +476,7 @@ const docTemplate = `{
                 "summary": "Create a new account",
                 "parameters": [
                     {
-                        "description": "Optional wallet address (ignored if KMS is configured)",
+                        "description": "Optional wallet address or private key",
                         "name": "request",
                         "in": "body",
                         "schema": {
@@ -683,6 +683,72 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/auth/wallet": {
+            "put": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "description": "Replace the wallet for the authenticated account with a new private key",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Update wallet",
+                "parameters": [
+                    {
+                        "description": "New private key (hex-encoded)",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.UpdateWalletRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.UpdateWalletResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Not authenticated",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/v1/pricing": {
             "get": {
                 "description": "Returns the pricing for all protected endpoints",
@@ -808,6 +874,10 @@ const docTemplate = `{
         "handlers.CreateAccountRequest": {
             "type": "object",
             "properties": {
+                "private_key": {
+                    "description": "hex-encoded, used to import existing wallet",
+                    "type": "string"
+                },
                 "wallet_address": {
                     "type": "string"
                 }
@@ -997,6 +1067,23 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "text": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.UpdateWalletRequest": {
+            "type": "object",
+            "properties": {
+                "private_key": {
+                    "description": "hex-encoded",
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.UpdateWalletResponse": {
+            "type": "object",
+            "properties": {
+                "wallet_address": {
                     "type": "string"
                 }
             }

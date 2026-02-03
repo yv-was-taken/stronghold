@@ -229,36 +229,6 @@ Use --output to specify a different location.`,
 	}
 	walletExportCmd.Flags().StringP("output", "o", "", "Output file path (default: ~/.stronghold/wallet-backup)")
 
-	walletCmd.AddCommand(walletExportCmd)
-
-	// Doctor command
-	doctorCmd := &cobra.Command{
-		Use:   "doctor",
-		Short: "Check system prerequisites",
-		Long: `Run diagnostic checks to verify your system is ready for Stronghold.
-
-This command checks:
-  - Operating system compatibility (Linux/macOS)
-  - Root/admin privileges
-  - Firewall tools (iptables/nftables on Linux, pf on macOS)
-  - Kernel modules (Linux)
-  - Available ports
-  - Configuration permissions
-  - Binary installations
-
-Run this before 'stronghold init' to catch issues early.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return cli.Doctor()
-		},
-	}
-
-	// Wallet command group
-	walletCmd := &cobra.Command{
-		Use:   "wallet",
-		Short: "Manage wallet",
-		Long:  `View and manage your Stronghold wallet.`,
-	}
-
 	walletReplaceCmd := &cobra.Command{
 		Use:   "replace",
 		Short: "Replace wallet with a new private key",
@@ -284,7 +254,28 @@ Example:
 	walletReplaceCmd.Flags().StringP("file", "f", "", "Read private key from file")
 	walletReplaceCmd.Flags().BoolP("yes", "y", false, "Skip warnings and confirmations")
 
-	walletCmd.AddCommand(walletReplaceCmd)
+	walletCmd.AddCommand(walletExportCmd, walletReplaceCmd)
+
+	// Doctor command
+	doctorCmd := &cobra.Command{
+		Use:   "doctor",
+		Short: "Check system prerequisites",
+		Long: `Run diagnostic checks to verify your system is ready for Stronghold.
+
+This command checks:
+  - Operating system compatibility (Linux/macOS)
+  - Root/admin privileges
+  - Firewall tools (iptables/nftables on Linux, pf on macOS)
+  - Kernel modules (Linux)
+  - Available ports
+  - Configuration permissions
+  - Binary installations
+
+Run this before 'stronghold init' to catch issues early.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cli.Doctor()
+		},
+	}
 
 	// Add all commands
 	rootCmd.AddCommand(

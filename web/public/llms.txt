@@ -40,7 +40,7 @@ curl -fsSL https://install.stronghold.security | sh
 stronghold doctor
 
 # Interactive setup (creates account, configures system)
-sudo stronghold install
+sudo stronghold init
 
 # Enable protection
 sudo stronghold enable
@@ -54,12 +54,14 @@ stronghold status
 | Command                    | Description                              |
 |----------------------------|------------------------------------------|
 | stronghold doctor          | Check system prerequisites               |
-| stronghold install         | Interactive installation (requires sudo) |
+| stronghold init            | Interactive installation (requires sudo) |
 | stronghold enable          | Start proxy, enable interception         |
 | stronghold disable         | Stop proxy, restore direct access        |
 | stronghold status          | Show proxy status and statistics         |
 | stronghold account balance | Check account balance                    |
 | stronghold account deposit | Show deposit options                     |
+| stronghold wallet export   | Export private key for backup            |
+| stronghold wallet replace  | Replace wallet with a new private key    |
 
 ---
 

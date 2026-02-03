@@ -125,13 +125,15 @@ sudo mv stronghold stronghold-proxy /usr/local/bin/
 | Command                    | Description                              | Sudo |
 |----------------------------|------------------------------------------|------|
 | stronghold doctor          | Check system prerequisites               | No   |
-| stronghold install         | Interactive installation                 | Yes  |
+| stronghold init            | Interactive installation                 | Yes  |
 | stronghold enable          | Start proxy, enable traffic interception | Yes  |
 | stronghold disable         | Stop proxy, restore direct access        | Yes  |
 | stronghold status          | Show proxy status and statistics         | No   |
 | stronghold logs            | View proxy logs                          | No   |
 | stronghold account balance | Check account balance                    | No   |
 | stronghold account deposit | Show deposit options                     | No   |
+| stronghold wallet export   | Export private key for backup            | No   |
+| stronghold wallet replace  | Replace wallet with a new private key    | No   |
 | stronghold uninstall       | Remove Stronghold from system            | Yes  |
 
 ### How the Proxy Works
@@ -144,7 +146,7 @@ sudo mv stronghold stronghold-proxy /usr/local/bin/
 |  2. Kernel intercepts (iptables/nftables/pf)              |
 |         |                                                 |
 |         v                                                 |
-|  3. Stronghold Proxy (localhost:8080)                     |
+|  3. Stronghold Proxy (localhost:8402)                     |
 |         |                                                 |
 |         +-- Fetches content from destination              |
 |         +-- Scans with Stronghold API                     |
@@ -178,7 +180,7 @@ The proxy respects these environment variables:
 
 | Variable                      | Default | Description                    |
 |-------------------------------|---------|--------------------------------|
-| STRONGHOLD_PROXY_PORT         | 8080    | Local proxy listen port        |
+| STRONGHOLD_PROXY_PORT         | 8402    | Local proxy listen port        |
 | STRONGHOLD_API_URL            | (prod)  | API server URL                 |
 | STRONGHOLD_BLOCK_ON_ERROR     | false   | Block if API is unreachable    |
 | STRONGHOLD_LOG_LEVEL          | info    | Log verbosity (debug/info/warn)|
@@ -418,7 +420,7 @@ Visit https://stronghold.security/dashboard and create an account.
 **Option 2: CLI**
 
 ```bash
-sudo stronghold install
+sudo stronghold init
 ```
 
 The installer creates a local wallet and registers it with the backend.

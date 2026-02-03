@@ -58,7 +58,7 @@ The transparent proxy solves this by operating **outside** the agent's cognition
 stronghold doctor
 
 # Install Stronghold (interactive setup)
-sudo stronghold install
+sudo stronghold init
 
 # Enable protection (starts transparent proxy)
 sudo stronghold enable
@@ -102,13 +102,15 @@ Run `stronghold doctor` to verify your system meets all requirements.
 | Command | Description | Requires Root |
 |---------|-------------|---------------|
 | `stronghold doctor` | Check system prerequisites | No |
-| `stronghold install` | Interactive installation | Yes |
+| `stronghold init` | Interactive installation | Yes |
 | `stronghold enable` | Start proxy and enable traffic interception | Yes |
 | `stronghold disable` | Stop proxy and restore direct access | Yes |
 | `stronghold status` | Show proxy status and statistics | No |
 | `stronghold logs` | View proxy logs | No |
 | `stronghold account balance` | Check your account balance | No |
 | `stronghold account deposit` | Show deposit options | No |
+| `stronghold wallet export` | Export private key for backup | No |
+| `stronghold wallet replace` | Replace wallet with a new private key | No |
 | `stronghold uninstall` | Remove Stronghold from system | Yes |
 
 ### How It Works
@@ -123,7 +125,7 @@ The transparent proxy uses **iptables/nftables** (Linux) or **pf** (macOS) to in
 │  Kernel intercepts (iptables/pf)            │
 │       │                                     │
 │       ▼                                     │
-│  Stronghold Proxy (localhost:8080)          │
+│  Stronghold Proxy (localhost:8402)          │
 │       │                                     │
 │       ├── Fetches content from destination  │
 │       ├── Scans with Stronghold API         │
@@ -215,7 +217,7 @@ Both the proxy and API require a funded account.
 Visit https://stronghold.security/dashboard
 
 **Option 2: CLI**
-Run `sudo stronghold install` — the installer creates a local wallet and registers it.
+Run `sudo stronghold init` — the installer creates a local wallet and registers it.
 
 ### Check Balance & Add Funds
 

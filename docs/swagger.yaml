@@ -2,6 +2,9 @@ basePath: /
 definitions:
   handlers.CreateAccountRequest:
     properties:
+      private_key:
+        description: hex-encoded, used to import existing wallet
+        type: string
       wallet_address:
         type: string
     type: object
@@ -126,6 +129,17 @@ definitions:
   handlers.ScanOutputRequest:
     properties:
       text:
+        type: string
+    type: object
+  handlers.UpdateWalletRequest:
+    properties:
+      private_key:
+        description: hex-encoded
+        type: string
+    type: object
+  handlers.UpdateWalletResponse:
+    properties:
+      wallet_address:
         type: string
     type: object
   stronghold.Decision:
@@ -497,9 +511,9 @@ paths:
       consumes:
       - application/json
       description: Creates a new account with a generated account number and server-side
-        wallet.
+        wallet. Optionally accepts a private key to import an existing wallet.
       parameters:
-      - description: Optional wallet address (ignored if KMS is configured)
+      - description: Optional wallet address or private key
         in: body
         name: request
         schema:
@@ -636,6 +650,49 @@ paths:
               type: string
             type: object
       summary: Refresh access token
+      tags:
+      - auth
+  /v1/auth/wallet:
+    put:
+      consumes:
+      - application/json
+      description: Replace the wallet for the authenticated account with a new private
+        key
+      parameters:
+      - description: New private key (hex-encoded)
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.UpdateWalletRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.UpdateWalletResponse'
+        "400":
+          description: Invalid request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Not authenticated
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - CookieAuth: []
+      summary: Update wallet
       tags:
       - auth
   /v1/pricing:
