@@ -1,10 +1,55 @@
-# Stronghold API Service
+# Stronghold
 
-A pay-per-request API service that wraps the Stronghold AI security scanner with x402 crypto payment integration. Enables AI agents to proxy requests through crypto payments to detect prompt injection attacks and credential leaks.
+Protect AI agents from prompt injection attacks and credential leaks.
 
-## Client Proxy (NEW)
+## The Problem
 
-The Stronghold CLI provides a **transparent proxy** that intercepts ALL HTTP/HTTPS traffic at the network level, scanning content before it reaches your AI agents. This is designed for isolated machines running AI agents.
+AI agents that read external content are vulnerable to prompt injection attacks. When an agent fetches a webpage, email, or API response, that content may contain malicious instructions designed to hijack the agent's behavior.
+
+```
+1. Attacker embeds instructions: "Ignore previous instructions..."
+2. Agent fetches content (webpage, email, document)
+3. Agent reads malicious content into its context
+4. Agent follows attacker's instructions instead of user's
+```
+
+## Two-Way Protection
+
+Stronghold protects both directions of data flow:
+
+```
+External content → [PROXY scans] → Agent → [API scans] → Output to user
+                    ↑                        ↑
+                 Injection               Credential leaks
+                 (INCOMING)              (OUTGOING)
+```
+
+**Proxy** scans INCOMING content — blocks prompt injection before the agent sees it
+**API** scans OUTGOING content — catches credential leaks in agent responses
+
+Both require an account with USDC balance. $0.001 per scan.
+
+---
+
+## 1. Transparent Proxy (Incoming Content)
+
+The proxy intercepts ALL HTTP/HTTPS traffic at the network level, scanning content **before** it reaches your AI agents.
+
+### Why Network-Level Protection?
+
+Traditional security that requires the agent to call an API has a fundamental flaw:
+
+- To call a security API, the agent must first **READ** the content
+- At that moment, prompt injection can already affect the agent
+- The agent might "forget" to call the API or ignore the result
+- The attack has already succeeded before any scan occurs
+
+The transparent proxy solves this by operating **outside** the agent's cognition:
+
+- Content is scanned **before** the agent receives it
+- Malicious content is blocked at the network level
+- The agent never processes threats it cannot see
+- **Cannot be bypassed by prompt injection**
 
 ### Quick Start
 
@@ -44,7 +89,7 @@ go build -o stronghold-proxy ./cmd/proxy
 
 - **OS**: Linux or macOS
 - **Privileges**: Root/sudo required for `install`, `enable`, `disable`
-- **Firewall**: iptables or nftables (Linux), pf (macOS) - usually pre-installed
+- **Firewall**: iptables or nftables (Linux), pf (macOS) — usually pre-installed
 - **Keyring** (Linux only): One of the following must be installed:
   - GNOME Keyring / Secret Service (`gnome-keyring`)
   - KWallet (pre-installed on KDE)
@@ -95,186 +140,39 @@ The transparent proxy uses **iptables/nftables** (Linux) or **pf** (macOS) to in
 - Adds `X-Stronghold-Decision` headers to responses
 - Blocks malicious content before agents see it
 
-### Account Management
+---
 
-Stronghold creates an account during installation to pay for API scanning. Your payment credentials are stored securely in your operating system's keyring.
+## 2. Output Scanning API (Outgoing Content)
 
-**Check your balance:**
+The API scans agent responses **before** they're sent to users, catching accidentally exposed credentials.
+
+### POST /v1/scan/output — Credential Leak Detection
+
+Use this to check agent output for accidentally exposed:
+- API keys and tokens
+- Passwords and secrets
+- Database connection strings
+- AWS credentials, private keys
+
 ```bash
-stronghold account balance
+curl -X POST https://api.stronghold.security/v1/scan/output \
+  -H "Content-Type: application/json" \
+  -H "X-PAYMENT: x402;..." \
+  -d '{
+    "text": "Here is the config: DB_PASSWORD=secret123"
+  }'
 ```
 
-**Add funds:**
-```bash
-stronghold account deposit
-```
+### POST /v1/scan/content — Prompt Injection Detection
 
-This shows options to deposit via:
-- **Dashboard**: Stripe, Coinbase Pay, or Moonpay (recommended)
-- **Direct**: Send USDC to your account ID
-
-**Security Notes:**
-- Private keys never leave your device
-- Credentials stored in OS-native keyring (macOS Keychain, Linux Secret Service/KWallet/pass, Windows Credential)
-- Only your account ID is shared with the backend for linking
-- Low balance warnings appear when below 1 USDC
-
-### Architecture Overview
-
-The project now consists of two main components:
-
-1. **API Server** (`cmd/api/`) - The pay-per-request scanning service
-2. **Client Proxy** (`cmd/cli/`, `cmd/proxy/`) - Local transparent proxy for agents
-
-## Features
-
-- **4-Layer Security Scanning**: Heuristics, ML classification, semantic similarity, and LLM classification
-- **x402 Payment Integration**: Pay-per-request model using USDC on Base
-- **Input Protection**: Detect prompt injection attacks
-- **Output Protection**: Detect credential leaks in LLM responses
-
-## Deployment
-
-### VPS Deployment (Recommended)
-
-1. **Provision a VPS** (Ubuntu 22.04+ recommended)
-   - Minimum: 2 vCPU, 2GB RAM
-   - Recommended: 4 vCPU, 4GB RAM for ML models
-
-2. **Install Docker**
-```bash
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-newgrp docker
-```
-
-### Fly.io Deployment (Recommended)
-
-1. **Install Fly CLI**
-```bash
-curl -L https://fly.io/install.sh | sh
-fly auth login
-```
-
-2. **Launch the app**
-```bash
-git clone https://github.com/yv-was-taken/stronghold.git
-cd stronghold
-
-fly launch --name stronghold-api --region iad
-```
-
-3. **Set secrets**
-```bash
-fly secrets set X402_WALLET_ADDRESS=0xYOUR_WALLET_ADDRESS
-fly secrets set X402_NETWORK=base
-fly secrets set STRONGHOLD_LLM_API_KEY=optional_api_key
-```
-
-4. **Deploy**
-```bash
-fly deploy
-```
-
-Your app will be available at `https://stronghold-api.fly.dev` (or your custom domain).
-
-### VPS Deployment
-
-1. **Provision a VPS** (Ubuntu 22.04+ recommended)
-   - Minimum: 2 vCPU, 2GB RAM
-   - Recommended: 4 vCPU, 4GB RAM for ML models
-
-2. **Install Docker**
-```bash
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-newgrp docker
-```
-
-3. **Clone and configure**
-```bash
-git clone https://github.com/yv-was-taken/stronghold.git
-cd stronghold
-
-# Create environment file
-cat > .env << 'EOF'
-X402_WALLET_ADDRESS=0xYOUR_WALLET_ADDRESS
-X402_NETWORK=base
-STRONGHOLD_ENABLE_HUGOT=true
-STRONGHOLD_ENABLE_SEMANTICS=true
-EOF
-```
-
-4. **Deploy**
-```bash
-# Build and start
-docker-compose up -d
-
-# With reverse proxy (Caddy)
-docker-compose --profile with-proxy up -d
-```
-
-5. **Configure Caddy** (for HTTPS)
-   - Edit `Caddyfile` and replace `api.stronghold.security` with your domain
-   - Ensure DNS points to your VPS
-   - Caddy auto-provisions Let's Encrypt certificates
-
-### Environment Variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `X402_WALLET_ADDRESS` | Yes | - | USDC receiving address |
-| `X402_NETWORK` | No | `base` | `base` or `base-sepolia` |
-| `STRONGHOLD_ENABLE_HUGOT` | No | `true` | Enable ML classification |
-| `STRONGHOLD_ENABLE_SEMANTICS` | No | `true` | Enable semantic similarity |
-
-## Configuration
-
-Environment variables:
+> **⚠️ We strongly recommend using the transparent proxy instead.**
+>
+> This endpoint scans text for prompt injection, but by the time you call it, your agent has already read the content. The proxy blocks threats **before** your agent sees them.
+>
+> Use this endpoint only if you cannot install the proxy (serverless functions, sandboxed containers, etc.).
 
 ```bash
-# Server
-PORT=8080
-
-# x402 Payment (optional for development)
-X402_WALLET_ADDRESS=0x...           # Receiving wallet address
-X402_FACILITATOR_URL=https://x402.org/facilitator
-X402_NETWORK=base-sepolia           # or base for production
-
-# Stronghold Configuration
-STRONGHOLD_BLOCK_THRESHOLD=0.55
-STRONGHOLD_WARN_THRESHOLD=0.35
-STRONGHOLD_ENABLE_HUGOT=true
-STRONGHOLD_ENABLE_SEMANTICS=true
-HUGOT_MODEL_PATH=./models
-
-# Optional LLM Layer
-STRONGHOLD_LLM_PROVIDER=groq
-STRONGHOLD_LLM_API_KEY=gsk_...
-
-# Pricing (in USD)
-PRICE_SCAN_CONTENT=0.001
-PRICE_SCAN_OUTPUT=0.001
-```
-
-## API Endpoints
-
-### Public Endpoints (No Payment)
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/health/live` | GET | Liveness probe |
-| `/health/ready` | GET | Readiness probe |
-| `/v1/pricing` | GET | List endpoint pricing |
-
-### Protected Endpoints (Payment Required)
-
-#### POST /v1/scan/content ($0.001)
-Scan external content for prompt injection.
-
-```bash
-curl -X POST http://localhost:8080/v1/scan/content \
+curl -X POST https://api.stronghold.security/v1/scan/content \
   -H "Content-Type: application/json" \
   -H "X-PAYMENT: x402;..." \
   -d '{
@@ -284,7 +182,8 @@ curl -X POST http://localhost:8080/v1/scan/content \
   }'
 ```
 
-Response:
+### Response Format
+
 ```json
 {
   "decision": "BLOCK",
@@ -299,17 +198,74 @@ Response:
 }
 ```
 
-#### POST /v1/scan/output ($0.001)
-Scan LLM output for credential leaks.
+**Decisions:**
+- `ALLOW`: No threats detected, proceed
+- `WARN`: Elevated risk, review recommended
+- `BLOCK`: High risk, reject the request
+
+---
+
+## 3. Account & Funding
+
+Both the proxy and API require a funded account.
+
+### Create an Account
+
+**Option 1: Dashboard**
+Visit https://stronghold.security/dashboard
+
+**Option 2: CLI**
+Run `sudo stronghold install` — the installer creates a local wallet and registers it.
+
+### Check Balance & Add Funds
 
 ```bash
-curl -X POST http://localhost:8080/v1/scan/output \
-  -H "Content-Type: application/json" \
-  -H "X-PAYMENT: x402;..." \
-  -d '{
-    "text": "LLM response here"
-  }'
+# Check your balance
+stronghold account balance
+
+# Add funds
+stronghold account deposit
 ```
+
+Deposit options:
+- **Dashboard**: Stripe, Coinbase Pay, or Moonpay (recommended)
+- **Direct**: Send USDC on Base to your account address
+
+### Pricing
+
+| Endpoint | Price |
+|----------|-------|
+| `/v1/scan/content` | $0.001 |
+| `/v1/scan/output` | $0.001 |
+
+### Security Notes
+
+- Private keys never leave your device
+- Credentials stored in OS-native keyring (macOS Keychain, Linux Secret Service/KWallet/pass)
+- Only your account ID is shared with the backend for linking
+- Low balance warnings appear when below 1 USDC
+
+---
+
+## API Reference
+
+### Public Endpoints (No Payment)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/health/live` | GET | Liveness probe |
+| `/health/ready` | GET | Readiness probe |
+| `/v1/pricing` | GET | List endpoint pricing |
+
+### Protected Endpoints (Payment Required)
+
+| Endpoint | Method | Price | Description |
+|----------|--------|-------|-------------|
+| `/v1/scan/content` | POST | $0.001 | Prompt injection detection |
+| `/v1/scan/output` | POST | $0.001 | Credential leak detection |
+
+---
 
 ## x402 Payment Flow
 
@@ -330,46 +286,81 @@ const fetchWithPayment = x402Client({
   network: "base"
 });
 
-// Scan external content before passing to LLM
+// Scan output for credential leaks before sending to user
 const result = await fetchWithPayment(
-  "https://api.stronghold.security/v1/scan/content",
+  "https://api.stronghold.security/v1/scan/output",
   {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: externalContent })
+    body: JSON.stringify({ text: agentResponse })
   }
 );
 
 const scanResult = await result.json();
 if (scanResult.decision === "BLOCK") {
-  // Reject the input
-  console.log("Threat detected:", scanResult.reason);
+  console.log("Credential leak detected:", scanResult.reason);
 }
 ```
 
-## Response Format
+---
 
-All scan endpoints return a standardized response:
+## Deployment
 
-```json
-{
-  "decision": "BLOCK|WARN|ALLOW",
-  "scores": {
-    "heuristic": 0.0-1.0,
-    "ml_confidence": 0.0-1.0,
-    "semantic": 0.0-1.0
-  },
-  "reason": "Human-readable explanation",
-  "latency_ms": 15,
-  "request_id": "uuid-for-tracing",
-  "metadata": {} // Optional additional data
-}
+### Fly.io (Recommended)
+
+```bash
+# Install Fly CLI
+curl -L https://fly.io/install.sh | sh
+fly auth login
+
+# Launch the app
+git clone https://github.com/yv-was-taken/stronghold.git
+cd stronghold
+fly launch --name stronghold-api --region iad
+
+# Set secrets
+fly secrets set X402_WALLET_ADDRESS=0xYOUR_WALLET_ADDRESS
+fly secrets set X402_NETWORK=base
+
+# Deploy
+fly deploy
 ```
 
-**Decisions:**
-- `ALLOW`: No threats detected, proceed
-- `WARN`: Elevated risk, review recommended
-- `BLOCK`: High risk, reject the request
+### Docker Compose
+
+```bash
+git clone https://github.com/yv-was-taken/stronghold.git
+cd stronghold
+
+# Create environment file
+cat > .env << 'EOF'
+X402_WALLET_ADDRESS=0xYOUR_WALLET_ADDRESS
+X402_NETWORK=base
+STRONGHOLD_ENABLE_HUGOT=true
+STRONGHOLD_ENABLE_SEMANTICS=true
+EOF
+
+# Build and start
+docker-compose up -d
+
+# With reverse proxy (Caddy for HTTPS)
+docker-compose --profile with-proxy up -d
+```
+
+### Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `X402_WALLET_ADDRESS` | Yes* | - | USDC receiving address |
+| `X402_NETWORK` | No | `base` | `base` or `base-sepolia` |
+| `STRONGHOLD_ENABLE_HUGOT` | No | `true` | Enable ML classification |
+| `STRONGHOLD_ENABLE_SEMANTICS` | No | `true` | Enable semantic similarity |
+| `STRONGHOLD_BLOCK_THRESHOLD` | No | `0.55` | Score threshold for BLOCK |
+| `STRONGHOLD_WARN_THRESHOLD` | No | `0.35` | Score threshold for WARN |
+
+*If `X402_WALLET_ADDRESS` is not set, the server runs in development mode without payments.
+
+---
 
 ## Project Structure
 
@@ -382,74 +373,16 @@ All scan endpoints return a standardized response:
 ├── internal/
 │   ├── server/server.go         # HTTP server setup
 │   ├── handlers/                # API endpoints
-│   │   ├── scan.go
-│   │   ├── health.go
-│   │   └── pricing.go
 │   ├── middleware/x402.go       # Payment middleware
-│   ├── config/config.go         # Server configuration
 │   ├── stronghold/client.go     # Scanner wrapper
 │   ├── wallet/                  # Wallet management
-│   │   ├── wallet.go            # OS keyring wallet operations
-│   │   └── x402.go              # x402 payment creation/verification
 │   ├── cli/                     # CLI implementation
-│   │   ├── config.go            # CLI configuration
-│   │   ├── doctor.go            # Prerequisites check
-│   │   ├── install.go           # Interactive installer
-│   │   ├── enable.go            # Enable proxy
-│   │   ├── disable.go           # Disable proxy
-│   │   ├── status.go            # Status display
-│   │   ├── uninstall.go         # Uninstall
-│   │   ├── wallet.go            # Wallet CLI commands
-│   │   ├── service.go           # System service management
-│   │   └── transparent.go       # Transparent proxy (iptables/pf)
 │   └── proxy/                   # Proxy implementation
-│       ├── server.go            # HTTP/HTTPS proxy server
-│       └── scanner.go           # API client for scanning
-├── go.mod
+├── web/                         # Frontend (Next.js)
 ├── Dockerfile
 ├── docker-compose.yml
 └── install.sh                   # One-line installer
 ```
-
-## Architecture
-
-```
-AI Agent Clients
-       │
-       │ 1. Request with X-PAYMENT header
-       ▼
-┌─────────────────────┐
-│  x402 Middleware    │
-│  - Verify payment   │
-└──────────┬──────────┘
-           │ 2. Payment verified
-           ▼
-┌─────────────────────┐
-│  Stronghold Scanner │
-│  - 4-layer scanning │
-└──────────┬──────────┘
-           │ 3. Scan result
-           ▼
-     (Client receives)
-```
-
-## Development
-
-### Running Tests
-
-```bash
-go test ./...
-```
-
-### Building
-
-```bash
-go build -o stronghold-api cmd/api/main.go
-```
-
-### Development Mode
-
-If `X402_WALLET_ADDRESS` is not set, the server runs in development mode where all endpoints are accessible without payment. This is useful for testing but should never be used in production.
 
 ## License
 

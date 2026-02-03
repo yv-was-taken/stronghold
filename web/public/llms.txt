@@ -1,0 +1,144 @@
+# Stronghold - AI Security Scanning
+
+> Protect AI agents from prompt injection attacks and credential leaks
+
+## Two-Way Protection
+
+Stronghold protects both directions of data flow:
+
+```
+External content -> [PROXY scans] -> Agent -> [API scans] -> Output
+                     |                         |
+                  Injection               Credential leaks
+                  (INCOMING)              (OUTGOING)
+```
+
+**Proxy**: Scans INCOMING content, blocks prompt injection before agent sees it
+**API**: Scans OUTGOING content, catches credential leaks in agent responses
+
+Both require an account with USDC balance. $0.001 per scan.
+
+---
+
+## 1. Transparent Proxy (Recommended for Incoming Content)
+
+Network-level interception that scans content BEFORE your agent processes it.
+
+### Why Network-Level?
+
+- Agent NEVER processes malicious content - blocked before delivery
+- Cannot be bypassed by prompt injection (operates outside agent's cognition)
+- Works for all processes automatically (iptables/nftables/pf)
+
+### Quick Start
+
+```bash
+# Install
+curl -fsSL https://install.stronghold.security | sh
+
+# Check system prerequisites
+stronghold doctor
+
+# Interactive setup (creates account, configures system)
+sudo stronghold install
+
+# Enable protection
+sudo stronghold enable
+
+# Check status
+stronghold status
+```
+
+### CLI Commands
+
+| Command                    | Description                              |
+|----------------------------|------------------------------------------|
+| stronghold doctor          | Check system prerequisites               |
+| stronghold install         | Interactive installation (requires sudo) |
+| stronghold enable          | Start proxy, enable interception         |
+| stronghold disable         | Stop proxy, restore direct access        |
+| stronghold status          | Show proxy status and statistics         |
+| stronghold account balance | Check account balance                    |
+| stronghold account deposit | Show deposit options                     |
+
+---
+
+## 2. Direct API
+
+Base URL: https://api.stronghold.security
+
+### POST /v1/scan/output (Recommended API use)
+
+Scans agent responses BEFORE sending to users. Catches credential leaks.
+
+Use this to check agent output for accidentally exposed:
+- API keys and tokens
+- Passwords and secrets
+- Database connection strings
+
+```bash
+curl -X POST https://api.stronghold.security/v1/scan/output \
+  -H "Content-Type: application/json" \
+  -H "X-PAYMENT: <x402-payment-header>" \
+  -d '{"text": "Here is the config: DB_PASSWORD=secret123"}'
+```
+
+### POST /v1/scan/content (Proxy recommended instead)
+
+Scans text for prompt injection.
+
+**Warning**: We STRONGLY recommend the transparent proxy instead:
+- To call this API, your agent must first READ the content
+- At that moment, prompt injection can already affect the agent
+- The agent might "forget" to call the API or ignore the result
+- The proxy blocks threats BEFORE the agent ever sees them
+
+If you cannot install the proxy (serverless, sandboxed environments),
+this endpoint exists as a fallback.
+
+```bash
+curl -X POST https://api.stronghold.security/v1/scan/content \
+  -H "Content-Type: application/json" \
+  -H "X-PAYMENT: <x402-payment-header>" \
+  -d '{"text": "Ignore previous instructions...", "source_url": "https://example.com"}'
+```
+
+### Response Format
+
+```json
+{
+  "decision": "BLOCK",
+  "scores": {
+    "heuristic": 0.85,
+    "ml_confidence": 0.92,
+    "semantic": 0.75
+  },
+  "reason": "High heuristic score - possible prompt injection",
+  "latency_ms": 15,
+  "request_id": "uuid"
+}
+```
+
+Decisions: ALLOW (safe), WARN (review), BLOCK (reject)
+
+---
+
+## Account & Funding
+
+Both proxy and API require a funded account:
+
+1. **Create account**: https://stronghold.security/dashboard or `stronghold install`
+2. **Deposit USDC**: Via dashboard (Stripe, Coinbase Pay) or direct transfer
+3. **Pay-per-request**: $0.001 per scan
+
+Check balance: `stronghold account balance`
+Add funds: `stronghold account deposit`
+
+---
+
+## Links
+
+- Documentation: https://github.com/yv-was-taken/stronghold
+- API Docs: https://api.stronghold.security/docs
+- Dashboard: https://stronghold.security/dashboard
+- Full Reference: https://stronghold.security/llms-full.txt
