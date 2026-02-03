@@ -19,7 +19,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (accountNumber: string) => Promise<void>;
-  createAccount: (walletAddress?: string) => Promise<{ accountNumber: string; recoveryFile: string }>;
+  createAccount: () => Promise<{ accountNumber: string; recoveryFile: string; walletAddress: string }>;
   logout: () => Promise<void>;
   refreshAuth: () => Promise<boolean>;
 }
@@ -89,21 +89,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const createAccount = async (walletAddress?: string): Promise<{ accountNumber: string; recoveryFile: string }> => {
+  const createAccount = async (): Promise<{ accountNumber: string; recoveryFile: string; walletAddress: string }> => {
     setIsLoading(true);
     try {
-      const body: { wallet_address?: string } = {};
-      if (walletAddress) {
-        body.wallet_address = walletAddress;
-      }
-
       const response = await fetch(`${API_URL}/v1/auth/account`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include', // Receive and store httpOnly cookies
-        body: JSON.stringify(body),
+        body: JSON.stringify({}),
       });
 
       if (!response.ok) {
@@ -119,6 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return {
         accountNumber: data.account_number,
         recoveryFile: data.recovery_file,
+        walletAddress: data.wallet_address,
       };
     } finally {
       setIsLoading(false);

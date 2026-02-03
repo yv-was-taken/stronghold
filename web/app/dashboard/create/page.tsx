@@ -9,8 +9,8 @@ import { downloadTextFile } from '@/lib/utils';
 
 export default function CreateAccountPage() {
   const [step, setStep] = useState<'form' | 'success'>('form');
-  const [walletAddress, setWalletAddress] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
+  const [walletAddress, setWalletAddress] = useState('');
   const [recoveryFile, setRecoveryFile] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -28,18 +28,11 @@ export default function CreateAccountPage() {
     e.preventDefault();
     setError('');
 
-    // Validate wallet address if provided
-    if (walletAddress && !/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
-      setError('Invalid wallet address format');
-      return;
-    }
-
     setIsSubmitting(true);
     try {
-      const result = await createAccount(
-        walletAddress || undefined
-      );
+      const result = await createAccount();
       setAccountNumber(result.accountNumber);
+      setWalletAddress(result.walletAddress);
       setRecoveryFile(result.recoveryFile);
       setStep('success');
     } catch (err) {
@@ -100,30 +93,6 @@ export default function CreateAccountPage() {
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label
-                  htmlFor="walletAddress"
-                  className="block text-sm font-medium text-gray-300 mb-2"
-                >
-                  Wallet Address (Optional)
-                </label>
-                <input
-                  type="text"
-                  id="walletAddress"
-                  value={walletAddress}
-                  onChange={(e) => {
-                    setWalletAddress(e.target.value);
-                    setError('');
-                  }}
-                  placeholder="0x..."
-                  className="w-full px-4 py-3 bg-[#0a0a0a] border border-[#333] rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-[#00D4AA] focus:ring-1 focus:ring-[#00D4AA] transition-colors font-mono text-sm"
-                />
-                <p className="text-gray-500 text-xs mt-2">
-                  Your Ethereum wallet address for receiving USDC on Base
-                  network
-                </p>
-              </div>
-
               {error && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
@@ -183,12 +152,23 @@ export default function CreateAccountPage() {
               Save your account number. You&apos;ll need it to log in.
             </p>
 
-            <div className="bg-[#0a0a0a] border border-[#333] rounded-lg p-4 mb-6">
-              <label className="block text-xs text-gray-500 mb-1">
-                Your Account Number
-              </label>
-              <div className="font-mono text-xl text-white tracking-wider">
-                {accountNumber}
+            <div className="space-y-4 mb-6">
+              <div className="bg-[#0a0a0a] border border-[#333] rounded-lg p-4">
+                <label className="block text-xs text-gray-500 mb-1">
+                  Your Account Number
+                </label>
+                <div className="font-mono text-xl text-white tracking-wider">
+                  {accountNumber}
+                </div>
+              </div>
+
+              <div className="bg-[#0a0a0a] border border-[#333] rounded-lg p-4">
+                <label className="block text-xs text-gray-500 mb-1">
+                  Your Wallet Address (Base USDC)
+                </label>
+                <div className="font-mono text-sm text-[#00D4AA] break-all">
+                  {walletAddress}
+                </div>
               </div>
             </div>
 

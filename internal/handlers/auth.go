@@ -167,6 +167,7 @@ type CreateAccountRequest struct {
 // CreateAccountResponse represents the response after creating an account
 type CreateAccountResponse struct {
 	AccountNumber string    `json:"account_number"`
+	WalletAddress string    `json:"wallet_address,omitempty"`
 	ExpiresAt     time.Time `json:"expires_at"`
 	RecoveryFile  string    `json:"recovery_file"`
 }
@@ -273,6 +274,7 @@ func (h *AuthHandler) CreateAccount(c fiber.Ctx) error {
 
 		return c.Status(fiber.StatusCreated).JSON(CreateAccountResponse{
 			AccountNumber: account.AccountNumber,
+			WalletAddress: address,
 			ExpiresAt:     expiresAt,
 			RecoveryFile:  recoveryFile,
 		})
@@ -319,11 +321,15 @@ func (h *AuthHandler) CreateAccount(c fiber.Ctx) error {
 	refreshExpiry := time.Now().UTC().Add(h.config.RefreshTokenTTL)
 	h.setAuthCookies(c, accessToken, refreshToken, expiresAt, refreshExpiry)
 
-	return c.Status(fiber.StatusCreated).JSON(CreateAccountResponse{
+	response := CreateAccountResponse{
 		AccountNumber: account.AccountNumber,
 		ExpiresAt:     expiresAt,
 		RecoveryFile:  recoveryFile,
-	})
+	}
+	if req.WalletAddress != nil {
+		response.WalletAddress = *req.WalletAddress
+	}
+	return c.Status(fiber.StatusCreated).JSON(response)
 }
 
 // LoginRequest represents a login request
