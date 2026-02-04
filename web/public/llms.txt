@@ -34,7 +34,7 @@ Network-level interception that scans content BEFORE your agent processes it.
 
 ```bash
 # Install
-curl -fsSL https://install.stronghold.security | sh
+curl -fsSL https://getstronghold.xyz/install.sh | sh
 
 # Check system prerequisites
 stronghold doctor

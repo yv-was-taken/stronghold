@@ -30,7 +30,7 @@
 ## Quick Start
 
 ```bash
-curl -fsSL https://install.stronghold.security | sh
+curl -fsSL https://getstronghold.xyz/install.sh | sh
 stronghold doctor
 sudo stronghold init
 sudo stronghold enable
@@ -129,7 +129,7 @@ The transparent proxy architecture eliminates this vulnerability:
 ### One-Line Installer
 
 ```bash
-curl -fsSL https://install.stronghold.security | sh
+curl -fsSL https://getstronghold.xyz/install.sh | sh
 ```
 
 ### Build from Source

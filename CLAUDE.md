@@ -165,5 +165,5 @@ This triggers `.github/workflows/release.yml` which builds binaries for all plat
 
 Users can install with:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yv-was-taken/stronghold/master/install.sh | sh
+curl -fsSL https://getstronghold.xyz/install.sh | sh
 ```

@@ -9,7 +9,7 @@ const steps = [
     icon: Download,
     title: 'Install',
     description: 'One command setup with automatic OS keyring configuration. Your wallet is created locally—private keys never leave your device.',
-    command: 'curl -fsSL https://install.stronghold.security | sh',
+    command: 'curl -fsSL https://getstronghold.xyz/install.sh | sh',
   },
   {
     number: '02',

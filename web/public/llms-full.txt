@@ -107,7 +107,7 @@ Run `stronghold doctor` to verify requirements.
 **One-line installer:**
 
 ```bash
-curl -fsSL https://install.stronghold.security | sh
+curl -fsSL https://getstronghold.xyz/install.sh | sh
 ```
 
 **From source:**
