@@ -117,8 +117,8 @@ export default function Hero() {
                   <Image
                     src="/logo.png"
                     alt="Stronghold"
-                    width={40}
-                    height={40}
+                    width={64}
+                    height={64}
                     className="relative z-10"
                   />
                 </div>
