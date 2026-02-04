@@ -50,6 +50,8 @@ services:
       X402_NETWORK: base-sepolia
       X402_WALLET_ADDRESS: ${API_WALLET_ADDRESS:-0x0000000000000000000000000000000000000000}
       X402_FACILITATOR_URL: https://x402.org/facilitator
+      CDP_API_KEY_ID: ${CDP_API_KEY_ID:-}
+      CDP_API_KEY_SECRET: ${CDP_API_KEY_SECRET:-}
       # JWT (generate with: openssl rand -base64 32)
       JWT_SECRET: testnet_jwt_secret_change_in_production
       # Scanner settings

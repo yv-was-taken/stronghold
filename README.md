@@ -397,12 +397,16 @@ docker-compose --profile with-proxy up -d
 |----------|----------|---------|-------------|
 | `X402_WALLET_ADDRESS` | Yes* | - | USDC receiving address |
 | `X402_NETWORK` | No | `base` | Network identifier: `base` or `base-sepolia` |
+| `CDP_API_KEY_ID` | Yes** | - | CDP API key ID for x402 facilitator |
+| `CDP_API_KEY_SECRET` | Yes** | - | CDP API key secret for x402 facilitator |
 | `STRONGHOLD_ENABLE_HUGOT` | No | `true` | Enable ML classification layer |
 | `STRONGHOLD_ENABLE_SEMANTICS` | No | `true` | Enable semantic similarity layer |
 | `STRONGHOLD_BLOCK_THRESHOLD` | No | `0.55` | Score threshold for BLOCK decisions |
 | `STRONGHOLD_WARN_THRESHOLD` | No | `0.35` | Score threshold for WARN decisions |
 
 *When `X402_WALLET_ADDRESS` is not configured, the server runs in development mode without payment verification.
+
+**Required in production when `X402_WALLET_ADDRESS` is configured. Get keys from [CDP Portal](https://portal.cdp.coinbase.com/).
 
 ---
 

@@ -49,6 +49,24 @@ func NewX402MiddlewareWithDB(cfg *config.X402Config, pricing *config.PricingConf
 	}
 }
 
+// createFacilitatorRequest creates an HTTP request with CDP authentication headers
+func (m *X402Middleware) createFacilitatorRequest(method, url string, body []byte) (*http.Request, error) {
+	req, err := http.NewRequest(method, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	// Add CDP API key authentication if configured
+	if m.config.CDPAPIKeyID != "" && m.config.CDPAPIKeySecret != "" {
+		req.Header.Set("X-Api-Key-Id", m.config.CDPAPIKeyID)
+		req.Header.Set("X-Api-Key-Secret", m.config.CDPAPIKeySecret)
+	}
+
+	return req, nil
+}
+
 // PriceRoute represents a route with its price
 type PriceRoute struct {
 	Path   string
@@ -328,11 +346,11 @@ func (m *X402Middleware) verifyPayment(paymentHeader string, expectedAmount *big
 		facilitatorURL = "https://x402.org/facilitator"
 	}
 
-	resp, err := m.httpClient.Post(
-		facilitatorURL+"/verify",
-		"application/json",
-		bytes.NewReader(verifyBody),
-	)
+	req, err := m.createFacilitatorRequest("POST", facilitatorURL+"/verify", verifyBody)
+	if err != nil {
+		return false, fmt.Errorf("failed to create verify request: %w", err)
+	}
+	resp, err := m.httpClient.Do(req)
 	if err != nil {
 		return false, fmt.Errorf("failed to call facilitator: %w", err)
 	}
@@ -388,11 +406,11 @@ func (m *X402Middleware) settlePayment(paymentHeader string) (string, error) {
 		facilitatorURL = "https://x402.org/facilitator"
 	}
 
-	resp, err := m.httpClient.Post(
-		facilitatorURL+"/settle",
-		"application/json",
-		bytes.NewReader(settleBody),
-	)
+	req, err := m.createFacilitatorRequest("POST", facilitatorURL+"/settle", settleBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to create settle request: %w", err)
+	}
+	resp, err := m.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to call facilitator: %w", err)
 	}

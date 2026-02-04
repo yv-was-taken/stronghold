@@ -75,6 +75,8 @@ type X402Config struct {
 	WalletAddress   string
 	FacilitatorURL  string
 	Network         string
+	CDPAPIKeyID     string // CDP API Key ID for x402 facilitator authentication
+	CDPAPIKeySecret string // CDP API Key Secret for x402 facilitator authentication
 }
 
 // StripeConfig holds Stripe payment configuration
@@ -155,9 +157,11 @@ func Load() *Config {
 			AllowedOrigins: getEnvSlice("DASHBOARD_ALLOWED_ORIGINS", []string{"http://localhost:3000"}),
 		},
 		X402: X402Config{
-			WalletAddress:  getEnv("X402_WALLET_ADDRESS", ""),
-			FacilitatorURL: getEnv("X402_FACILITATOR_URL", "https://x402.org/facilitator"),
-			Network:        getEnv("X402_NETWORK", "base-sepolia"),
+			WalletAddress:   getEnv("X402_WALLET_ADDRESS", ""),
+			FacilitatorURL:  getEnv("X402_FACILITATOR_URL", "https://x402.org/facilitator"),
+			Network:         getEnv("X402_NETWORK", "base-sepolia"),
+			CDPAPIKeyID:     getEnv("CDP_API_KEY_ID", ""),
+			CDPAPIKeySecret: getEnv("CDP_API_KEY_SECRET", ""),
 		},
 		Stripe: StripeConfig{
 			SecretKey:      getEnv("STRIPE_SECRET_KEY", ""),
@@ -293,6 +297,16 @@ func (c *Config) Validate() error {
 		}
 		if c.KMS.KeyID == "" {
 			errs = append(errs, "KMS_KEY_ID is required in production")
+		}
+	}
+
+	// CDP API keys are required in production for x402 facilitator
+	if c.Environment == EnvProduction && c.X402.WalletAddress != "" {
+		if c.X402.CDPAPIKeyID == "" {
+			errs = append(errs, "CDP_API_KEY_ID is required in production when x402 is enabled")
+		}
+		if c.X402.CDPAPIKeySecret == "" {
+			errs = append(errs, "CDP_API_KEY_SECRET is required in production when x402 is enabled")
 		}
 	}
 
