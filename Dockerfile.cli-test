@@ -19,10 +19,6 @@ RUN apk add --no-cache \
     pass \
     gnupg
 
-# Initialize GPG and pass for keyring support
-RUN gpg --batch --passphrase '' --quick-gen-key "Stronghold Test <test@stronghold.local>" default default never && \
-    pass init "Stronghold Test"
-
 WORKDIR /app
 
 # Copy go mod files first for better caching
@@ -39,5 +35,17 @@ RUN go build -o /usr/local/bin/stronghold-proxy ./cmd/proxy
 # Set API URL environment variable (uses production API by default)
 ENV STRONGHOLD_API_URL=https://api.getstronghold.xyz
 
-# Default to bash shell for interactive testing
+# Create entrypoint script that initializes GPG at runtime
+RUN printf '#!/bin/bash\nset -e\n\n\
+if [ ! -d ~/.gnupg ] || [ ! -f ~/.gnupg/trustdb.gpg ]; then\n\
+    echo "Initializing GPG keyring..."\n\
+    gpg --batch --passphrase "" --quick-gen-key "Stronghold Test <test@stronghold.local>" default default never 2>/dev/null\n\
+    pass init "Stronghold Test" 2>/dev/null\n\
+    echo "GPG keyring initialized."\n\
+fi\n\n\
+gpgconf --kill gpg-agent 2>/dev/null || true\n\
+gpg-agent --daemon --allow-preset-passphrase 2>/dev/null || true\n\n\
+exec "$@"\n' > /entrypoint.sh && chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]
