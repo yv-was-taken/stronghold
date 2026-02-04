@@ -9,8 +9,8 @@ import { Menu, X, Github } from 'lucide-react'
 const navLinks = [
   { label: 'Features', href: '#features' },
   { label: 'Pricing', href: '#pricing' },
-  { label: 'Docs', href: '#docs' },
-  { label: 'Dashboard', href: '/dashboard' },
+  { label: 'Docs', href: 'https://api.stronghold.xyz/docs', external: true },
+  { label: 'Dashboard', href: '/dashboard', external: true },
 ]
 
 export default function Navigation() {
@@ -56,6 +56,8 @@ export default function Navigation() {
               <motion.a
                 key={link.label}
                 href={link.href}
+                target={link.external ? '_blank' : undefined}
+                rel={link.external ? 'noopener noreferrer' : undefined}
                 className="text-sm text-gray-400 hover:text-white transition-colors relative group"
                 whileHover={{ y: -1 }}
               >
@@ -108,6 +110,8 @@ export default function Navigation() {
               <a
                 key={link.label}
                 href={link.href}
+                target={link.external ? '_blank' : undefined}
+                rel={link.external ? 'noopener noreferrer' : undefined}
                 className="block text-gray-400 hover:text-white transition-colors"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
