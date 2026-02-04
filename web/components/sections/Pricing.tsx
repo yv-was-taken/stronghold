@@ -1,60 +1,15 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { Check, Zap, Building2 } from 'lucide-react'
+import { Check, Zap } from 'lucide-react'
 import Button from '../ui/Button'
 
-const plans = [
-  {
-    name: 'Self-Hosted',
-    description: 'Run your own instance',
-    price: 'Free',
-    priceNote: 'Open source',
-    features: [
-      'Full source code access',
-      'Self-hosted proxy',
-      'Bring your own API keys',
-      'Community support',
-      'Manual x402 payments',
-    ],
-    cta: 'Get Started',
-    variant: 'secondary' as const,
-    popular: false,
-  },
-  {
-    name: 'Pay Per Scan',
-    description: 'Usage-based pricing',
-    price: '$0.001–0.005',
-    priceNote: 'per scan',
-    features: [
-      'Managed infrastructure',
-      'Automatic scaling',
-      'Usage dashboard',
-      'Email support',
-      'x402 crypto payments',
-      'Sub-50ms latency SLA',
-    ],
-    cta: 'Start Scanning',
-    variant: 'primary' as const,
-    popular: true,
-  },
-  {
-    name: 'Enterprise',
-    description: 'For large organizations',
-    price: 'Custom',
-    priceNote: 'Contact us',
-    features: [
-      'Dedicated infrastructure',
-      'Custom ML models',
-      'SSO & audit logs',
-      '24/7 phone support',
-      'Custom integrations',
-      'SLA guarantees',
-    ],
-    cta: 'Contact Sales',
-    variant: 'outline' as const,
-    popular: false,
-  },
+const features = [
+  'Managed infrastructure',
+  'Automatic scaling',
+  'Usage dashboard',
+  'x402 crypto payments',
+  'Sub-50ms latency SLA',
 ]
 
 export default function Pricing() {
@@ -82,80 +37,55 @@ export default function Pricing() {
           </p>
         </motion.div>
 
-        {/* Pricing Cards */}
-        <div className="grid md:grid-cols-3 gap-8">
-          {plans.map((plan, index) => (
-            <motion.div
-              key={plan.name}
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: index * 0.1 }}
-              className={`relative ${plan.popular ? 'md:-mt-4 md:mb-4' : ''}`}
-            >
-              {plan.popular && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                  <span className="px-4 py-1 rounded-full bg-stronghold-cyan text-stronghold-darker text-xs font-mono font-semibold">
-                    Most Popular
+        {/* Pricing Content - Two Column Layout */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+          className="max-w-2xl mx-auto"
+        >
+          <div className="rounded-xl bg-stronghold-stone/50 border border-stronghold-stone-light/30 p-8 md:p-12">
+            <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-center">
+              {/* Price Column */}
+              <div className="text-center">
+                <div className="flex items-baseline gap-3 justify-center mb-6">
+                  <span className="font-display text-6xl sm:text-7xl font-bold">
+                    $1
+                  </span>
+                  <span className="text-gray-400 text-lg">
+                    per 1,000 scans
                   </span>
                 </div>
-              )}
+                <Button variant="primary" size="lg">
+                  Start Scanning
+                </Button>
+              </div>
 
-              <div
-                className={`fortress-card rounded-xl p-8 h-full flex flex-col ${
-                  plan.popular ? 'border-stronghold-cyan/50' : ''
-                }`}
-              >
-                {/* Plan Header */}
-                <div className="mb-6">
-                  <h3 className="font-display text-2xl font-semibold mb-2">
-                    {plan.name}
-                  </h3>
-                  <p className="text-gray-400 text-sm">{plan.description}</p>
-                </div>
-
-                {/* Price */}
-                <div className="mb-6">
-                  <span className="font-display text-4xl font-bold">
-                    {plan.price}
-                  </span>
-                  <span className="text-gray-500 text-sm ml-2">
-                    {plan.priceNote}
-                  </span>
-                </div>
-
-                {/* Features */}
-                <ul className="space-y-3 mb-8 flex-grow">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-3">
+              {/* Features Column */}
+              <div>
+                <ul className="space-y-4">
+                  {features.map((feature) => (
+                    <li key={feature} className="flex items-center gap-3">
                       <Check
-                        className="text-stronghold-cyan flex-shrink-0 mt-0.5"
-                        size={18}
+                        className="text-stronghold-cyan flex-shrink-0"
+                        size={20}
                       />
-                      <span className="text-gray-300 text-sm">{feature}</span>
+                      <span className="text-gray-300">{feature}</span>
                     </li>
                   ))}
                 </ul>
-
-                {/* CTA */}
-                <Button
-                  variant={plan.variant}
-                  size="md"
-                  className="w-full"
-                >
-                  {plan.cta}
-                </Button>
               </div>
-            </motion.div>
-          ))}
-        </div>
+            </div>
+          </div>
+        </motion.div>
 
         {/* x402 Note */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.6, delay: 0.4 }}
+          transition={{ duration: 0.6, delay: 0.2 }}
           className="mt-12 text-center"
         >
           <div className="inline-flex items-center gap-3 px-6 py-3 rounded-full bg-stronghold-stone/30 border border-stronghold-stone-light/30">

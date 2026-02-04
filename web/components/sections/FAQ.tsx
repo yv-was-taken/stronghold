@@ -15,7 +15,7 @@ const faqs = [
   },
   {
     question: 'Why x402 as a payment method?',
-    answer: 'x402 is an open protocol designed specifically for pay-per-use APIs. Unlike subscriptions, you only pay for what you use—down to the individual scan. Your account is automatically topped up via the dashboard (Stripe, Coinbase Pay, Moonpay) or direct deposit. The crypto layer is completely abstracted: no seed phrases, no gas fees, no complexity. Just scan, pay, go.',
+    answer: 'x402 is an open protocol designed for pay-per-use APIs—and it\'s ideal for AI agents. Traditional payment methods require a human to enter credit card details and manage subscriptions. With x402, your agent\'s wallet pays automatically for each scan, enabling fully autonomous operation. No human in the loop for billing. Top up via the dashboard (Stripe, Coinbase Pay) or direct deposit. The crypto layer is completely abstracted: no seed phrases, no gas fees, no complexity.',
   },
   {
     question: 'Can I self-host Stronghold?',
