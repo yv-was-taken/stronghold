@@ -20,7 +20,7 @@ const (
 
 	// Defaults
 	DefaultProxyPort   = 8402
-	DefaultAPIEndpoint = "https://api.stronghold.security"
+	DefaultAPIEndpoint = "https://api.getstronghold.xyz"
 	DefaultBlockchain  = "base"
 
 	// Retries

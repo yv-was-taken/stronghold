@@ -615,7 +615,7 @@ func (m *InstallModel) viewConfig() string {
 	b.WriteString(m.portInput.View())
 	b.WriteString("\n\n")
 
-	b.WriteString("Stronghold API [https://api.stronghold.security]:\n")
+	b.WriteString("Stronghold API [https://api.getstronghold.xyz]:\n")
 	b.WriteString(m.apiInput.View())
 	b.WriteString("\n\n")
 

@@ -1,0 +1,43 @@
+# CLI Testing Dockerfile
+# Provides an isolated environment to test stronghold CLI commands
+# without affecting the host system's network configuration.
+#
+# Build: docker build -f Dockerfile.cli-test -t stronghold-cli-test .
+# Run:   docker run -it --cap-add=NET_ADMIN stronghold-cli-test
+
+FROM golang:1.25-alpine
+
+# Install dependencies for proxy functionality and testing
+RUN apk add --no-cache \
+    iptables \
+    nftables \
+    ip6tables \
+    curl \
+    bash \
+    git \
+    ca-certificates \
+    pass \
+    gnupg
+
+# Initialize GPG and pass for keyring support
+RUN gpg --batch --passphrase '' --quick-gen-key "Stronghold Test <test@stronghold.local>" default default never && \
+    pass init "Stronghold Test"
+
+WORKDIR /app
+
+# Copy go mod files first for better caching
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build CLI and proxy binaries
+RUN go build -o /usr/local/bin/stronghold ./cmd/cli
+RUN go build -o /usr/local/bin/stronghold-proxy ./cmd/proxy
+
+# Set API URL environment variable (uses production API by default)
+ENV STRONGHOLD_API_URL=https://api.getstronghold.xyz
+
+# Default to bash shell for interactive testing
+CMD ["/bin/bash"]

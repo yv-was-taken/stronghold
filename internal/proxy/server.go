@@ -151,7 +151,7 @@ func LoadConfig() (*Config, error) {
 			Bind: "127.0.0.1",
 		},
 		API: APIConfig{
-			Endpoint: "https://api.stronghold.security",
+			Endpoint: "https://api.getstronghold.xyz",
 			Timeout:  30 * time.Second,
 		},
 		Scanning: ScanningConfig{

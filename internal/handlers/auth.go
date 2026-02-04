@@ -889,7 +889,7 @@ IMPORTANT: Store this file securely. Anyone with access to your account number
 can access your account. Treat it like a password.
 
 To recover your account:
-1. Visit https://dashboard.stronghold.security
+1. Visit https://getstronghold.xyz/dashboard
 2. Enter your account number: %s
 3. Download your wallet recovery file separately if needed
 

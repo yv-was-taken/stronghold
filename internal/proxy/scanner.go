@@ -111,7 +111,7 @@ func (c *ScannerClient) scanWithPayment(ctx context.Context, endpoint string, re
 
 	// Check if we have a wallet
 	if c.wallet == nil {
-		return nil, fmt.Errorf("payment required but no wallet configured. Run 'stronghold wallet show' to check your balance or visit https://dashboard.stronghold.security to add funds")
+		return nil, fmt.Errorf("payment required but no wallet configured. Run 'stronghold wallet show' to check your balance or visit https://getstronghold.xyz/dashboard to add funds")
 	}
 
 	// Create x402 payment
