@@ -58,6 +58,11 @@ func (w *TestWallet) AddressString() string {
 	return w.Address.Hex()
 }
 
+// Exists returns true since a test wallet always exists once created
+func (w *TestWallet) Exists() bool {
+	return w.privateKey != nil
+}
+
 // SetNetwork sets the network for this wallet
 func (w *TestWallet) SetNetwork(network string) {
 	w.network = network

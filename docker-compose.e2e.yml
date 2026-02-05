@@ -1,0 +1,128 @@
+# Docker Compose for x402 End-to-End Testing
+#
+# This compose file sets up a complete test environment for verifying
+# x402 payments work correctly with REAL testnet funds.
+#
+# Prerequisites:
+#   1. Get Base Sepolia ETH: https://www.alchemy.com/faucets/base-sepolia
+#   2. Get Base Sepolia USDC: https://faucet.circle.com/ (select Base Sepolia)
+#   3. Export TEST_PRIVATE_KEY=0x... (your funded wallet)
+#
+# Usage:
+#   export TEST_PRIVATE_KEY=0x...
+#   ./scripts/e2e-x402-test.sh
+#
+# Or manually:
+#   docker-compose -f docker-compose.e2e.yml up -d postgres api
+#   docker-compose -f docker-compose.e2e.yml run --rm cli /app/scripts/e2e-tests-internal.sh
+
+version: '3.8'
+
+services:
+  # PostgreSQL database
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: stronghold
+      POSTGRES_PASSWORD: e2e_test_password
+      POSTGRES_DB: stronghold
+    volumes:
+      - e2e_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stronghold"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+    networks:
+      - e2e_network
+
+  # Stronghold API server configured for Base Sepolia testnet
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      # Database
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: stronghold
+      DB_PASSWORD: e2e_test_password
+      DB_NAME: stronghold
+      DB_SSLMODE: disable
+
+      # x402 Configuration - Base Sepolia testnet
+      # This address receives payments - use a real address to verify funds transfer
+      X402_NETWORK: base-sepolia
+      X402_WALLET_ADDRESS: ${API_WALLET_ADDRESS:-0x0000000000000000000000000000000000000001}
+      X402_FACILITATOR_URL: https://x402.org/facilitator
+
+      # CDP API for payment verification (optional for basic tests)
+      CDP_API_KEY_ID: ${CDP_API_KEY_ID:-}
+      CDP_API_KEY_SECRET: ${CDP_API_KEY_SECRET:-}
+
+      # JWT secret for sessions
+      JWT_SECRET: e2e_test_jwt_secret_not_for_production
+
+      # Scanner settings - use heuristics only for faster tests
+      STRONGHOLD_BLOCK_THRESHOLD: "0.55"
+      STRONGHOLD_WARN_THRESHOLD: "0.35"
+      STRONGHOLD_ENABLE_HUGOT: "false"
+      STRONGHOLD_ENABLE_SEMANTICS: "false"
+      STRONGHOLD_ENABLE_LLM: "false"
+
+      # Pricing - $0.002 per scan (2000 USDC atomic units)
+      PRICE_SCAN_CONTENT: "0.002"
+      PRICE_SCAN_OUTPUT: "0.002"
+
+      # Logging
+      LOG_LEVEL: debug
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - e2e_network
+
+  # CLI testing container
+  cli:
+    build:
+      context: .
+      dockerfile: Dockerfile.cli-test
+    environment:
+      # Point to local API server
+      STRONGHOLD_API_URL: http://api:8080
+
+      # x402 network configuration
+      X402_NETWORK: base-sepolia
+
+      # Pass through test credentials
+      TEST_PRIVATE_KEY: ${TEST_PRIVATE_KEY:-}
+
+      # Facilitator URL
+      X402_FACILITATOR_URL: https://x402.org/facilitator
+    volumes:
+      # Mount scripts directory for running tests
+      - ./scripts:/app/scripts:ro
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - e2e_network
+    # Keep container available for interactive debugging
+    stdin_open: true
+    tty: true
+
+networks:
+  e2e_network:
+    driver: bridge
+
+volumes:
+  e2e_pgdata:

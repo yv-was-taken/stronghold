@@ -51,12 +51,18 @@ type ScanRequest struct {
 	ContentType string `json:"content_type,omitempty"`
 }
 
+// X402Wallet defines the interface for x402 payment creation
+type X402Wallet interface {
+	Exists() bool
+	CreateX402Payment(req *wallet.PaymentRequirements) (string, error)
+}
+
 // ScannerClient is a client for the Stronghold scanning API
 type ScannerClient struct {
 	baseURL       string
 	token         string
 	httpClient    *http.Client
-	wallet        *wallet.Wallet
+	wallet        X402Wallet
 	facilitatorURL string
 }
 
@@ -81,7 +87,7 @@ func NewScannerClient(baseURL, token string) *ScannerClient {
 }
 
 // SetWallet sets the wallet for x402 payments
-func (c *ScannerClient) SetWallet(w *wallet.Wallet) {
+func (c *ScannerClient) SetWallet(w X402Wallet) {
 	c.wallet = w
 }
 
