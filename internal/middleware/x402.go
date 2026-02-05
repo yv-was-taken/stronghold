@@ -321,22 +321,20 @@ func (m *X402Middleware) verifyPayment(paymentHeader string, expectedAmount *big
 		return false, fmt.Errorf("invalid signature: %w", err)
 	}
 
-	// Call facilitator to verify payment is valid and not already spent
-	verifyReq := struct {
-		Payment  string `json:"payment"`
-		Network  string `json:"network"`
-		Amount   string `json:"amount"`
-		Receiver string `json:"receiver"`
-		Token    string `json:"token"`
-	}{
-		Payment:  paymentHeader,
-		Network:  payload.Network,
-		Amount:   payload.Amount,
-		Receiver: payload.Receiver,
-		Token:    payload.TokenAddress,
+	// Build the original payment requirements for facilitator
+	originalReq := &wallet.PaymentRequirements{
+		Scheme:     "x402",
+		Network:    m.config.Network,
+		Recipient:  m.config.WalletAddress,
+		Amount:     expectedAmount.String(),
+		Currency:   "USDC",
 	}
 
-	verifyBody, err := json.Marshal(verifyReq)
+	// Call facilitator to verify payment is valid and not already spent
+	// Use x402 v2 format with paymentPayload and paymentRequirements
+	facilitatorReq := wallet.BuildFacilitatorRequest(payload, originalReq)
+
+	verifyBody, err := json.Marshal(facilitatorReq)
 	if err != nil {
 		return false, fmt.Errorf("failed to marshal verify request: %w", err)
 	}
@@ -360,16 +358,23 @@ func (m *X402Middleware) verifyPayment(paymentHeader string, expectedAmount *big
 		return false, fmt.Errorf("facilitator verification failed: %s", resp.Status)
 	}
 
+	// x402 v2 response format
 	var verifyResult struct {
-		Valid   bool   `json:"valid"`
-		Reason  string `json:"reason,omitempty"`
+		IsValid        bool   `json:"isValid"`
+		InvalidReason  string `json:"invalidReason,omitempty"`
+		InvalidMessage string `json:"invalidMessage,omitempty"`
+		Payer          string `json:"payer,omitempty"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&verifyResult); err != nil {
 		return false, fmt.Errorf("failed to decode verify response: %w", err)
 	}
 
-	if !verifyResult.Valid {
-		return false, fmt.Errorf("payment invalid: %s", verifyResult.Reason)
+	if !verifyResult.IsValid {
+		reason := verifyResult.InvalidReason
+		if verifyResult.InvalidMessage != "" {
+			reason = verifyResult.InvalidMessage
+		}
+		return false, fmt.Errorf("payment invalid: %s", reason)
 	}
 
 	return true, nil
@@ -382,21 +387,19 @@ func (m *X402Middleware) settlePayment(paymentHeader string) (string, error) {
 		return "", fmt.Errorf("failed to parse payment: %w", err)
 	}
 
-	settleReq := struct {
-		Payment  string `json:"payment"`
-		Network  string `json:"network"`
-		Amount   string `json:"amount"`
-		Receiver string `json:"receiver"`
-		Token    string `json:"token"`
-	}{
-		Payment:  paymentHeader,
-		Network:  payload.Network,
-		Amount:   payload.Amount,
-		Receiver: payload.Receiver,
-		Token:    payload.TokenAddress,
+	// Build the original payment requirements for facilitator
+	originalReq := &wallet.PaymentRequirements{
+		Scheme:    "x402",
+		Network:   m.config.Network,
+		Recipient: m.config.WalletAddress,
+		Amount:    payload.Amount,
+		Currency:  "USDC",
 	}
 
-	settleBody, err := json.Marshal(settleReq)
+	// Use x402 v2 format with paymentPayload and paymentRequirements
+	facilitatorReq := wallet.BuildFacilitatorRequest(payload, originalReq)
+
+	settleBody, err := json.Marshal(facilitatorReq)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal settle request: %w", err)
 	}
@@ -420,14 +423,20 @@ func (m *X402Middleware) settlePayment(paymentHeader string) (string, error) {
 		return "", fmt.Errorf("facilitator settlement failed: %s", resp.Status)
 	}
 
+	// x402 v2 settle response format
 	var settleResult struct {
-		PaymentID string `json:"payment_id"`
-		TxHash    string `json:"tx_hash,omitempty"`
+		Success   bool   `json:"success"`
+		TxHash    string `json:"txHash,omitempty"`
+		PaymentID string `json:"paymentId,omitempty"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&settleResult); err != nil {
 		return "", fmt.Errorf("failed to decode settle response: %w", err)
 	}
 
+	// Return txHash or paymentId as the payment identifier
+	if settleResult.TxHash != "" {
+		return settleResult.TxHash, nil
+	}
 	return settleResult.PaymentID, nil
 }
 

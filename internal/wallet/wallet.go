@@ -16,8 +16,11 @@ import (
 
 	"github.com/99designs/keyring"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/signer/core/apitypes"
 )
 
 const (
@@ -310,6 +313,79 @@ func (w *Wallet) SignTypedData(typedData *TypedData) ([]byte, error) {
 	sig, err := crypto.Sign(crypto.Keccak256(rawData), privateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign typed data: %w", err)
+	}
+
+	return sig, nil
+}
+
+// SignEIP3009 signs an EIP-3009 TransferWithAuthorization using proper EIP-712 encoding
+// Reference implementation: https://github.com/brtvcl/eip-3009-transferWithAuthorization-example
+func (w *Wallet) SignEIP3009(chainID int64, tokenAddress, from, to string, value *big.Int, validAfter, validBefore int64, nonce []byte) ([]byte, error) {
+	privateKey, err := w.getPrivateKey()
+	if err != nil {
+		return nil, err
+	}
+	defer w.zeroKey(privateKey)
+
+	// Convert nonce to hex string with 0x prefix using go-ethereum's hexutil
+	// This is equivalent to ethers.hexlify() which produces "0x..." format
+	nonceHex := hexutil.Encode(nonce)
+
+	// Build the EIP-712 typed data using go-ethereum's proper implementation
+	// Reference format from working ethers.js implementation:
+	// - value: BigInt (we use *math.HexOrDecimal256)
+	// - validAfter/validBefore: numbers (we use *math.HexOrDecimal256)
+	// - nonce: hex string with 0x prefix
+	typedData := apitypes.TypedData{
+		Types: apitypes.Types{
+			"EIP712Domain": []apitypes.Type{
+				{Name: "name", Type: "string"},
+				{Name: "version", Type: "string"},
+				{Name: "chainId", Type: "uint256"},
+				{Name: "verifyingContract", Type: "address"},
+			},
+			"TransferWithAuthorization": []apitypes.Type{
+				{Name: "from", Type: "address"},
+				{Name: "to", Type: "address"},
+				{Name: "value", Type: "uint256"},
+				{Name: "validAfter", Type: "uint256"},
+				{Name: "validBefore", Type: "uint256"},
+				{Name: "nonce", Type: "bytes32"},
+			},
+		},
+		PrimaryType: "TransferWithAuthorization",
+		Domain: apitypes.TypedDataDomain{
+			Name:              "USD Coin",
+			Version:           "2",
+			ChainId:           math.NewHexOrDecimal256(chainID),
+			VerifyingContract: tokenAddress,
+		},
+		Message: apitypes.TypedDataMessage{
+			"from":        from,
+			"to":          to,
+			"value":       (*math.HexOrDecimal256)(value),
+			"validAfter":  math.NewHexOrDecimal256(validAfter),
+			"validBefore": math.NewHexOrDecimal256(validBefore),
+			"nonce":       nonceHex, // Hex string with 0x prefix per ethers.js convention
+		},
+	}
+
+	// Get the hash using go-ethereum's proper EIP-712 implementation
+	hash, _, err := apitypes.TypedDataAndHash(typedData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash typed data: %w", err)
+	}
+
+	// Sign the hash
+	sig, err := crypto.Sign(hash, privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign: %w", err)
+	}
+
+	// Adjust V value for EIP-712: go-ethereum returns 0/1, but EIP-712 expects 27/28
+	// Reference: viem uses v = recovery ? 28n : 27n
+	if sig[64] < 27 {
+		sig[64] += 27
 	}
 
 	return sig, nil

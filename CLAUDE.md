@@ -79,6 +79,25 @@ Required environment variables for local development (see `.env.example`):
 - CLI must work correctly in all environments: local development, installed via release, and Docker containers
 - Always verify file/binary existence before returning paths - don't assume files exist based on directory structure alone
 
+## Research Before Implementation - NO GUESSING
+
+**CRITICAL: Never guess at implementations. Always research first. This applies to EVERYTHING.**
+
+For ANY implementation, you MUST:
+1. **Read the documentation** - Find and read the actual docs, specs, or API references
+2. **Find reference implementations** - Look at working code examples in the same language
+3. **Check library source code** - When using libraries, read the source to understand expected types and behavior
+4. **Verify with real tests** - Don't assume mock-based tests prove correctness
+
+**DO NOT:**
+- Guess at data formats, types, or behavior and "try things"
+- Assume something works because it compiles
+- Trust that mocked tests prove correctness
+- Make changes without understanding what you're changing
+- Say something "works" without actually verifying it end-to-end
+
+This applies to EVERYTHING: APIs, libraries, protocols, file formats, CLI tools, database queries, etc. If you don't know how something works, research it first. Do not iterate by trial and error unless the user explicitly asks you to.
+
 ## Architecture
 
 ```
@@ -119,6 +138,24 @@ internal/
   2. Direct USDC transfer to their wallet address on Base
 - There is no "Stripe payment method" vs "wallet payment method" - x402 is the only payment method
 
+### x402 EIP-3009 Implementation Details
+
+**CRITICAL: Both `Wallet` and `TestWallet` must use identical signing logic.**
+
+The x402 payment uses EIP-3009 `TransferWithAuthorization` with EIP-712 typed data signing:
+
+- **EIP-712 Types**: Use `apitypes.TypedData` from go-ethereum (NOT our custom `TypedData` struct with JSON hashing)
+- **Domain**: `name="USD Coin"`, `version="2"`, `chainId`, `verifyingContract=tokenAddress`
+- **Primary Type**: `TransferWithAuthorization` (NOT "Payment")
+- **Value types**: Use `*math.HexOrDecimal256` for uint256 fields
+- **Nonce format**: Use `hexutil.Encode(nonceBytes)` to get "0x..." hex string
+- **V value**: go-ethereum returns 0/1, must adjust to 27/28 (`if sig[64] < 27 { sig[64] += 27 }`)
+
+Reference implementations:
+- [ethers.js example](https://github.com/brtvcl/eip-3009-transferWithAuthorization-example)
+- [viem signature format](https://github.com/wevm/viem/blob/main/src/accounts/utils/sign.ts)
+- [x402 TypeScript SDK](https://github.com/coinbase/x402/tree/main/typescript/packages/mechanisms/evm)
+
 ## Testing Requirements
 
 **CRITICAL: All tests must actually run and pass before considering work complete.**
@@ -146,6 +183,23 @@ go test ./...
 ```
 
 **DO NOT use `-short` flag** - this skips important integration tests. Always run the full test suite.
+
+### Mocked vs Real Testing - CRITICAL DISTINCTION
+
+**NEVER claim something "works" if it was only tested with mocks.** Be explicit about what has been actually tested:
+
+1. **Real e2e tests** - Tests that hit actual external APIs (x402 facilitator, blockchain RPCs, etc.)
+2. **Mocked tests** - Tests that mock external dependencies
+
+When reporting test results, ALWAYS specify:
+- "Tests pass WITH MOCKS for external services" (not fully verified)
+- "Tests pass WITH REAL API calls" (actually verified)
+
+**x402 Payment Testing:**
+- Mocked facilitator tests do NOT verify the actual signature format, API format, or protocol compliance
+- The ONLY way to verify x402 payments work is to test against the REAL x402.org facilitator
+- Use `cmd/x402test/e2e.go` to test real x402 payments against production
+- If tests mock the facilitator, they CANNOT catch EIP-712 signature format bugs, API format mismatches, etc.
 
 ## Database
 

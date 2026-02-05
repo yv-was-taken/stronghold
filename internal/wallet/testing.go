@@ -5,10 +5,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/signer/core/apitypes"
 )
 
 // TestWallet is a wallet that doesn't require OS keyring access.
@@ -69,6 +73,7 @@ func (w *TestWallet) SetNetwork(network string) {
 }
 
 // CreateX402Payment creates a signed x402 payment for testing
+// Uses proper EIP-3009 TransferWithAuthorization format
 func (w *TestWallet) CreateX402Payment(req *PaymentRequirements) (string, error) {
 	// Get x402 config for network
 	var x402Config X402Config
@@ -87,6 +92,19 @@ func (w *TestWallet) CreateX402Payment(req *PaymentRequirements) (string, error)
 		return "", fmt.Errorf("failed to generate payment nonce: %w", err)
 	}
 
+	timestamp := time.Now().Unix()
+	validAfter := int64(0)
+	validBefore := timestamp + 300 // 5 minute validity window
+
+	// Parse amount as big.Int
+	amount := new(big.Int)
+	if _, ok := amount.SetString(req.Amount, 10); !ok {
+		return "", fmt.Errorf("invalid amount: %s", req.Amount)
+	}
+
+	// Generate nonce as bytes
+	nonceBytes := common.FromHex(nonce)
+
 	payload := X402Payload{
 		Network:      x402Config.Network,
 		Scheme:       "x402",
@@ -94,45 +112,21 @@ func (w *TestWallet) CreateX402Payment(req *PaymentRequirements) (string, error)
 		Receiver:     req.Recipient,
 		TokenAddress: x402Config.TokenAddress,
 		Amount:       req.Amount,
-		Timestamp:    time.Now().Unix(),
+		Timestamp:    timestamp,
 		Nonce:        nonce,
 	}
 
-	// Create EIP-712 typed data for signing
-	typedData := &TypedData{
-		Types: map[string][]TypedDataField{
-			"EIP712Domain": {
-				{Name: "name", Type: "string"},
-				{Name: "version", Type: "string"},
-				{Name: "chainId", Type: "uint256"},
-				{Name: "verifyingContract", Type: "address"},
-			},
-			"Payment": {
-				{Name: "receiver", Type: "address"},
-				{Name: "tokenAddress", Type: "address"},
-				{Name: "amount", Type: "uint256"},
-				{Name: "timestamp", Type: "uint256"},
-				{Name: "nonce", Type: "string"},
-			},
-		},
-		PrimaryType: "Payment",
-		Domain: TypedDataDomain{
-			Name:              "x402",
-			Version:           "1",
-			ChainID:           x402Config.ChainID,
-			VerifyingContract: req.Recipient,
-		},
-		Message: map[string]interface{}{
-			"receiver":     req.Recipient,
-			"tokenAddress": x402Config.TokenAddress,
-			"amount":       req.Amount,
-			"timestamp":    payload.Timestamp,
-			"nonce":        nonce,
-		},
-	}
-
-	// Sign the typed data
-	signature, err := w.signTypedData(typedData)
+	// Sign using proper EIP-3009 TransferWithAuthorization format
+	signature, err := w.signEIP3009(
+		int64(x402Config.ChainID),
+		x402Config.TokenAddress,
+		w.Address.Hex(), // from
+		req.Recipient,   // to
+		amount,
+		validAfter,
+		validBefore,
+		nonceBytes,
+	)
 	if err != nil {
 		return "", fmt.Errorf("failed to sign payment: %w", err)
 	}
@@ -152,26 +146,65 @@ func (w *TestWallet) CreateX402Payment(req *PaymentRequirements) (string, error)
 	return payment, nil
 }
 
-// signTypedData signs EIP-712 typed data
-func (w *TestWallet) signTypedData(typedData *TypedData) ([]byte, error) {
-	domainSeparator, err := typedData.HashStruct("EIP712Domain", typedData.Domain.Map())
-	if err != nil {
-		return nil, fmt.Errorf("failed to hash domain: %w", err)
+// signEIP3009 signs an EIP-3009 TransferWithAuthorization using proper EIP-712 encoding
+// Reference implementation: https://github.com/brtvcl/eip-3009-transferWithAuthorization-example
+// V value format: viem uses 27/28, per https://github.com/wevm/viem/blob/main/src/accounts/utils/sign.ts
+func (w *TestWallet) signEIP3009(chainID int64, tokenAddress, from, to string, value *big.Int, validAfter, validBefore int64, nonce []byte) ([]byte, error) {
+	// Convert nonce to hex string with 0x prefix using go-ethereum's hexutil
+	// This is equivalent to ethers.hexlify() which produces "0x..." format
+	nonceHex := hexutil.Encode(nonce)
+
+	// Build the EIP-712 typed data using go-ethereum's proper implementation
+	typedData := apitypes.TypedData{
+		Types: apitypes.Types{
+			"EIP712Domain": []apitypes.Type{
+				{Name: "name", Type: "string"},
+				{Name: "version", Type: "string"},
+				{Name: "chainId", Type: "uint256"},
+				{Name: "verifyingContract", Type: "address"},
+			},
+			"TransferWithAuthorization": []apitypes.Type{
+				{Name: "from", Type: "address"},
+				{Name: "to", Type: "address"},
+				{Name: "value", Type: "uint256"},
+				{Name: "validAfter", Type: "uint256"},
+				{Name: "validBefore", Type: "uint256"},
+				{Name: "nonce", Type: "bytes32"},
+			},
+		},
+		PrimaryType: "TransferWithAuthorization",
+		Domain: apitypes.TypedDataDomain{
+			Name:              "USD Coin",
+			Version:           "2",
+			ChainId:           math.NewHexOrDecimal256(chainID),
+			VerifyingContract: tokenAddress,
+		},
+		Message: apitypes.TypedDataMessage{
+			"from":        from,
+			"to":          to,
+			"value":       (*math.HexOrDecimal256)(value),
+			"validAfter":  math.NewHexOrDecimal256(validAfter),
+			"validBefore": math.NewHexOrDecimal256(validBefore),
+			"nonce":       nonceHex, // Hex string with 0x prefix per ethers.js convention
+		},
 	}
 
-	typedDataHash, err := typedData.HashStruct(typedData.PrimaryType, typedData.Message)
+	// Get the hash using go-ethereum's proper EIP-712 implementation
+	hash, _, err := apitypes.TypedDataAndHash(typedData)
 	if err != nil {
-		return nil, fmt.Errorf("failed to hash message: %w", err)
+		return nil, fmt.Errorf("failed to hash typed data: %w", err)
 	}
 
-	// Construct the final hash: keccak256("\x19\x01" || domainSeparator || structHash)
-	rawData := []byte("\x19\x01")
-	rawData = append(rawData, domainSeparator...)
-	rawData = append(rawData, typedDataHash...)
-
-	sig, err := crypto.Sign(crypto.Keccak256(rawData), w.privateKey)
+	// Sign the hash
+	sig, err := crypto.Sign(hash, w.privateKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to sign typed data: %w", err)
+		return nil, fmt.Errorf("failed to sign: %w", err)
+	}
+
+	// Adjust V value for EIP-712: go-ethereum returns 0/1, but EIP-712 expects 27/28
+	// Reference: viem uses v = recovery ? 28n : 27n
+	if sig[64] < 27 {
+		sig[64] += 27
 	}
 
 	return sig, nil
