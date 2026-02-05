@@ -33,7 +33,7 @@ type ServiceStatus struct {
 // IsRunning checks if the proxy is running
 func (s *ServiceManager) IsRunning() (*ServiceStatus, error) {
 	// Check if process is listening on the configured port
-	addr := fmt.Sprintf("%s:%d", s.config.Proxy.Bind, s.config.Proxy.Port)
+	addr := net.JoinHostPort(s.config.Proxy.Bind, fmt.Sprintf("%d", s.config.Proxy.Port))
 
 	// Try to connect
 	conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
