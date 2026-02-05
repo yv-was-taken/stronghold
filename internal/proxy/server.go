@@ -363,13 +363,8 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request, start time.T
 	outReq.Header.Del("Proxy-Connection")
 	outReq.Header.Del("Proxy-Authenticate")
 
-	// Perform the request
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse // Don't follow redirects automatically
-		},
-	}
+	// Perform the request using marked client (sets SO_MARK to avoid redirect loops)
+	client := NewMarkedClient()
 
 	resp, err := client.Do(outReq)
 	if err != nil {
@@ -469,7 +464,9 @@ func (s *Server) handleHTTP(w http.ResponseWriter, r *http.Request, start time.T
 
 // handleConnect handles HTTPS CONNECT requests
 func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
-	destConn, err := net.DialTimeout("tcp", r.Host, 10*time.Second)
+	// Use marked dialer to avoid redirect loops
+	dialer := &MarkedDialer{Timeout: 1 * time.Second}
+	destConn, err := dialer.Dial("tcp", r.Host)
 	if err != nil {
 		s.logger.Error("error connecting to host", "host", r.Host, "error", err)
 		http.Error(w, "Bad Gateway", http.StatusBadGateway)

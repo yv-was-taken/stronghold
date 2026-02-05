@@ -71,6 +71,14 @@ Required environment variables for local development (see `.env.example`):
 - `JWT_SECRET` - Authentication token signing
 - `X402_WALLET_ADDRESS` - Payment receiving address (omit for dev mode without payments)
 
+## CLI Development
+
+**Fix bugs properly - no workarounds.**
+
+- When CLI code has bugs (e.g., path resolution issues), fix the actual code rather than adding workarounds like symlinks or environment hacks
+- CLI must work correctly in all environments: local development, installed via release, and Docker containers
+- Always verify file/binary existence before returning paths - don't assume files exist based on directory structure alone
+
 ## Architecture
 
 ```

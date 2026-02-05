@@ -10,6 +10,12 @@ import (
 	"strings"
 )
 
+// StrongholdMark is the netfilter mark used to identify proxy traffic.
+// The proxy sets this mark on its outbound sockets so nftables/iptables
+// can skip them, preventing infinite redirect loops.
+// 0x2702 = "stronghold" in hex-speak
+const StrongholdMark = 0x2702
+
 // TransparentProxy manages transparent proxying via iptables/nftables/pf
 type TransparentProxy struct {
 	config *CLIConfig
@@ -124,13 +130,16 @@ func (t *TransparentProxy) statusLinux() (bool, error) {
 // enableIptables sets up iptables rules for transparent proxying
 func (t *TransparentProxy) enableIptables() error {
 	proxyPort := strconv.Itoa(t.config.Proxy.Port)
+	markHex := fmt.Sprintf("0x%x", StrongholdMark)
 
 	// Create custom chain for stronghold
+	// Use packet mark (set by proxy via SO_MARK) instead of UID to identify proxy traffic.
+	// This ensures all users' traffic goes through the proxy, including root.
 	rules := [][]string{
 		// Create chain if doesn't exist
 		{"iptables", "-t", "nat", "-N", "STRONGHOLD", "-m", "comment", "--comment", "Stronghold transparent proxy"},
-		// Don't redirect traffic from the proxy itself (avoid loops)
-		{"iptables", "-t", "nat", "-A", "STRONGHOLD", "-m", "owner", "--uid-owner", strconv.Itoa(os.Getuid()), "-j", "RETURN"},
+		// Don't redirect traffic from the proxy itself (identified by socket mark)
+		{"iptables", "-t", "nat", "-A", "STRONGHOLD", "-m", "mark", "--mark", markHex, "-j", "RETURN"},
 		// Don't redirect localhost traffic (avoid loops)
 		{"iptables", "-t", "nat", "-A", "STRONGHOLD", "-d", "127.0.0.1/8", "-j", "RETURN"},
 		// Don't redirect private networks (optional, for local development)
@@ -174,12 +183,14 @@ func (t *TransparentProxy) enableNftables() error {
 	proxyPort := strconv.Itoa(t.config.Proxy.Port)
 
 	// Create nftables script
+	// Use packet mark (set by proxy via SO_MARK) instead of UID to identify proxy traffic.
+	// This ensures all users' traffic goes through the proxy, including root.
 	nftScript := fmt.Sprintf(`table inet stronghold {
     chain output {
         type nat hook output priority 0; policy accept;
 
-        # Don't redirect proxy's own traffic
-        meta skuid %d return
+        # Don't redirect proxy's own traffic (identified by socket mark)
+        meta mark 0x%x return
 
         # Don't redirect localhost
         ip daddr 127.0.0.0/8 return
@@ -196,7 +207,7 @@ func (t *TransparentProxy) enableNftables() error {
         # Redirect HTTPS to proxy
         tcp dport 443 redirect to :%s
     }
-}`, os.Getuid(), proxyPort, proxyPort)
+}`, StrongholdMark, proxyPort, proxyPort)
 
 	// Apply nftables config
 	cmd := exec.Command("nft", "-f", "-")
@@ -224,9 +235,12 @@ func (t *TransparentProxy) enableDarwin() error {
 	proxyPort := strconv.Itoa(t.config.Proxy.Port)
 
 	// Create pf configuration
+	// Note: macOS pf doesn't support packet marks like Linux nftables/iptables.
+	// We use a tagged approach instead - proxy traffic is tagged and skipped.
+	// The proxy must set the "stronghold" tag on its outbound connections.
 	pfConf := fmt.Sprintf(`# Stronghold transparent proxy
-# Skip proxy's own traffic
-pass out quick proto tcp from any user = %d to any port { 80, 443 }
+# Skip proxy's own traffic (tagged by proxy)
+pass out quick proto tcp tagged stronghold
 
 # Redirect HTTP to proxy
 rdr pass on lo0 inet proto tcp from any to any port 80 -> 127.0.0.1 port %s
@@ -234,7 +248,7 @@ rdr pass on lo0 inet proto tcp from any to any port 443 -> 127.0.0.1 port %s
 
 # Allow redirected traffic
 pass out quick on lo0 inet proto tcp from any to 127.0.0.1 port %s
-`, os.Getuid(), proxyPort, proxyPort, proxyPort)
+`, proxyPort, proxyPort, proxyPort)
 
 	// Write config file
 	configPath := "/etc/pf.stronghold.conf"

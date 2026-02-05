@@ -338,9 +338,11 @@ func (s *ServiceManager) uninstallDarwinService() error {
 
 // getProxyBinaryPath returns the path to the proxy binary
 func (s *ServiceManager) getProxyBinaryPath() string {
-	// Check if running from source (development)
+	// Check if running from source (development) AND binary exists
 	if _, err := os.Stat("./cmd/proxy"); err == nil {
-		return "./stronghold-proxy"
+		if _, err := os.Stat("./stronghold-proxy"); err == nil {
+			return "./stronghold-proxy"
+		}
 	}
 
 	// Check standard locations
