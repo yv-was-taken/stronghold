@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +21,25 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// createRawPaymentHeader creates a payment header with arbitrary values for testing edge cases.
+// This bypasses wallet validation to allow testing malformed inputs.
+func createRawPaymentHeader(payer, receiver, amount, network, nonce, signature string) string {
+	payload := wallet.X402Payload{
+		Network:      network,
+		Scheme:       "x402",
+		Payer:        payer,
+		Receiver:     receiver,
+		TokenAddress: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // USDC on base-sepolia
+		Amount:       amount,
+		Timestamp:    time.Now().Unix(),
+		Nonce:        nonce,
+		Signature:    signature,
+	}
+
+	payloadJSON, _ := json.Marshal(payload)
+	return "x402;" + base64.StdEncoding.EncodeToString(payloadJSON)
+}
 
 func TestAtomicPayment_DevModeBypass(t *testing.T) {
 	// No wallet address = dev mode
@@ -246,13 +266,13 @@ func TestAtomicPayment_WithDB_IdempotencyCache(t *testing.T) {
 	// Mock verify to succeed
 	httpmock.RegisterResponder("POST", "https://x402.org/facilitator/verify",
 		httpmock.NewJsonResponderOrPanic(200, map[string]interface{}{
-			"valid": true,
+			"isValid": true,
 		}))
 
 	// Mock settle to succeed
 	httpmock.RegisterResponder("POST", "https://x402.org/facilitator/settle",
 		httpmock.NewJsonResponderOrPanic(200, map[string]interface{}{
-			"payment_id": "test-payment-123",
+			"paymentId": "test-payment-123",
 		}))
 
 	// Create payment header
@@ -319,7 +339,7 @@ func TestAtomicPayment_DuplicateInProgress(t *testing.T) {
 
 	httpmock.RegisterResponder("POST", "https://x402.org/facilitator/verify",
 		httpmock.NewJsonResponderOrPanic(200, map[string]interface{}{
-			"valid": true,
+			"isValid": true,
 		}))
 
 	// Slow settle to simulate in-progress state
@@ -327,7 +347,7 @@ func TestAtomicPayment_DuplicateInProgress(t *testing.T) {
 		func(req *http.Request) (*http.Response, error) {
 			time.Sleep(100 * time.Millisecond)
 			return httpmock.NewJsonResponse(200, map[string]interface{}{
-				"payment_id": "test-payment-123",
+				"paymentId": "test-payment-123",
 			})
 		})
 
@@ -405,7 +425,7 @@ func TestAtomicPayment_SettlementFailure(t *testing.T) {
 	// Mock verify to succeed
 	httpmock.RegisterResponder("POST", "https://x402.org/facilitator/verify",
 		httpmock.NewJsonResponderOrPanic(200, map[string]interface{}{
-			"valid": true,
+			"isValid": true,
 		}))
 
 	// Mock settle to fail
@@ -471,7 +491,7 @@ func TestAtomicPayment_HandlerError(t *testing.T) {
 
 	httpmock.RegisterResponder("POST", "https://x402.org/facilitator/verify",
 		httpmock.NewJsonResponderOrPanic(200, map[string]interface{}{
-			"valid": true,
+			"isValid": true,
 		}))
 
 	// Settle should NOT be called since handler fails
@@ -480,7 +500,7 @@ func TestAtomicPayment_HandlerError(t *testing.T) {
 		func(req *http.Request) (*http.Response, error) {
 			settleCalled = true
 			return httpmock.NewJsonResponse(200, map[string]interface{}{
-				"payment_id": "test-payment-123",
+				"paymentId": "test-payment-123",
 			})
 		})
 
@@ -685,12 +705,12 @@ func TestAtomicPayment_FullFlow_Integration(t *testing.T) {
 
 	httpmock.RegisterResponder("POST", "https://x402.org/facilitator/verify",
 		httpmock.NewJsonResponderOrPanic(200, map[string]interface{}{
-			"valid": true,
+			"isValid": true,
 		}))
 
 	httpmock.RegisterResponder("POST", "https://x402.org/facilitator/settle",
 		httpmock.NewJsonResponderOrPanic(200, map[string]interface{}{
-			"payment_id": "test-payment-456",
+			"paymentId": "test-payment-456",
 		}))
 
 	paymentHeader, err := testWallet.CreateTestPaymentHeader(receiverAddress, "1000", "base-sepolia")
@@ -750,10 +770,8 @@ func TestAtomicPayment_InvalidAmountFormat(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
 	defer testDB.Close(t)
 
-	testWallet, err := wallet.NewTestWallet()
-	require.NoError(t, err)
-
 	receiverAddress := "0x1234567890123456789012345678901234567890"
+	payerAddress := "0xabcdef1234567890abcdef1234567890abcdef12"
 
 	cfg := &config.X402Config{
 		WalletAddress:  receiverAddress,
@@ -772,12 +790,18 @@ func TestAtomicPayment_InvalidAmountFormat(t *testing.T) {
 	// This should not even be called since amount parsing should fail first
 	httpmock.RegisterResponder("POST", "https://x402.org/facilitator/verify",
 		httpmock.NewJsonResponderOrPanic(200, map[string]interface{}{
-			"valid": true,
+			"isValid": true,
 		}))
 
-	// Create payment with invalid amount (not a number)
-	paymentHeader, err := testWallet.CreateTestPaymentHeader(receiverAddress, "invalid_amount", "base-sepolia")
-	require.NoError(t, err)
+	// Create payment with invalid amount (not a number) using raw helper
+	paymentHeader := createRawPaymentHeader(
+		payerAddress,
+		receiverAddress,
+		"invalid_amount", // Invalid: not a number
+		"base-sepolia",
+		"0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+		"0xabababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab", // Dummy 65-byte signature
+	)
 
 	app := fiber.New()
 	app.Post("/v1/scan/content", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
@@ -821,12 +845,12 @@ func TestVerifyPayment_AddressNormalization(t *testing.T) {
 
 	httpmock.RegisterResponder("POST", "https://x402.org/facilitator/verify",
 		httpmock.NewJsonResponderOrPanic(200, map[string]interface{}{
-			"valid": true,
+			"isValid": true,
 		}))
 
 	httpmock.RegisterResponder("POST", "https://x402.org/facilitator/settle",
 		httpmock.NewJsonResponderOrPanic(200, map[string]interface{}{
-			"payment_id": "test-123",
+			"paymentId": "test-123",
 		}))
 
 	// Create payment with uppercase address (should still match)

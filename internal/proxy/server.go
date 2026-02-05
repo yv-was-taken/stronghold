@@ -377,10 +377,25 @@ func (s *Server) handleConnection(conn net.Conn) {
 		// TLS connection - handle with MITM if available
 		if s.mitm != nil {
 			// Get original destination for transparent mode
+			// First try SO_ORIGINAL_DST (Linux only)
 			originalDst, err := GetOriginalDst(conn)
 			if err != nil {
-				s.logger.Debug("failed to get original destination, using local addr", "error", err)
-				originalDst = conn.LocalAddr().String()
+				// SO_ORIGINAL_DST failed (macOS or error) - extract SNI from ClientHello
+				s.logger.Debug("SO_ORIGINAL_DST failed, extracting SNI", "error", err)
+
+				sni, fullClientHello, sniErr := ExtractSNI(conn, buf[:n])
+				if sniErr != nil {
+					s.logger.Error("failed to extract SNI", "error", sniErr)
+					conn.Close()
+					return
+				}
+
+				// Use SNI hostname with default HTTPS port
+				originalDst = sni + ":443"
+				s.logger.Debug("extracted SNI for destination", "sni", sni, "dst", originalDst)
+
+				// Create new prefixed connection with the full ClientHello we read
+				prefixedConn = newPrefixedConn(conn, fullClientHello)
 			}
 			s.mitm.HandleTLS(prefixedConn, originalDst)
 		} else {
@@ -412,11 +427,40 @@ func (s *Server) handleHTTPConnection(conn net.Conn) {
 func (s *Server) tunnelConnection(conn net.Conn) {
 	defer conn.Close()
 
-	// Get original destination
-	originalDst, err := GetOriginalDst(conn)
+	var originalDst string
+	var tunnelConn net.Conn = conn
+
+	// Try to get underlying TCP connection for SO_ORIGINAL_DST
+	underlyingConn := conn
+	if pc, ok := conn.(*prefixedConn); ok {
+		underlyingConn = pc.Conn
+	}
+
+	// Try SO_ORIGINAL_DST first (Linux)
+	var err error
+	originalDst, err = GetOriginalDst(underlyingConn)
 	if err != nil {
-		s.logger.Error("failed to get original destination for tunnel", "error", err)
-		return
+		// SO_ORIGINAL_DST failed - try SNI extraction
+		s.logger.Debug("SO_ORIGINAL_DST failed for tunnel, extracting SNI", "error", err)
+
+		// Get the prefix data if this is a prefixedConn
+		var prefix []byte
+		if pc, ok := conn.(*prefixedConn); ok {
+			prefix = pc.prefix
+		}
+
+		// We need to read the TLS ClientHello for SNI
+		sni, fullClientHello, sniErr := ExtractSNI(underlyingConn, prefix)
+		if sniErr != nil {
+			s.logger.Error("failed to extract SNI for tunnel", "error", sniErr)
+			return
+		}
+
+		originalDst = sni + ":443"
+		s.logger.Debug("extracted SNI for tunnel", "sni", sni, "dst", originalDst)
+
+		// Create new prefixed connection with full ClientHello for tunneling
+		tunnelConn = newPrefixedConn(underlyingConn, fullClientHello)
 	}
 
 	// Connect to destination
@@ -430,10 +474,10 @@ func (s *Server) tunnelConnection(conn net.Conn) {
 	// Bidirectional copy
 	done := make(chan struct{})
 	go func() {
-		io.Copy(destConn, conn)
+		io.Copy(destConn, tunnelConn)
 		close(done)
 	}()
-	io.Copy(conn, destConn)
+	io.Copy(tunnelConn, destConn)
 	<-done
 }
 
