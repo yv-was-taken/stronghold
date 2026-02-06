@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"os"
@@ -287,37 +286,6 @@ func (w *Wallet) Sign(data []byte) ([]byte, error) {
 	return sig, nil
 }
 
-// SignTypedData signs EIP-712 typed data (used for x402 payments)
-func (w *Wallet) SignTypedData(typedData *TypedData) ([]byte, error) {
-	privateKey, err := w.getPrivateKey()
-	if err != nil {
-		return nil, err
-	}
-	defer w.zeroKey(privateKey)
-
-	domainSeparator, err := typedData.HashStruct("EIP712Domain", typedData.Domain.Map())
-	if err != nil {
-		return nil, fmt.Errorf("failed to hash domain: %w", err)
-	}
-
-	typedDataHash, err := typedData.HashStruct(typedData.PrimaryType, typedData.Message)
-	if err != nil {
-		return nil, fmt.Errorf("failed to hash message: %w", err)
-	}
-
-	// Construct the final hash: keccak256("\x19\x01" || domainSeparator || structHash)
-	rawData := []byte("\x19\x01")
-	rawData = append(rawData, domainSeparator...)
-	rawData = append(rawData, typedDataHash...)
-
-	sig, err := crypto.Sign(crypto.Keccak256(rawData), privateKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to sign typed data: %w", err)
-	}
-
-	return sig, nil
-}
-
 // SignEIP3009 signs an EIP-3009 TransferWithAuthorization using proper EIP-712 encoding
 // Reference implementation: https://github.com/brtvcl/eip-3009-transferWithAuthorization-example
 func (w *Wallet) SignEIP3009(chainID int64, tokenAddress, from, to string, value *big.Int, validAfter, validBefore int64, nonce []byte) ([]byte, error) {
@@ -562,49 +530,6 @@ func execLookPath(file string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("not found")
-}
-
-// TypedData represents EIP-712 typed data for signing
-type TypedData struct {
-	Types       map[string][]TypedDataField `json:"types"`
-	PrimaryType string                      `json:"primaryType"`
-	Domain      TypedDataDomain             `json:"domain"`
-	Message     map[string]interface{}      `json:"message"`
-}
-
-// TypedDataField represents a field in an EIP-712 type
-type TypedDataField struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
-}
-
-// TypedDataDomain represents the domain separator
-type TypedDataDomain struct {
-	Name              string `json:"name"`
-	Version           string `json:"version"`
-	ChainID           int    `json:"chainId"`
-	VerifyingContract string `json:"verifyingContract"`
-}
-
-// Map returns the domain as a map for hashing
-func (d TypedDataDomain) Map() map[string]interface{} {
-	return map[string]interface{}{
-		"name":              d.Name,
-		"version":           d.Version,
-		"chainId":           d.ChainID,
-		"verifyingContract": d.VerifyingContract,
-	}
-}
-
-// HashStruct hashes a struct according to EIP-712
-func (t *TypedData) HashStruct(primaryType string, data map[string]interface{}) ([]byte, error) {
-	// This is a simplified implementation
-	// Full EIP-712 implementation would encode according to the type schema
-	encoded, err := json.Marshal(data)
-	if err != nil {
-		return nil, err
-	}
-	return crypto.Keccak256(encoded), nil
 }
 
 // Delete removes the wallet from the keyring

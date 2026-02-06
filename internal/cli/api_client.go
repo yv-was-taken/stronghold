@@ -48,7 +48,11 @@ type LoginResponse struct {
 	AccountNumber string  `json:"account_number"`
 	ExpiresAt     string  `json:"expires_at"`
 	WalletAddress *string `json:"wallet_address,omitempty"`
-	PrivateKey    *string `json:"private_key,omitempty"`
+}
+
+// GetWalletKeyResponse represents the response from the wallet-key endpoint
+type GetWalletKeyResponse struct {
+	PrivateKey string `json:"private_key"`
 }
 
 // ErrorResponse represents an API error response
@@ -124,6 +128,15 @@ func (c *APIClient) Login(accountNumber string) (*LoginResponse, error) {
 		return nil, err
 	}
 	return &result, nil
+}
+
+// GetWalletKey retrieves the decrypted wallet private key from the server
+func (c *APIClient) GetWalletKey() (string, error) {
+	var result GetWalletKeyResponse
+	if err := c.doRequest(http.MethodGet, "/v1/auth/wallet-key", http.StatusOK, nil, &result); err != nil {
+		return "", err
+	}
+	return result.PrivateKey, nil
 }
 
 // UpdateWalletRequest represents a request to update wallet

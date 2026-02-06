@@ -1,5 +1,9 @@
 package cli
 
+import (
+	"unsafe"
+)
+
 // SecureBytes wraps sensitive byte data with explicit zeroing capability.
 // This type ensures that sensitive data like private keys can be securely
 // cleared from memory when no longer needed.
@@ -57,19 +61,24 @@ func (s *SecureBytes) IsEmpty() bool {
 	return s == nil || len(s.data) == 0
 }
 
-// ZeroString is a utility function to zero out a string's underlying bytes.
-// Note: This only works if the string was created from a mutable byte slice
-// and that byte slice is still accessible. For strings created from literals
-// or through other means, this may not effectively zero the memory.
+// ZeroString zeros the backing memory of a string in place using unsafe.StringData.
+// Go strings are normally immutable, so we use unsafe to access the underlying
+// byte array directly. This is necessary for security-sensitive data like private
+// keys where we need to ensure the plaintext is cleared from memory.
+//
+// IMPORTANT: This only works for heap-allocated strings (e.g., from API responses,
+// string([]byte{...}), fmt.Sprintf). Passing a string literal may cause a fault
+// because literals reside in read-only memory. All callers in this codebase pass
+// heap-allocated strings from API responses, so this is safe.
 // Use SecureBytes instead when possible for better guarantees.
 func ZeroString(s *string) {
-	if s == nil || *s == "" {
+	if s == nil || len(*s) == 0 {
 		return
 	}
-	// Convert string to byte slice for zeroing
-	// Note: This creates a new allocation, so the original string memory
-	// may not be zeroed. This is a best-effort approach.
-	b := []byte(*s)
+	// unsafe.StringData returns a pointer to the string's underlying bytes.
+	// unsafe.Slice converts it to a mutable byte slice so we can zero each byte.
+	p := unsafe.StringData(*s)
+	b := unsafe.Slice(p, len(*s))
 	for i := range b {
 		b[i] = 0
 	}

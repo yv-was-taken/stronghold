@@ -378,61 +378,6 @@ func ParseX402Payment(paymentHeader string) (*X402Payload, error) {
 	return &payload, nil
 }
 
-// Helper functions
-
-// buildEIP3009TypedData creates the EIP-712 typed data for EIP-3009 TransferWithAuthorization
-// This is required for x402 payments using USDC and other EIP-3009 compatible tokens
-func buildEIP3009TypedData(chainID int, tokenAddress, from, to, value string, validAfter, validBefore int64, nonce string) *TypedData {
-	// Format nonce as bytes32 (must be 0x prefixed)
-	nonceHex := nonce
-	if len(nonce) > 0 && nonce[:2] != "0x" {
-		nonceHex = "0x" + nonce
-	}
-
-	return &TypedData{
-		Types: map[string][]TypedDataField{
-			"EIP712Domain": {
-				{Name: "name", Type: "string"},
-				{Name: "version", Type: "string"},
-				{Name: "chainId", Type: "uint256"},
-				{Name: "verifyingContract", Type: "address"},
-			},
-			"TransferWithAuthorization": {
-				{Name: "from", Type: "address"},
-				{Name: "to", Type: "address"},
-				{Name: "value", Type: "uint256"},
-				{Name: "validAfter", Type: "uint256"},
-				{Name: "validBefore", Type: "uint256"},
-				{Name: "nonce", Type: "bytes32"},
-			},
-		},
-		PrimaryType: "TransferWithAuthorization",
-		Domain: TypedDataDomain{
-			Name:              "USD Coin",
-			Version:           "2",
-			ChainID:           chainID,
-			VerifyingContract: tokenAddress,
-		},
-		Message: map[string]interface{}{
-			"from":        from,
-			"to":          to,
-			"value":       value,
-			"validAfter":  validAfter,
-			"validBefore": validBefore,
-			"nonce":       nonceHex,
-		},
-	}
-}
-
-// buildPaymentTypedData creates the EIP-712 typed data structure for payment signing/verification
-// DEPRECATED: Use buildEIP3009TypedData for x402 payments
-func buildPaymentTypedData(chainID int, receiver, tokenAddress, amount string, timestamp int64, nonce string) *TypedData {
-	// For backward compatibility, delegate to EIP-3009 format
-	validAfter := int64(0)
-	validBefore := timestamp + 300 // 5 minute validity window
-	return buildEIP3009TypedData(chainID, tokenAddress, "", receiver, amount, validAfter, validBefore, nonce)
-}
-
 func generateNonce() (string, error) {
 	// Generate a cryptographically secure random nonce
 	// Use 32 bytes (256 bits) to reduce birthday collision risk at scale

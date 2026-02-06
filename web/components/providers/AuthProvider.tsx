@@ -1,8 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-
-const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080').trim();
+import { API_URL } from '@/lib/api';
 
 interface Account {
   id: string;

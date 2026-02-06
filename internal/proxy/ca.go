@@ -8,6 +8,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -151,6 +152,8 @@ func LoadOrCreateCA(caDir string) (*CA, error) {
 	if err := os.WriteFile(keyPath, ca.keyPEM, 0600); err != nil {
 		return nil, fmt.Errorf("failed to write CA key: %w", err)
 	}
+
+	slog.Info("Generated new CA certificate", "cert", certPath, "key", keyPath)
 
 	return ca, nil
 }

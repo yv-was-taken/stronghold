@@ -13,8 +13,7 @@ import { useAuth } from '@/components/providers/AuthProvider';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { CopyButton } from '@/components/ui/CopyButton';
 import { formatUSDC } from '@/lib/utils';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+import { API_URL, fetchWithAuth } from '@/lib/api';
 
 export default function DepositPage() {
   const { account } = useAuth();
@@ -41,12 +40,11 @@ export default function DepositPage() {
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(`${API_URL}/v1/account/deposit`, {
+      const response = await fetchWithAuth(`${API_URL}/v1/account/deposit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
         body: JSON.stringify({
           amount_usdc: amountNum,
           provider: provider,

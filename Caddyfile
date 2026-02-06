@@ -5,16 +5,25 @@ api.stronghold.security {
     # Enable compression
     encode gzip zstd
 
-    # Security headers
-    header {
-        # CORS headers for x402
-        Access-Control-Allow-Origin "*"
+    # Allowed CORS origins
+    @cors_origins {
+        header Origin https://stronghold-bhj.pages.dev
+        header Origin https://getstronghold.xyz
+        header Origin http://localhost:3000
+    }
+
+    # Set CORS headers only for allowed origins (echo back the matched Origin)
+    header @cors_origins {
+        Access-Control-Allow-Origin {http.request.header.Origin}
         Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
         Access-Control-Allow-Headers "Origin, Content-Type, Accept, X-PAYMENT, X-PAYMENT-RESPONSE, Authorization"
         Access-Control-Expose-Headers "X-PAYMENT-RESPONSE"
         Access-Control-Max-Age 300
+        Vary Origin
+    }
 
-        # Security headers
+    # Security headers (applied to all responses)
+    header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
         X-Content-Type-Options "nosniff"
         X-Frame-Options "DENY"

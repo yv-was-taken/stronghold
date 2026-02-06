@@ -27,7 +27,7 @@ type Account struct {
 	ID             uuid.UUID       `json:"id"`
 	AccountNumber  string          `json:"account_number"`
 	WalletAddress  *string         `json:"wallet_address,omitempty"`
-	BalanceUSDC    float64         `json:"balance_usdc"`
+	BalanceUSDC    float64         `json:"balance_usdc"` // TODO: migrate to integer cents or string to avoid float64 precision issues with money
 	Status         AccountStatus   `json:"status"`
 	CreatedAt      time.Time       `json:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at"`

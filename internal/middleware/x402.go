@@ -522,36 +522,6 @@ func (m *X402Middleware) Middleware() fiber.Handler {
 	}
 }
 
-// SettleAfterHandler settles the payment after the handler completes successfully
-func (m *X402Middleware) SettleAfterHandler() fiber.Handler {
-	return func(c fiber.Ctx) error {
-		// Continue to next handler first
-		err := c.Next()
-		if err != nil {
-			return err
-		}
-
-		// Check if there's a payment to settle
-		paymentHeader, ok := c.Locals("x402_payment").(string)
-		if !ok || paymentHeader == "" {
-			return nil
-		}
-
-		// Only settle if response is successful
-		if c.Response().StatusCode() >= 200 && c.Response().StatusCode() < 300 {
-			paymentID, err := m.settlePayment(paymentHeader)
-			if err != nil {
-				// Log but don't fail the request - payment was already verified
-				slog.Error("failed to settle payment", "error", err)
-			} else {
-				m.PaymentResponse(c, paymentID)
-			}
-		}
-
-		return nil
-	}
-}
-
 // getPriceForRoute returns the price for a given route
 func (m *X402Middleware) getPriceForRoute(path, method string) float64 {
 	routes := m.GetRoutes()
@@ -563,28 +533,3 @@ func (m *X402Middleware) getPriceForRoute(path, method string) float64 {
 	return 0
 }
 
-// X402Client is a client for interacting with x402 payments
-type X402Client struct {
-	FacilitatorURL string
-	Network        string
-}
-
-// NewX402Client creates a new x402 client
-func NewX402Client(facilitatorURL, network string) *X402Client {
-	return &X402Client{
-		FacilitatorURL: facilitatorURL,
-		Network:        network,
-	}
-}
-
-// VerifyPayment verifies a payment with the facilitator
-func (c *X402Client) VerifyPayment(payment string, amount *big.Int) (bool, error) {
-	// This is now handled by the middleware
-	return true, nil
-}
-
-// SettlePayment settles a payment with the facilitator
-func (c *X402Client) SettlePayment(payment string) (string, error) {
-	// This is now handled by the middleware
-	return "payment-id", nil
-}

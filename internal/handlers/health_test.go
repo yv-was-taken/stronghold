@@ -210,6 +210,9 @@ func TestHealth_Timeout(t *testing.T) {
 		t.Skip("Skipping timeout test in short mode")
 	}
 
+	// Clear any cached facilitator result from previous tests
+	resetFacilitatorCache()
+
 	// Create a slow facilitator server
 	slowServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(5 * time.Second) // Sleep longer than timeout

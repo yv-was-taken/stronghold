@@ -41,7 +41,7 @@ export default function Hero() {
           transition={{ duration: 0.6, delay: 0.3 }}
           className="flex flex-col sm:flex-row items-center justify-center gap-4"
         >
-          <Button variant="primary" size="lg" icon={<ArrowRight size={18} />}>
+          <Button variant="primary" size="lg" href="/dashboard/create" icon={<ArrowRight size={18} />}>
             Get Started
           </Button>
           <Button

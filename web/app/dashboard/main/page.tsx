@@ -16,11 +16,7 @@ import { useAuth } from '@/components/providers/AuthProvider';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { CopyButton } from '@/components/ui/CopyButton';
 import { formatUSDC, truncateAddress } from '@/lib/utils';
-
-const API_URL =
-  process.env.NODE_ENV === 'development'
-    ? 'http://localhost:8080'
-    : process.env.NEXT_PUBLIC_API_URL;
+import { API_URL } from '@/lib/api';
 
 export default function DashboardPage() {
   const { account, isAuthenticated, isLoading, logout } = useAuth();

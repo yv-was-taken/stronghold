@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+import { API_URL, fetchWithAuth } from '@/lib/api';
 
 export interface Deposit {
   id: string;
@@ -34,9 +33,8 @@ export function useDeposits() {
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
-      const response = await fetch(
-        `${API_URL}/v1/account/deposits?limit=${limit}&offset=${offset}`,
-        { credentials: 'include' }
+      const response = await fetchWithAuth(
+        `${API_URL}/v1/account/deposits?limit=${limit}&offset=${offset}`
       );
 
       if (!response.ok) {

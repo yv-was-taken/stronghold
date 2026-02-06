@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion'
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import Logo from '../Logo'
 import Button from '../ui/Button'
 import { Menu, X, Github } from 'lucide-react'
@@ -79,11 +80,11 @@ export default function Navigation() {
             >
               <Github size={20} />
             </motion.a>
-            <a href="/dashboard/create">
+            <Link href="/dashboard/create">
               <Button variant="primary" size="sm">
                 Get Started
               </Button>
-            </a>
+            </Link>
           </div>
 
           {/* Mobile Menu Button */}
@@ -118,9 +119,11 @@ export default function Navigation() {
                 {link.label}
               </a>
             ))}
-            <Button variant="primary" size="sm" className="w-full">
-              Get Started
-            </Button>
+            <Link href="/dashboard/create">
+              <Button variant="primary" size="sm" className="w-full">
+                Get Started
+              </Button>
+            </Link>
           </div>
         </motion.div>
       </div>

@@ -68,19 +68,26 @@ func TestPaymentTransactionStatusFlow(t *testing.T) {
 		t.Fatalf("Failed to record execution: %v", err)
 	}
 
-	// Verify transition to settling and service_result stored
+	// Verify service_result stored but status remains executing
+	// (RecordExecution no longer transitions status — the middleware owns that)
 	fetched, err = db.GetPaymentByID(ctx, tx.ID)
 	if err != nil {
 		t.Fatalf("Failed to get payment by ID: %v", err)
 	}
-	if fetched.Status != PaymentStatusSettling {
-		t.Errorf("Expected status %s, got %s", PaymentStatusSettling, fetched.Status)
+	if fetched.Status != PaymentStatusExecuting {
+		t.Errorf("Expected status %s, got %s", PaymentStatusExecuting, fetched.Status)
 	}
 	if fetched.ServiceResult == nil {
 		t.Error("Expected service result to be stored")
 	}
 	if fetched.ExecutedAt == nil {
 		t.Error("Expected executed_at to be set")
+	}
+
+	// Transition to settling (normally done by middleware after handler returns)
+	err = db.TransitionStatus(ctx, tx.ID, PaymentStatusExecuting, PaymentStatusSettling)
+	if err != nil {
+		t.Fatalf("Failed to transition to settling: %v", err)
 	}
 
 	// Test: Complete settlement

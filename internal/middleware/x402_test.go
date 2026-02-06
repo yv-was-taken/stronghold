@@ -663,21 +663,6 @@ func TestNewX402MiddlewareWithDB(t *testing.T) {
 	assert.NotNil(t, m.db)
 }
 
-func TestX402Client_Placeholder(t *testing.T) {
-	// Test the placeholder client methods
-	client := NewX402Client("https://x402.org/facilitator", "base-sepolia")
-	assert.NotNil(t, client)
-
-	// These are placeholder implementations
-	valid, err := client.VerifyPayment("payment", nil)
-	require.NoError(t, err)
-	assert.True(t, valid)
-
-	paymentID, err := client.SettlePayment("payment")
-	require.NoError(t, err)
-	assert.Equal(t, "payment-id", paymentID)
-}
-
 // Integration test with real database
 func TestAtomicPayment_FullFlow_Integration(t *testing.T) {
 	testDB := testutil.NewTestDB(t)

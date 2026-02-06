@@ -2,7 +2,9 @@ package cli
 
 import (
 	"bufio"
+	"crypto/rand"
 	"fmt"
+	"math/big"
 	"os"
 	"os/exec"
 	"os/user"
@@ -306,25 +308,29 @@ func (m *InstallModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.loggedIn = true
 			m.progress = append(m.progress, successStyle.Render(fmt.Sprintf("✓ Logged in as %s", loginResp.AccountNumber)))
 
-			// Import wallet key if returned
-			if loginResp.PrivateKey != nil && loginResp.WalletAddress != nil {
-				userID := generateUserID()
-				m.config.Auth.UserID = userID
-				address, err := ImportWallet(userID, DefaultBlockchain, *loginResp.PrivateKey)
-				// Zero the private key after use
-				ZeroString(loginResp.PrivateKey)
+			// Fetch and import wallet key from separate endpoint
+			if loginResp.WalletAddress != nil {
+				privateKey, err := apiClient.GetWalletKey()
 				if err != nil {
-					m.progress = append(m.progress, warningStyle.Render(fmt.Sprintf("⚠ Wallet import failed: %v", err)))
-				} else {
-					m.config.Wallet.Address = address
+					m.progress = append(m.progress, warningStyle.Render(fmt.Sprintf("⚠ Wallet key fetch failed: %v", err)))
+					m.config.Wallet.Address = *loginResp.WalletAddress
 					m.config.Wallet.Network = DefaultBlockchain
-					m.walletAddress = address
-					m.progress = append(m.progress, successStyle.Render("✓ Wallet synced"))
+					m.walletAddress = *loginResp.WalletAddress
+				} else {
+					userID := generateUserID()
+					m.config.Auth.UserID = userID
+					address, err := ImportWallet(userID, DefaultBlockchain, privateKey)
+					// Zero the private key after use
+					ZeroString(&privateKey)
+					if err != nil {
+						m.progress = append(m.progress, warningStyle.Render(fmt.Sprintf("⚠ Wallet import failed: %v", err)))
+					} else {
+						m.config.Wallet.Address = address
+						m.config.Wallet.Network = DefaultBlockchain
+						m.walletAddress = address
+						m.progress = append(m.progress, successStyle.Render("✓ Wallet synced"))
+					}
 				}
-			} else if loginResp.WalletAddress != nil {
-				m.config.Wallet.Address = *loginResp.WalletAddress
-				m.config.Wallet.Network = DefaultBlockchain
-				m.walletAddress = *loginResp.WalletAddress
 			}
 			m.awaitingLoginInput = false
 			m.state = StatePayment
@@ -367,31 +373,34 @@ func (m *InstallModel) handleEnter() (tea.Model, tea.Cmd) {
 				m.loggedIn = true
 				m.progress = append(m.progress, successStyle.Render("✓ Account created via API"))
 
-				// Now login to get the wallet key (if KMS is configured)
+				// Now login and fetch wallet key via separate endpoint
 				loginResp, err := apiClient.Login(resp.AccountNumber)
 				if err != nil {
 					m.progress = append(m.progress, warningStyle.Render(fmt.Sprintf("⚠ Login failed: %v", err)))
-				} else if loginResp.PrivateKey != nil && loginResp.WalletAddress != nil {
-					// Import the wallet key from server
-					userID := generateUserID()
-					m.config.Auth.UserID = userID
-
-					address, err := ImportWallet(userID, DefaultBlockchain, *loginResp.PrivateKey)
-					// Zero the private key after use
-					ZeroString(loginResp.PrivateKey)
-					if err != nil {
-						m.progress = append(m.progress, errorStyle.Render(fmt.Sprintf("✗ Wallet import failed: %v", err)))
-					} else {
-						m.config.Wallet.Address = address
-						m.config.Wallet.Network = DefaultBlockchain
-						m.walletAddress = address
-						m.progress = append(m.progress, successStyle.Render("✓ Wallet synced from server"))
-					}
 				} else if loginResp.WalletAddress != nil {
-					// Server has wallet address but no KMS key (legacy account)
-					m.config.Wallet.Address = *loginResp.WalletAddress
-					m.config.Wallet.Network = DefaultBlockchain
-					m.walletAddress = *loginResp.WalletAddress
+					// Fetch wallet key from dedicated endpoint
+					privateKey, err := apiClient.GetWalletKey()
+					if err != nil {
+						// Fallback: use wallet address without key
+						m.config.Wallet.Address = *loginResp.WalletAddress
+						m.config.Wallet.Network = DefaultBlockchain
+						m.walletAddress = *loginResp.WalletAddress
+						m.progress = append(m.progress, warningStyle.Render(fmt.Sprintf("⚠ Wallet key fetch failed: %v", err)))
+					} else {
+						userID := generateUserID()
+						m.config.Auth.UserID = userID
+						address, err := ImportWallet(userID, DefaultBlockchain, privateKey)
+						// Zero the private key after use
+						ZeroString(&privateKey)
+						if err != nil {
+							m.progress = append(m.progress, errorStyle.Render(fmt.Sprintf("✗ Wallet import failed: %v", err)))
+						} else {
+							m.config.Wallet.Address = address
+							m.config.Wallet.Network = DefaultBlockchain
+							m.walletAddress = address
+							m.progress = append(m.progress, successStyle.Render("✓ Wallet synced from server"))
+						}
+					}
 				}
 			}
 
@@ -1028,20 +1037,25 @@ func RunInstallNonInteractive(privateKey, accountNumber string) error {
 		config.Auth.AccountNumber = loginResp.AccountNumber
 		config.Auth.LoggedIn = true
 
-		// Import wallet key if returned from server
-		if loginResp.PrivateKey != nil && loginResp.WalletAddress != nil {
-			address, err := ImportWallet(userID, DefaultBlockchain, *loginResp.PrivateKey)
-			// Zero the private key after use
-			ZeroString(loginResp.PrivateKey)
+		// Fetch and import wallet key from separate endpoint
+		if loginResp.WalletAddress != nil {
+			walletKey, err := apiClient.GetWalletKey()
 			if err != nil {
-				return fmt.Errorf("failed to import wallet: %w", err)
+				// Fallback: use wallet address without key
+				config.Wallet.Address = *loginResp.WalletAddress
+				config.Wallet.Network = DefaultBlockchain
+				fmt.Printf("⚠ Wallet key fetch failed: %v\n", err)
+			} else {
+				address, err := ImportWallet(userID, DefaultBlockchain, walletKey)
+				// Zero the private key after use
+				ZeroString(&walletKey)
+				if err != nil {
+					return fmt.Errorf("failed to import wallet: %w", err)
+				}
+				config.Wallet.Address = address
+				config.Wallet.Network = DefaultBlockchain
+				fmt.Printf("✓ Wallet synced: %s\n", address)
 			}
-			config.Wallet.Address = address
-			config.Wallet.Network = DefaultBlockchain
-			fmt.Printf("✓ Wallet synced: %s\n", address)
-		} else if loginResp.WalletAddress != nil {
-			config.Wallet.Address = *loginResp.WalletAddress
-			config.Wallet.Network = DefaultBlockchain
 		}
 		fmt.Printf("✓ Logged in as %s\n", loginResp.AccountNumber)
 	} else {
@@ -1082,14 +1096,17 @@ func RunInstallNonInteractive(privateKey, accountNumber string) error {
 			// If we didn't import a key, sync wallet from server
 			if privateKey == "" {
 				loginResp, err := apiClient.Login(resp.AccountNumber)
-				if err == nil && loginResp.PrivateKey != nil {
-					address, err := ImportWallet(userID, DefaultBlockchain, *loginResp.PrivateKey)
-					// Zero the private key after use
-					ZeroString(loginResp.PrivateKey)
+				if err == nil && loginResp.WalletAddress != nil {
+					walletKey, err := apiClient.GetWalletKey()
 					if err == nil {
-						config.Wallet.Address = address
-						config.Wallet.Network = DefaultBlockchain
-						fmt.Printf("✓ Wallet synced: %s\n", address)
+						address, err := ImportWallet(userID, DefaultBlockchain, walletKey)
+						// Zero the private key after use
+						ZeroString(&walletKey)
+						if err == nil {
+							config.Wallet.Address = address
+							config.Wallet.Network = DefaultBlockchain
+							fmt.Printf("✓ Wallet synced: %s\n", address)
+						}
 					}
 				}
 			}
@@ -1165,10 +1182,15 @@ func generateUserID() string {
 // generateSimulatedAccountNumber generates a simulated account number for demo
 // In production, this would come from the API
 func generateSimulatedAccountNumber() string {
-	parts := []string{}
+	max := big.NewInt(10000)
+	parts := make([]string, 4)
 	for i := 0; i < 4; i++ {
-		parts = append(parts, fmt.Sprintf("%04d", time.Now().UnixNano()%10000))
-		time.Sleep(1 * time.Millisecond)
+		n, err := rand.Int(rand.Reader, max)
+		if err != nil {
+			// Fallback should never happen, but don't panic
+			n = big.NewInt(0)
+		}
+		parts[i] = fmt.Sprintf("%04d", n.Int64())
 	}
 	return fmt.Sprintf("%s-%s-%s-%s", parts[0], parts[1], parts[2], parts[3])
 }

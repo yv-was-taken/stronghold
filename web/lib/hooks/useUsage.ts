@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+import { API_URL, fetchWithAuth } from '@/lib/api';
 
 export interface UsageLog {
   id: string;
@@ -47,9 +46,8 @@ export function useUsageLogs() {
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
-      const response = await fetch(
-        `${API_URL}/v1/account/usage?limit=${limit}&offset=${offset}`,
-        { credentials: 'include' }
+      const response = await fetchWithAuth(
+        `${API_URL}/v1/account/usage?limit=${limit}&offset=${offset}`
       );
 
       if (!response.ok) {
@@ -100,9 +98,8 @@ export function useUsageStats() {
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
-      const response = await fetch(
-        `${API_URL}/v1/account/usage/stats?days=${days}`,
-        { credentials: 'include' }
+      const response = await fetchWithAuth(
+        `${API_URL}/v1/account/usage/stats?days=${days}`
       );
 
       if (!response.ok) {

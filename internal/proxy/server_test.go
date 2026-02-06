@@ -842,11 +842,10 @@ func TestHandleConnect_HijackNotSupported(t *testing.T) {
 
 	s.handleConnect(rec, req)
 
-	// TODO: handleConnect writes 200 before checking Hijacker support.
-	// In production this means the client sees 200 followed by an error body.
-	// Consider checking Hijacker support before writing the status line.
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status 200 (written before hijack check), got %d", rec.Code)
+	// handleConnect now correctly checks Hijacker support BEFORE writing 200,
+	// so non-hijackable connections get a 500 error instead of a misleading 200.
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500 (hijack not supported), got %d", rec.Code)
 	}
 
 	body := rec.Body.String()

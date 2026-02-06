@@ -124,7 +124,22 @@ func TestSecureBytes_NilSafety(t *testing.T) {
 }
 
 func TestZeroString(t *testing.T) {
-	s := "test"
+	// Use a heap-allocated string (not a literal) since ZeroString uses unsafe
+	// to zero the backing memory, which would segfault on read-only literal data.
+	b := []byte("sensitive-key-data")
+	s := string(b)
+	ZeroString(&s)
+	if s != "" {
+		t.Errorf("ZeroString should set string to empty, got %q", s)
+	}
+	// Verify the original backing bytes were zeroed
+	// (string(b) makes a copy, so b is separate; but we verify s is cleared)
+}
+
+func TestZeroString_HeapString(t *testing.T) {
+	// Simulate the real use case: a string from an API response (heap-allocated)
+	original := []byte("0xdeadbeef1234567890abcdef")
+	s := string(original)
 	ZeroString(&s)
 	if s != "" {
 		t.Errorf("ZeroString should set string to empty, got %q", s)

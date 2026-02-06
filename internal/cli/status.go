@@ -1,10 +1,14 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
+
+	"stronghold/internal/wallet"
 )
 
 // Status displays the current status of Stronghold
@@ -65,9 +69,27 @@ func Status() error {
 	fmt.Println("Session:")
 	if config.Auth.LoggedIn {
 		fmt.Printf("  User:       %s\n", config.Auth.Email)
-		// In a real implementation, fetch balance from API
-		fmt.Printf("  Balance:    $12.45\n")
-		fmt.Printf("  Spent:      $3.55 this month\n")
+		// Fetch real balance from wallet
+		if config.Wallet.Address != "" && config.Auth.UserID != "" {
+			w, err := wallet.New(wallet.Config{
+				UserID:  config.Auth.UserID,
+				Network: config.Wallet.Network,
+			})
+			if err != nil {
+				fmt.Printf("  Balance:    Error — %v\n", err)
+			} else {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				balance, err := w.GetBalanceHuman(ctx)
+				if err != nil {
+					fmt.Printf("  Balance:    Error — %v\n", err)
+				} else {
+					fmt.Printf("  Balance:    $%.2f\n", balance)
+				}
+			}
+		} else {
+			fmt.Printf("  Balance:    Error — wallet not configured\n")
+		}
 	} else {
 		fmt.Printf("  User:       %s\n", "Not logged in")
 	}
@@ -164,12 +186,14 @@ func Logs(follow bool, lines int) error {
 			return fmt.Errorf("failed to read log file: %w", err)
 		}
 
-		// Simple implementation - just print the whole file or last portion
 		content := string(data)
-		if len(content) > 10000 {
-			content = content[len(content)-10000:]
+		allLines := strings.Split(strings.TrimRight(content, "\n"), "\n")
+		if lines > 0 && len(allLines) > lines {
+			allLines = allLines[len(allLines)-lines:]
 		}
-		fmt.Print(content)
+		for _, line := range allLines {
+			fmt.Println(line)
+		}
 	}
 
 	return nil

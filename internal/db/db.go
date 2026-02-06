@@ -123,11 +123,32 @@ func (db *DB) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx
 	return db.pool.QueryRow(ctx, sql, args...)
 }
 
-// Query executes a query that returns multiple rows
+// cancelRows wraps pgx.Rows to call a context cancel function when Close is called.
+// This is necessary because Query creates a timeout context that must remain alive
+// while the caller iterates over rows, but must be canceled when done.
+type cancelRows struct {
+	pgx.Rows
+	cancel context.CancelFunc
+}
+
+// Close closes the rows and cancels the associated context.
+func (r *cancelRows) Close() {
+	r.Rows.Close()
+	r.cancel()
+}
+
+// Query executes a query that returns multiple rows.
+// The returned Rows must be closed by the caller, which will also cancel the
+// timeout context. Do not defer cancel() here since rows need the context alive
+// during iteration.
 func (db *DB) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
 	ctx, cancel := context.WithTimeout(ctx, DefaultQueryTimeout)
-	defer cancel()
-	return db.pool.Query(ctx, sql, args...)
+	rows, err := db.pool.Query(ctx, sql, args...)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	return &cancelRows{Rows: rows, cancel: cancel}, nil
 }
 
 // HashToken creates a SHA-256 hash of a token for storage

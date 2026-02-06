@@ -155,6 +155,7 @@ func (h *AuthHandler) RegisterRoutesWithMiddleware(app *fiber.App, middlewares .
 	group.Post("/refresh", h.RefreshToken)
 	group.Post("/logout", h.AuthMiddleware(), h.Logout)
 	group.Get("/me", h.AuthMiddleware(), h.GetMe)
+	group.Get("/wallet-key", h.AuthMiddleware(), h.GetWalletKey)
 	group.Put("/wallet", h.AuthMiddleware(), h.UpdateWallet)
 }
 
@@ -366,7 +367,6 @@ type LoginResponse struct {
 	AccountNumber string    `json:"account_number"`
 	ExpiresAt     time.Time `json:"expires_at"`
 	WalletAddress *string   `json:"wallet_address,omitempty"`
-	PrivateKey    *string   `json:"private_key,omitempty"` // Only returned over TLS when KMS-encrypted key exists
 }
 
 // Login authenticates an account by account number
@@ -470,30 +470,6 @@ func (h *AuthHandler) Login(c fiber.Ctx) error {
 		AccountNumber: account.AccountNumber,
 		ExpiresAt:     expiresAt,
 		WalletAddress: account.WalletAddress,
-	}
-
-	// If KMS is configured and account has an encrypted key, decrypt and include it
-	if h.kmsClient != nil {
-		hasKey, err := h.db.HasEncryptedKey(ctx, account.ID)
-		if err != nil {
-			slog.Error("failed to check encrypted key", "account_id", account.ID, "error", err)
-		} else if hasKey {
-			encryptedKey, err := h.db.GetEncryptedKey(ctx, account.ID)
-			if err != nil {
-				slog.Error("failed to get encrypted key", "account_id", account.ID, "error", err)
-			} else {
-				privateKeyHex, err := h.kmsClient.Decrypt(ctx, encryptedKey)
-				if err != nil {
-					slog.Error("failed to decrypt wallet key", "account_id", account.ID, "error", err)
-				} else {
-					response.PrivateKey = &privateKeyHex
-					slog.Info("wallet key decrypted for login",
-						"account_id", account.ID,
-						"ip", c.IP(),
-					)
-				}
-			}
-		}
 	}
 
 	return c.JSON(response)
@@ -664,6 +640,86 @@ func (h *AuthHandler) GetMe(c fiber.Ctx) error {
 		"status":         account.Status,
 		"created_at":     account.CreatedAt,
 		"last_login_at":  account.LastLoginAt,
+	})
+}
+
+// GetWalletKeyResponse represents the response from the wallet key endpoint
+type GetWalletKeyResponse struct {
+	PrivateKey string `json:"private_key"`
+}
+
+// GetWalletKey returns the decrypted wallet private key for the authenticated account.
+// This is a sensitive endpoint that should be called over TLS only.
+// @Summary Get wallet private key
+// @Description Returns the KMS-decrypted wallet private key for the authenticated account
+// @Tags auth
+// @Produce json
+// @Success 200 {object} GetWalletKeyResponse
+// @Failure 401 {object} map[string]string "Not authenticated"
+// @Failure 404 {object} map[string]string "No encrypted key found"
+// @Failure 500 {object} map[string]string "Server error"
+// @Security CookieAuth
+// @Router /v1/auth/wallet-key [get]
+func (h *AuthHandler) GetWalletKey(c fiber.Ctx) error {
+	accountIDStr := c.Locals("account_id")
+	if accountIDStr == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Not authenticated",
+		})
+	}
+
+	accountID, err := uuid.Parse(accountIDStr.(string))
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Invalid account ID",
+		})
+	}
+
+	if h.kmsClient == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "KMS not configured",
+		})
+	}
+
+	ctx := c.Context()
+
+	hasKey, err := h.db.HasEncryptedKey(ctx, accountID)
+	if err != nil {
+		slog.Error("failed to check encrypted key", "account_id", accountID, "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to check wallet key",
+		})
+	}
+
+	if !hasKey {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "No encrypted key found for this account",
+		})
+	}
+
+	encryptedKey, err := h.db.GetEncryptedKey(ctx, accountID)
+	if err != nil {
+		slog.Error("failed to get encrypted key", "account_id", accountID, "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to retrieve wallet key",
+		})
+	}
+
+	privateKeyHex, err := h.kmsClient.Decrypt(ctx, encryptedKey)
+	if err != nil {
+		slog.Error("failed to decrypt wallet key", "account_id", accountID, "error", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to decrypt wallet key",
+		})
+	}
+
+	slog.Info("wallet key decrypted",
+		"account_id", accountID,
+		"ip", c.IP(),
+	)
+
+	return c.JSON(GetWalletKeyResponse{
+		PrivateKey: privateKeyHex,
 	})
 }
 

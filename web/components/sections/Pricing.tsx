@@ -57,7 +57,7 @@ export default function Pricing() {
                     per 1,000 scans
                   </span>
                 </div>
-                <Button variant="primary" size="lg">
+                <Button variant="primary" size="lg" href="/dashboard/create">
                   Start Scanning
                 </Button>
               </div>

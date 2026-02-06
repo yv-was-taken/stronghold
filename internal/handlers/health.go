@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"sync"
 	"time"
 
 	"stronghold/internal/config"
@@ -10,6 +11,24 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 )
+
+// facilitatorCache caches the result of the x402 facilitator health check
+// to avoid making an external HTTP call on every health/readiness request.
+var facilitatorCache struct {
+	mu     sync.Mutex
+	status string
+	expiry time.Time
+}
+
+const facilitatorCacheTTL = 30 * time.Second
+
+// resetFacilitatorCache clears the cached facilitator status (used in tests)
+func resetFacilitatorCache() {
+	facilitatorCache.mu.Lock()
+	facilitatorCache.status = ""
+	facilitatorCache.expiry = time.Time{}
+	facilitatorCache.mu.Unlock()
+}
 
 // HealthHandler handles health check endpoints
 type HealthHandler struct {
@@ -137,25 +156,43 @@ func (h *HealthHandler) checkDatabase() string {
 	return "up"
 }
 
-// checkX402Facilitator verifies x402 facilitator is reachable
+// checkX402Facilitator verifies x402 facilitator is reachable.
+// Results are cached for 30 seconds to avoid per-request external HTTP calls.
 func (h *HealthHandler) checkX402Facilitator() string {
 	if h.config == nil || h.config.X402.FacilitatorURL == "" {
 		return "not_configured"
 	}
 
+	facilitatorCache.mu.Lock()
+	if time.Now().Before(facilitatorCache.expiry) {
+		status := facilitatorCache.status
+		facilitatorCache.mu.Unlock()
+		return status
+	}
+	facilitatorCache.mu.Unlock()
+
 	client := &http.Client{
 		Timeout: 3 * time.Second,
 	}
 
+	var status string
 	resp, err := client.Head(h.config.X402.FacilitatorURL)
 	if err != nil {
-		return "unreachable"
+		status = "unreachable"
+	} else {
+		resp.Body.Close()
+		// Accept 2xx, 3xx, or 405 (Method Not Allowed - means server is up but doesn't support HEAD)
+		if resp.StatusCode < 500 {
+			status = "up"
+		} else {
+			status = "error"
+		}
 	}
-	defer resp.Body.Close()
 
-	// Accept 2xx, 3xx, or 405 (Method Not Allowed - means server is up but doesn't support HEAD)
-	if resp.StatusCode < 500 {
-		return "up"
-	}
-	return "error"
+	facilitatorCache.mu.Lock()
+	facilitatorCache.status = status
+	facilitatorCache.expiry = time.Now().Add(facilitatorCacheTTL)
+	facilitatorCache.mu.Unlock()
+
+	return status
 }

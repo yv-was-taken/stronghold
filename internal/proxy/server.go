@@ -782,13 +782,13 @@ func (s *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
 	}
 	defer destConn.Close()
 
-	w.WriteHeader(http.StatusOK)
-
 	hijacker, ok := w.(http.Hijacker)
 	if !ok {
 		http.Error(w, "Hijacking not supported", http.StatusInternalServerError)
 		return
 	}
+
+	w.WriteHeader(http.StatusOK)
 
 	clientConn, _, err := hijacker.Hijack()
 	if err != nil {

@@ -224,21 +224,19 @@ func (w *Worker) settlePayment(paymentHeader string) (string, error) {
 		return "", fmt.Errorf("failed to parse payment: %w", err)
 	}
 
-	settleReq := struct {
-		Payment  string `json:"payment"`
-		Network  string `json:"network"`
-		Amount   string `json:"amount"`
-		Receiver string `json:"receiver"`
-		Token    string `json:"token"`
-	}{
-		Payment:  paymentHeader,
-		Network:  payload.Network,
-		Amount:   payload.Amount,
-		Receiver: payload.Receiver,
-		Token:    payload.TokenAddress,
+	// Build the original payment requirements for facilitator
+	originalReq := &wallet.PaymentRequirements{
+		Scheme:    "x402",
+		Network:   w.x402Config.Network,
+		Recipient: w.x402Config.WalletAddress,
+		Amount:    payload.Amount,
+		Currency:  "USDC",
 	}
 
-	settleBody, err := json.Marshal(settleReq)
+	// Use x402 v2 format with paymentPayload and paymentRequirements
+	facilitatorReq := wallet.BuildFacilitatorRequest(payload, originalReq)
+
+	settleBody, err := json.Marshal(facilitatorReq)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal settle request: %w", err)
 	}
@@ -248,11 +246,19 @@ func (w *Worker) settlePayment(paymentHeader string) (string, error) {
 		facilitatorURL = "https://x402.org/facilitator"
 	}
 
-	resp, err := w.httpClient.Post(
-		facilitatorURL+"/settle",
-		"application/json",
-		bytes.NewReader(settleBody),
-	)
+	req, err := http.NewRequest("POST", facilitatorURL+"/settle", bytes.NewReader(settleBody))
+	if err != nil {
+		return "", fmt.Errorf("failed to create settle request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// Add CDP API key authentication if configured
+	if w.x402Config.CDPAPIKeyID != "" && w.x402Config.CDPAPIKeySecret != "" {
+		req.Header.Set("X-Api-Key-Id", w.x402Config.CDPAPIKeyID)
+		req.Header.Set("X-Api-Key-Secret", w.x402Config.CDPAPIKeySecret)
+	}
+
+	resp, err := w.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to call facilitator: %w", err)
 	}
@@ -262,13 +268,19 @@ func (w *Worker) settlePayment(paymentHeader string) (string, error) {
 		return "", fmt.Errorf("facilitator settlement failed: %s", resp.Status)
 	}
 
+	// x402 v2 settle response format
 	var settleResult struct {
-		PaymentID string `json:"payment_id"`
-		TxHash    string `json:"tx_hash,omitempty"`
+		Success   bool   `json:"success"`
+		TxHash    string `json:"txHash,omitempty"`
+		PaymentID string `json:"paymentId,omitempty"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&settleResult); err != nil {
 		return "", fmt.Errorf("failed to decode settle response: %w", err)
 	}
 
+	// Return txHash or paymentId as the payment identifier
+	if settleResult.TxHash != "" {
+		return settleResult.TxHash, nil
+	}
 	return settleResult.PaymentID, nil
 }

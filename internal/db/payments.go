@@ -30,7 +30,7 @@ type PaymentTransaction struct {
 	PayerAddress           string                 `json:"payer_address"`
 	ReceiverAddress        string                 `json:"receiver_address"`
 	Endpoint               string                 `json:"endpoint"`
-	AmountUSDC             float64                `json:"amount_usdc"`
+	AmountUSDC             float64                `json:"amount_usdc"` // TODO: migrate to integer cents or string to avoid float64 precision issues with money
 	Network                string                 `json:"network"`
 	Status                 PaymentStatus          `json:"status"`
 	FacilitatorPaymentID   *string                `json:"facilitator_payment_id,omitempty"`
@@ -231,7 +231,9 @@ func (db *DB) TransitionStatus(ctx context.Context, id uuid.UUID, from, to Payme
 	return nil
 }
 
-// RecordExecution marks a payment as executing and stores the service result
+// RecordExecution stores the service result on a payment transaction.
+// It does NOT transition status — the middleware owns state transitions
+// (executing -> settling happens in AtomicPayment after the handler returns).
 func (db *DB) RecordExecution(ctx context.Context, id uuid.UUID, result map[string]interface{}) error {
 	resultJSON, err := json.Marshal(result)
 	if err != nil {
@@ -240,11 +242,11 @@ func (db *DB) RecordExecution(ctx context.Context, id uuid.UUID, result map[stri
 
 	query := `
 		UPDATE payment_transactions
-		SET status = $2, service_result = $3, executed_at = NOW()
-		WHERE id = $1 AND status = $4
+		SET service_result = $2, executed_at = NOW()
+		WHERE id = $1 AND status = $3
 	`
 
-	res, err := db.pool.Exec(ctx, query, id, PaymentStatusSettling, resultJSON, PaymentStatusExecuting)
+	res, err := db.pool.Exec(ctx, query, id, resultJSON, PaymentStatusExecuting)
 	if err != nil {
 		return fmt.Errorf("failed to record execution: %w", err)
 	}
