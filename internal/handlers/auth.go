@@ -683,6 +683,25 @@ func (h *AuthHandler) GetWalletKey(c fiber.Ctx) error {
 
 	ctx := c.Context()
 
+	// Require a fresh session (logged in within the last 5 minutes) to retrieve wallet key.
+	// This protects against stolen session cookies while allowing multi-device use.
+	tokenIssuedAt := c.Locals("token_issued_at")
+	if tokenIssuedAt == nil {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Session information unavailable. Please log in again.",
+		})
+	}
+	issuedAt, ok := tokenIssuedAt.(time.Time)
+	if !ok || time.Since(issuedAt) > 5*time.Minute {
+		slog.Warn("wallet key retrieval with stale session",
+			"account_id", accountID,
+			"ip", c.IP(),
+		)
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Session too old. Please log in again to retrieve your wallet key.",
+		})
+	}
+
 	hasKey, err := h.db.HasEncryptedKey(ctx, accountID)
 	if err != nil {
 		slog.Error("failed to check encrypted key", "account_id", accountID, "error", err)
@@ -713,7 +732,7 @@ func (h *AuthHandler) GetWalletKey(c fiber.Ctx) error {
 		})
 	}
 
-	slog.Info("wallet key decrypted",
+	slog.Info("wallet key decrypted and retrieved",
 		"account_id", accountID,
 		"ip", c.IP(),
 	)
@@ -736,6 +755,8 @@ func (h *AuthHandler) generateAccessToken(accountID, accountNumber string) (stri
 			IssuedAt:  jwt.NewNumericDate(time.Now().UTC()),
 			NotBefore: jwt.NewNumericDate(time.Now().UTC()),
 			Subject:   accountID,
+			Issuer:    "stronghold-api",
+			Audience:  jwt.ClaimStrings{"stronghold-api"},
 		},
 	}
 
@@ -773,13 +794,16 @@ func (h *AuthHandler) AuthMiddleware() fiber.Handler {
 			})
 		}
 
-		// Parse and validate token
+		// Parse and validate token with issuer and audience checks
 		token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
 			return []byte(h.config.JWTSecret), nil
-		})
+		},
+			jwt.WithIssuer("stronghold-api"),
+			jwt.WithAudience("stronghold-api"),
+		)
 
 		if err != nil {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -804,6 +828,9 @@ func (h *AuthHandler) AuthMiddleware() fiber.Handler {
 		// Store account info in context
 		c.Locals("account_id", claims.AccountID)
 		c.Locals("account_number", claims.AccountNumber)
+		if claims.IssuedAt != nil {
+			c.Locals("token_issued_at", claims.IssuedAt.Time)
+		}
 
 		return c.Next()
 	}

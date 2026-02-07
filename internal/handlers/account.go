@@ -15,6 +15,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 )
 
 // AccountHandler handles account management endpoints
@@ -239,21 +240,21 @@ func (h *AccountHandler) GetUsageStats(c fiber.Ctx) error {
 
 // InitiateDepositRequest represents a request to initiate a deposit
 type InitiateDepositRequest struct {
-	AmountUSDC float64 `json:"amount_usdc"`
-	Provider   string  `json:"provider"`
+	AmountUSDC decimal.Decimal `json:"amount_usdc"`
+	Provider   string          `json:"provider"`
 }
 
 // InitiateDepositResponse represents the response after initiating a deposit
 type InitiateDepositResponse struct {
-	DepositID      string  `json:"deposit_id"`
-	AmountUSDC     float64 `json:"amount_usdc"`
-	Provider       string  `json:"provider"`
-	Status         string  `json:"status"`
-	CheckoutURL    *string `json:"checkout_url,omitempty"`
-	ClientSecret   *string `json:"client_secret,omitempty"`
-	PublishableKey *string `json:"publishable_key,omitempty"`
-	WalletAddress  *string `json:"wallet_address,omitempty"`
-	Instructions   string  `json:"instructions"`
+	DepositID      string          `json:"deposit_id"`
+	AmountUSDC     decimal.Decimal `json:"amount_usdc"`
+	Provider       string          `json:"provider"`
+	Status         string          `json:"status"`
+	CheckoutURL    *string         `json:"checkout_url,omitempty"`
+	ClientSecret   *string         `json:"client_secret,omitempty"`
+	PublishableKey *string         `json:"publishable_key,omitempty"`
+	WalletAddress  *string         `json:"wallet_address,omitempty"`
+	Instructions   string          `json:"instructions"`
 }
 
 // InitiateDeposit initiates a new deposit
@@ -291,7 +292,7 @@ func (h *AccountHandler) InitiateDeposit(c fiber.Ctx) error {
 		})
 	}
 
-	if req.AmountUSDC <= 0 {
+	if req.AmountUSDC.LessThanOrEqual(decimal.Zero) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Amount must be greater than 0",
 		})
@@ -509,16 +510,18 @@ func (h *AccountHandler) LinkWallet(c fiber.Ctx) error {
 }
 
 // calculateFee calculates the fee for a deposit based on provider
-func calculateFee(amount float64, provider db.DepositProvider) float64 {
+func calculateFee(amount decimal.Decimal, provider db.DepositProvider) decimal.Decimal {
 	switch provider {
 	case db.DepositProviderStripe:
 		// Stripe typically charges 2.9% + $0.30
-		return (amount * 0.029) + 0.30
+		rate := decimal.NewFromFloat(0.029)
+		flat := decimal.NewFromFloat(0.30)
+		return amount.Mul(rate).Add(flat)
 	case db.DepositProviderDirect:
 		// No fee for direct deposits
-		return 0
+		return decimal.Zero
 	default:
-		return 0
+		return decimal.Zero
 	}
 }
 

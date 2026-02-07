@@ -26,12 +26,12 @@ CREATE TABLE accounts (
     metadata JSONB DEFAULT '{}'::jsonb,
 
     CONSTRAINT valid_account_number CHECK (account_number ~ '^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{4}$'),
-    CONSTRAINT valid_wallet_address CHECK (wallet_address IS NULL OR wallet_address ~ '^0x[a-fA-F0-9]{40}$')
+    CONSTRAINT valid_wallet_address CHECK (wallet_address IS NULL OR wallet_address ~ '^0x[a-fA-F0-9]{40}$'),
+    CONSTRAINT accounts_balance_non_negative CHECK (balance_usdc >= 0)
 );
 
--- Create index for account number lookups
-CREATE INDEX idx_accounts_account_number ON accounts(account_number);
-CREATE INDEX idx_accounts_wallet_address ON accounts(wallet_address);
+-- Create indexes for account lookups (UNIQUE on account_number already creates an implicit index)
+CREATE UNIQUE INDEX accounts_wallet_address_unique ON accounts(wallet_address) WHERE wallet_address IS NOT NULL;
 CREATE INDEX idx_accounts_status ON accounts(status);
 
 -- Sessions table - JWT refresh token storage
@@ -86,7 +86,7 @@ CREATE TABLE deposits (
     fee_usdc DECIMAL(20,6) NOT NULL DEFAULT 0.000000,
     net_amount_usdc DECIMAL(20,6) NOT NULL, -- amount - fee
     status deposit_status NOT NULL DEFAULT 'pending',
-    provider_transaction_id VARCHAR(255),
+    provider_transaction_id VARCHAR(255) UNIQUE,
     wallet_address VARCHAR(42), -- for direct deposits
     metadata JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -174,3 +174,11 @@ COMMENT ON TABLE usage_logs IS 'Billing and analytics for API usage';
 COMMENT ON TABLE deposits IS 'Payment tracking for account funding';
 COMMENT ON COLUMN accounts.account_number IS 'Formatted as XXXX-XXXX-XXXX-XXXX';
 COMMENT ON COLUMN accounts.wallet_address IS 'Ethereum address for x402 payments';
+-- Processed webhook events for idempotency (H6)
+CREATE TABLE processed_webhook_events (
+    event_id VARCHAR(255) PRIMARY KEY,
+    event_type VARCHAR(100) NOT NULL,
+    processed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_processed_webhook_events_processed_at ON processed_webhook_events(processed_at);

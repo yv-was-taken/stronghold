@@ -60,15 +60,19 @@ func (m *MITMHandler) HandleTLS(clientConn net.Conn, originalDst string) error {
 	}
 
 	// Wrap client connection in TLS (we're the server to the client)
+	// Set deadline for TLS handshake to prevent slow clients from tying up resources
+	clientConn.SetDeadline(time.Now().Add(10 * time.Second))
 	tlsClientConn := tls.Server(clientConn, tlsConfig)
 	if err := tlsClientConn.Handshake(); err != nil {
 		m.logger.Debug("TLS handshake with client failed", "host", host, "error", err)
 		return fmt.Errorf("TLS handshake failed: %w", err)
 	}
+	// Clear deadline after successful handshake
+	tlsClientConn.SetDeadline(time.Time{})
 	defer tlsClientConn.Close()
 
-	// Connect to actual server with TLS
-	serverConn, err := tls.Dial("tcp", originalDst, &tls.Config{
+	// Connect to actual server with TLS (with connection timeout)
+	serverConn, err := tls.DialWithDialer(&net.Dialer{Timeout: 10 * time.Second}, "tcp", originalDst, &tls.Config{
 		ServerName: host,
 		MinVersion: tls.VersionTLS12,
 	})
@@ -85,6 +89,7 @@ func (m *MITMHandler) HandleTLS(clientConn net.Conn, originalDst string) error {
 // proxyHTTPS proxies HTTP requests over established TLS connections
 func (m *MITMHandler) proxyHTTPS(clientConn, serverConn net.Conn, host string) error {
 	clientReader := bufio.NewReader(clientConn)
+	serverReader := bufio.NewReader(serverConn)
 
 	for {
 		// Set read deadline to detect closed connections
@@ -109,11 +114,11 @@ func (m *MITMHandler) proxyHTTPS(clientConn, serverConn net.Conn, host string) e
 		// Scan request body if it exists (for prompt injection in POST data)
 		var requestBody []byte
 		if req.Body != nil && req.ContentLength != 0 && m.config.Scanning.Content.Enabled {
-			requestBody, _ = io.ReadAll(req.Body)
+			requestBody, _ = io.ReadAll(io.LimitReader(req.Body, 1024*1024+1))
 			req.Body.Close()
 
-			// Scan the request content
-			if len(requestBody) > 0 && len(requestBody) < 1024*1024 { // Max 1MB
+			// Scan the request content (skip if over 1MB)
+			if len(requestBody) > 0 && len(requestBody) <= 1024*1024 {
 				result := m.scanContent(requestBody, req.URL.String(), req.Header.Get("Content-Type"))
 				if result != nil && result.Decision == DecisionBlock {
 					// Block the request
@@ -132,7 +137,6 @@ func (m *MITMHandler) proxyHTTPS(clientConn, serverConn net.Conn, host string) e
 		}
 
 		// Read response from server
-		serverReader := bufio.NewReader(serverConn)
 		resp, err := http.ReadResponse(serverReader, req)
 		if err != nil {
 			return fmt.Errorf("failed to read response: %w", err)

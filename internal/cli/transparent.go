@@ -237,41 +237,55 @@ func (t *TransparentProxy) enableDarwin() error {
 	proxyPort := strconv.Itoa(t.config.Proxy.Port)
 	username := StrongholdUsername() // "_stronghold"
 
-	// Create pf configuration
-	// Use user-based filtering to skip proxy's own traffic
-	pfConf := fmt.Sprintf(`# Stronghold transparent proxy
+	// Detect the active network interface via default route
+	activeIface := "en0" // fallback
+	routeCmd := exec.Command("sh", "-c", "netstat -rn | grep '^default' | head -1 | awk '{print $NF}'")
+	if output, err := routeCmd.Output(); err == nil {
+		if iface := strings.TrimSpace(string(output)); iface != "" {
+			activeIface = iface
+		}
+	}
+
+	// Create anchor-based pf rules (only manages our own anchor, never touches main config)
+	pfConf := fmt.Sprintf(`# Stronghold transparent proxy anchor rules
 # Skip proxy's own traffic (runs as _stronghold user)
 pass out quick proto tcp user %s
 
-# Redirect HTTP to proxy
+# Redirect HTTP to proxy on active interface
+rdr pass on %s inet proto tcp from any to any port 80 -> 127.0.0.1 port %s
+
+# Redirect HTTPS to proxy on active interface
+rdr pass on %s inet proto tcp from any to any port 443 -> 127.0.0.1 port %s
+
+# Also redirect on loopback
 rdr pass on lo0 inet proto tcp from any to any port 80 -> 127.0.0.1 port %s
 rdr pass on lo0 inet proto tcp from any to any port 443 -> 127.0.0.1 port %s
 
 # Allow redirected traffic
 pass out quick on lo0 inet proto tcp from any to 127.0.0.1 port %s
-`, username, proxyPort, proxyPort, proxyPort)
+`, username, activeIface, proxyPort, activeIface, proxyPort, proxyPort, proxyPort, proxyPort)
 
-	// Write config file
+	// Write config file for the anchor
 	configPath := "/etc/pf.stronghold.conf"
 	if err := os.WriteFile(configPath, []byte(pfConf), 0644); err != nil {
 		return fmt.Errorf("failed to write pf config: %w", err)
 	}
 
-	// Load pf rules
-	cmd := exec.Command("pfctl", "-f", configPath)
+	// Load rules into the "stronghold" anchor only (does not affect main pf config)
+	cmd := exec.Command("pfctl", "-a", "stronghold", "-f", configPath)
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("pfctl failed: %s - %s", err, string(output))
+		return fmt.Errorf("pfctl anchor load failed: %s - %s", err, string(output))
 	}
 
-	// Enable pf
+	// Enable pf if not already enabled
 	exec.Command("pfctl", "-e").Run()
 
 	return nil
 }
 
 func (t *TransparentProxy) disableDarwin() error {
-	// Remove our rules by reloading default config
-	exec.Command("pfctl", "-f", "/etc/pf.conf").Run()
+	// Flush only our anchor rules (does not affect main pf config or other anchors)
+	exec.Command("pfctl", "-a", "stronghold", "-F", "all").Run()
 
 	// Remove our config file
 	os.Remove("/etc/pf.stronghold.conf")
@@ -280,12 +294,14 @@ func (t *TransparentProxy) disableDarwin() error {
 }
 
 func (t *TransparentProxy) statusDarwin() (bool, error) {
-	cmd := exec.Command("pfctl", "-sr")
+	// Check if our anchor has any rules loaded
+	cmd := exec.Command("pfctl", "-a", "stronghold", "-sr")
 	output, err := cmd.Output()
 	if err != nil {
-		return false, err
+		return false, nil // Anchor doesn't exist = not enabled
 	}
-	return strings.Contains(string(output), "stronghold"), nil
+	// If anchor has rules, proxy is enabled
+	return len(strings.TrimSpace(string(output))) > 0, nil
 }
 
 // IsTransparentProxyEnabled checks if transparent proxying is currently active

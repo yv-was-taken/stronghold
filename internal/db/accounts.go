@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/shopspring/decimal"
 )
 
 // AccountStatus represents the status of an account
@@ -27,7 +28,7 @@ type Account struct {
 	ID             uuid.UUID       `json:"id"`
 	AccountNumber  string          `json:"account_number"`
 	WalletAddress  *string         `json:"wallet_address,omitempty"`
-	BalanceUSDC    float64         `json:"balance_usdc"` // TODO: migrate to integer cents or string to avoid float64 precision issues with money
+	BalanceUSDC    decimal.Decimal `json:"balance_usdc"`
 	Status         AccountStatus   `json:"status"`
 	CreatedAt      time.Time       `json:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at"`
@@ -92,7 +93,7 @@ func (db *DB) CreateAccount(ctx context.Context, walletAddress *string) (*Accoun
 		ID:            uuid.New(),
 		AccountNumber: accountNumber,
 		WalletAddress: walletAddress,
-		BalanceUSDC:   0,
+		BalanceUSDC:   decimal.Zero,
 		Status:        AccountStatusActive,
 		CreatedAt:     time.Now().UTC(),
 		UpdatedAt:     time.Now().UTC(),
@@ -115,14 +116,15 @@ func (db *DB) CreateAccount(ctx context.Context, walletAddress *string) (*Accoun
 // GetAccountByID retrieves an account by its UUID
 func (db *DB) GetAccountByID(ctx context.Context, id uuid.UUID) (*Account, error) {
 	account := &Account{}
+	var balanceStr string
 	err := db.QueryRow(ctx, `
-		SELECT id, account_number, wallet_address, balance_usdc, status,
+		SELECT id, account_number, wallet_address, balance_usdc::text, status,
 		       created_at, updated_at, last_login_at, metadata
 		FROM accounts
 		WHERE id = $1
 	`, id).Scan(
 		&account.ID, &account.AccountNumber, &account.WalletAddress,
-		&account.BalanceUSDC, &account.Status, &account.CreatedAt,
+		&balanceStr, &account.Status, &account.CreatedAt,
 		&account.UpdatedAt, &account.LastLoginAt, &account.Metadata,
 	)
 
@@ -131,6 +133,11 @@ func (db *DB) GetAccountByID(ctx context.Context, id uuid.UUID) (*Account, error
 			return nil, errors.New("account not found")
 		}
 		return nil, fmt.Errorf("failed to get account: %w", err)
+	}
+
+	account.BalanceUSDC, err = decimal.NewFromString(balanceStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse balance: %w", err)
 	}
 
 	return account, nil
@@ -142,14 +149,15 @@ func (db *DB) GetAccountByNumber(ctx context.Context, accountNumber string) (*Ac
 	normalized := normalizeAccountNumber(accountNumber)
 
 	account := &Account{}
+	var balanceStr string
 	err := db.QueryRow(ctx, `
-		SELECT id, account_number, wallet_address, balance_usdc, status,
+		SELECT id, account_number, wallet_address, balance_usdc::text, status,
 		       created_at, updated_at, last_login_at, metadata
 		FROM accounts
 		WHERE account_number = $1
 	`, normalized).Scan(
 		&account.ID, &account.AccountNumber, &account.WalletAddress,
-		&account.BalanceUSDC, &account.Status, &account.CreatedAt,
+		&balanceStr, &account.Status, &account.CreatedAt,
 		&account.UpdatedAt, &account.LastLoginAt, &account.Metadata,
 	)
 
@@ -160,20 +168,26 @@ func (db *DB) GetAccountByNumber(ctx context.Context, accountNumber string) (*Ac
 		return nil, fmt.Errorf("failed to get account: %w", err)
 	}
 
+	account.BalanceUSDC, err = decimal.NewFromString(balanceStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse balance: %w", err)
+	}
+
 	return account, nil
 }
 
 // GetAccountByWalletAddress retrieves an account by its wallet address
 func (db *DB) GetAccountByWalletAddress(ctx context.Context, walletAddress string) (*Account, error) {
 	account := &Account{}
+	var balanceStr string
 	err := db.QueryRow(ctx, `
-		SELECT id, account_number, wallet_address, balance_usdc, status,
+		SELECT id, account_number, wallet_address, balance_usdc::text, status,
 		       created_at, updated_at, last_login_at, metadata
 		FROM accounts
 		WHERE wallet_address = $1
 	`, walletAddress).Scan(
 		&account.ID, &account.AccountNumber, &account.WalletAddress,
-		&account.BalanceUSDC, &account.Status, &account.CreatedAt,
+		&balanceStr, &account.Status, &account.CreatedAt,
 		&account.UpdatedAt, &account.LastLoginAt, &account.Metadata,
 	)
 
@@ -182,6 +196,11 @@ func (db *DB) GetAccountByWalletAddress(ctx context.Context, walletAddress strin
 			return nil, errors.New("account not found")
 		}
 		return nil, fmt.Errorf("failed to get account: %w", err)
+	}
+
+	account.BalanceUSDC, err = decimal.NewFromString(balanceStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse balance: %w", err)
 	}
 
 	return account, nil
@@ -247,7 +266,7 @@ func (db *DB) LinkWallet(ctx context.Context, accountID uuid.UUID, walletAddress
 }
 
 // UpdateBalance updates an account's balance directly (for admin operations)
-func (db *DB) UpdateBalance(ctx context.Context, accountID uuid.UUID, newBalance float64) error {
+func (db *DB) UpdateBalance(ctx context.Context, accountID uuid.UUID, newBalance decimal.Decimal) error {
 	_, err := db.pool.Exec(ctx, `
 		UPDATE accounts
 		SET balance_usdc = $1, updated_at = $2

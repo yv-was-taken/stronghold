@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -133,17 +134,34 @@ func (s *ServiceManager) Stop() error {
 		return nil // Already stopped
 	}
 
-	// Kill the process
+	// Send SIGTERM first for graceful shutdown
 	if status.PID > 0 {
 		process, err := os.FindProcess(status.PID)
 		if err == nil {
-			if err := process.Kill(); err != nil {
-				return fmt.Errorf("failed to stop proxy (PID: %d): %w", status.PID, err)
+			if err := process.Signal(syscall.SIGTERM); err != nil {
+				return fmt.Errorf("failed to send SIGTERM to proxy (PID: %d): %w", status.PID, err)
 			}
 		}
 	}
 
-	// Wait for it to stop
+	// Wait up to 5 seconds for graceful shutdown
+	for i := 0; i < 50; i++ {
+		time.Sleep(100 * time.Millisecond)
+		status, _ = s.IsRunning()
+		if !status.Running {
+			return nil
+		}
+	}
+
+	// Process still running after 5s -- force kill
+	if status.PID > 0 {
+		process, err := os.FindProcess(status.PID)
+		if err == nil {
+			process.Kill()
+		}
+	}
+
+	// Wait a bit more for the force kill to take effect
 	for i := 0; i < 10; i++ {
 		time.Sleep(100 * time.Millisecond)
 		status, _ = s.IsRunning()

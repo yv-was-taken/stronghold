@@ -16,6 +16,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gofiber/fiber/v3"
+	"github.com/shopspring/decimal"
 )
 
 // X402Middleware creates x402 payment verification middleware
@@ -71,7 +72,7 @@ func (m *X402Middleware) createFacilitatorRequest(method, url string, body []byt
 type PriceRoute struct {
 	Path   string
 	Method string
-	Price  float64
+	Price  decimal.Decimal
 }
 
 // GetRoutes returns all priced routes
@@ -88,7 +89,7 @@ func (m *X402Middleware) GetNetwork() string {
 }
 
 // RequirePayment returns middleware that requires x402 payment
-func (m *X402Middleware) RequirePayment(price float64) fiber.Handler {
+func (m *X402Middleware) RequirePayment(price decimal.Decimal) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		// Skip if wallet address not configured (allow all in dev mode)
 		if m.config.WalletAddress == "" {
@@ -96,7 +97,7 @@ func (m *X402Middleware) RequirePayment(price float64) fiber.Handler {
 		}
 
 		// Convert price to wei (6 decimal places for USDC)
-		priceWei := float64ToWei(price)
+		priceWei := decimalToWei(price)
 
 		// Check for payment header
 		paymentHeader := c.Get("X-Payment")
@@ -119,7 +120,7 @@ func (m *X402Middleware) RequirePayment(price float64) fiber.Handler {
 // AtomicPayment returns middleware that implements the reserve-commit pattern for atomic payments.
 // It ensures that either both service execution and payment settlement succeed, or neither does.
 // If settlement fails, a 503 is returned and the service result is not delivered.
-func (m *X402Middleware) AtomicPayment(price float64) fiber.Handler {
+func (m *X402Middleware) AtomicPayment(price decimal.Decimal) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		// Skip if wallet address not configured (allow all in dev mode)
 		if m.config.WalletAddress == "" {
@@ -127,7 +128,7 @@ func (m *X402Middleware) AtomicPayment(price float64) fiber.Handler {
 		}
 
 		// Convert price to wei (6 decimal places for USDC)
-		priceWei := float64ToWei(price)
+		priceWei := decimalToWei(price)
 
 		// Check for payment header
 		paymentHeader := c.Get("X-Payment")
@@ -349,6 +350,25 @@ func (m *X402Middleware) verifyPayment(paymentHeader string, expectedAmount *big
 		return false, fmt.Errorf("failed to create verify request: %w", err)
 	}
 	resp, err := m.httpClient.Do(req)
+
+	// Retry once on transient errors (connection errors, timeouts, 5xx)
+	if err != nil || (resp != nil && resp.StatusCode >= 500) {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		if err != nil {
+			slog.Warn("facilitator verify failed, retrying once", "error", err)
+		} else {
+			slog.Warn("facilitator verify returned 5xx, retrying once", "status", resp.StatusCode)
+		}
+		time.Sleep(500 * time.Millisecond)
+		retryReq, retryErr := m.createFacilitatorRequest("POST", facilitatorURL+"/verify", verifyBody)
+		if retryErr != nil {
+			return false, fmt.Errorf("failed to create verify retry request: %w", retryErr)
+		}
+		resp, err = m.httpClient.Do(retryReq)
+	}
+
 	if err != nil {
 		return false, fmt.Errorf("failed to call facilitator: %w", err)
 	}
@@ -433,6 +453,11 @@ func (m *X402Middleware) settlePayment(paymentHeader string) (string, error) {
 		return "", fmt.Errorf("failed to decode settle response: %w", err)
 	}
 
+	// Check if the facilitator reported failure despite 200 status
+	if !settleResult.Success {
+		return "", fmt.Errorf("facilitator returned success=false")
+	}
+
 	// Return txHash or paymentId as the payment identifier
 	if settleResult.TxHash != "" {
 		return settleResult.TxHash, nil
@@ -455,16 +480,12 @@ func (m *X402Middleware) PaymentResponse(c fiber.Ctx, paymentID string) {
 	c.Set("X-Payment-Response", string(responseJSON))
 }
 
-// float64ToWei converts a dollar amount to USDC atomic units (6 decimals)
+// decimalToWei converts a dollar amount to USDC atomic units (6 decimals)
 // For example: $0.001 -> 1000 units, $1.00 -> 1000000 units
-// Uses big.Float for precision to avoid float64 truncation issues
-func float64ToWei(amount float64) *big.Int {
+func decimalToWei(amount decimal.Decimal) *big.Int {
 	// USDC has 6 decimals, so multiply by 10^6
-	// Use big.Float to avoid precision loss in edge cases
-	bf := big.NewFloat(amount)
-	bf.Mul(bf, big.NewFloat(1_000_000))
-	result, _ := bf.Int(nil)
-	return result
+	shifted := amount.Shift(6)
+	return shifted.BigInt()
 }
 
 // IsFreeRoute checks if a route doesn't require payment
@@ -499,7 +520,7 @@ func (m *X402Middleware) Middleware() fiber.Handler {
 
 		// Get price for this route
 		price := m.getPriceForRoute(path, c.Method())
-		if price == 0 {
+		if price.IsZero() {
 			// No price set, allow through
 			return c.Next()
 		}
@@ -507,12 +528,12 @@ func (m *X402Middleware) Middleware() fiber.Handler {
 		// Check payment
 		paymentHeader := c.Get("X-Payment")
 		if paymentHeader == "" {
-			return m.requirePaymentResponse(c, float64ToWei(price))
+			return m.requirePaymentResponse(c, decimalToWei(price))
 		}
 
-		valid, err := m.verifyPayment(paymentHeader, float64ToWei(price))
+		valid, err := m.verifyPayment(paymentHeader, decimalToWei(price))
 		if err != nil || !valid {
-			return m.requirePaymentResponse(c, float64ToWei(price))
+			return m.requirePaymentResponse(c, decimalToWei(price))
 		}
 
 		// Store payment header for settlement after successful handler
@@ -523,13 +544,13 @@ func (m *X402Middleware) Middleware() fiber.Handler {
 }
 
 // getPriceForRoute returns the price for a given route
-func (m *X402Middleware) getPriceForRoute(path, method string) float64 {
+func (m *X402Middleware) getPriceForRoute(path, method string) decimal.Decimal {
 	routes := m.GetRoutes()
 	for _, route := range routes {
 		if strings.HasPrefix(path, route.Path) && method == route.Method {
 			return route.Price
 		}
 	}
-	return 0
+	return decimal.Zero
 }
 

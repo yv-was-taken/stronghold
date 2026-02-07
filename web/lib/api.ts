@@ -6,10 +6,36 @@ export const API_URL =
     ? 'http://localhost:8080'
     : 'https://api.getstronghold.xyz');
 
+/** Default request timeout in milliseconds */
+const REQUEST_TIMEOUT_MS = 30_000;
+
+/**
+ * Creates a fetch call with an AbortController timeout.
+ * If the caller already provides a signal, it is not overridden;
+ * otherwise a 30-second timeout signal is attached.
+ */
+function fetchWithTimeout(
+  input: string,
+  init?: RequestInit
+): Promise<Response> {
+  // If the caller already set a signal, respect it
+  if (init?.signal) {
+    return fetch(input, init);
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  return fetch(input, { ...init, signal: controller.signal }).finally(() => {
+    clearTimeout(timeoutId);
+  });
+}
+
 /**
  * Fetch wrapper that includes credentials and handles 401 with token refresh.
  * On 401, attempts to refresh the auth token and retries the original request once.
  * On refresh failure, redirects to the login page.
+ * All requests have a 30-second timeout by default.
  */
 export async function fetchWithAuth(
   input: string,
@@ -20,18 +46,26 @@ export async function fetchWithAuth(
     credentials: 'include',
   };
 
-  const response = await fetch(input, options);
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(input, options);
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS}ms`);
+    }
+    throw err;
+  }
 
   if (response.status === 401) {
     // Attempt token refresh
-    const refreshResponse = await fetch(`${API_URL}/v1/auth/refresh`, {
+    const refreshResponse = await fetchWithTimeout(`${API_URL}/v1/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
     });
 
     if (refreshResponse.ok) {
       // Retry the original request
-      return fetch(input, options);
+      return fetchWithTimeout(input, options);
     }
 
     // Refresh failed - redirect to login and throw so callers

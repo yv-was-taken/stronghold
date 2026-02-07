@@ -9,6 +9,7 @@ import (
 	"stronghold/internal/middleware"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,8 +21,8 @@ func TestGetPricing_ReturnsAllRoutes(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricingCfg := &config.PricingConfig{
-		ScanContent:  0.001,
-		ScanOutput: 0.001,
+		ScanContent: decimal.NewFromFloat(0.001),
+		ScanOutput:  decimal.NewFromFloat(0.001),
 	}
 
 	x402 := middleware.NewX402Middleware(x402cfg, pricingCfg)
@@ -51,7 +52,7 @@ func TestGetPricing_ReturnsAllRoutes(t *testing.T) {
 	for _, route := range body.Routes {
 		routePaths[route.Path] = true
 		assert.NotEmpty(t, route.Method)
-		assert.GreaterOrEqual(t, route.Price, 0.0)
+		assert.True(t, route.Price.GreaterThanOrEqual(decimal.Zero))
 	}
 
 	// These endpoints should be in the pricing
@@ -72,8 +73,8 @@ func TestGetPricing_HasDescriptions(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricingCfg := &config.PricingConfig{
-		ScanContent:  0.001,
-		ScanOutput: 0.001,
+		ScanContent: decimal.NewFromFloat(0.001),
+		ScanOutput:  decimal.NewFromFloat(0.001),
 	}
 
 	x402 := middleware.NewX402Middleware(x402cfg, pricingCfg)
@@ -108,8 +109,8 @@ func TestGetPricing_CorrectPrices(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricingCfg := &config.PricingConfig{
-		ScanContent:  0.001,
-		ScanOutput: 0.001,
+		ScanContent: decimal.NewFromFloat(0.001),
+		ScanOutput:  decimal.NewFromFloat(0.001),
 	}
 
 	x402 := middleware.NewX402Middleware(x402cfg, pricingCfg)
@@ -128,14 +129,14 @@ func TestGetPricing_CorrectPrices(t *testing.T) {
 	require.NoError(t, err)
 
 	// Map prices by path
-	pricesByPath := make(map[string]float64)
+	pricesByPath := make(map[string]decimal.Decimal)
 	for _, route := range body.Routes {
 		pricesByPath[route.Path] = route.Price
 	}
 
 	// Verify expected prices - all endpoints are $0.001
-	assert.Equal(t, 0.001, pricesByPath["/v1/scan/content"])
-	assert.Equal(t, 0.001, pricesByPath["/v1/scan/output"])
+	assert.True(t, decimal.NewFromFloat(0.001).Equal(pricesByPath["/v1/scan/content"]))
+	assert.True(t, decimal.NewFromFloat(0.001).Equal(pricesByPath["/v1/scan/output"]))
 }
 
 func TestGetPricing_JSONContentType(t *testing.T) {
@@ -145,8 +146,8 @@ func TestGetPricing_JSONContentType(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricingCfg := &config.PricingConfig{
-		ScanContent:  0.001,
-		ScanOutput: 0.001,
+		ScanContent: decimal.NewFromFloat(0.001),
+		ScanOutput:  decimal.NewFromFloat(0.001),
 	}
 
 	x402 := middleware.NewX402Middleware(x402cfg, pricingCfg)
@@ -170,8 +171,8 @@ func TestGetPricing_AllRoutesHaveMethod(t *testing.T) {
 		Network:        "base-sepolia",
 	}
 	pricingCfg := &config.PricingConfig{
-		ScanContent:  0.001,
-		ScanOutput: 0.001,
+		ScanContent: decimal.NewFromFloat(0.001),
+		ScanOutput:  decimal.NewFromFloat(0.001),
 	}
 
 	x402 := middleware.NewX402Middleware(x402cfg, pricingCfg)

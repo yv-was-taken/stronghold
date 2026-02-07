@@ -14,13 +14,14 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o stronghold-api ./cmd/api/main.go
+ARG VERSION=dev
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-X stronghold/internal/handlers.Version=${VERSION}" -o stronghold-api ./cmd/api/main.go
 
 # Ensure models directory exists
 RUN mkdir -p models
 
 # Final stage
-FROM alpine:latest
+FROM alpine:3.21
 
 WORKDIR /app
 

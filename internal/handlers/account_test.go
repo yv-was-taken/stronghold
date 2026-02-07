@@ -12,6 +12,7 @@ import (
 	"stronghold/internal/db/testutil"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -117,14 +118,6 @@ func TestGetAccount_ReturnsStats(t *testing.T) {
 	stats := body["deposit_stats"].(map[string]interface{})
 	assert.Contains(t, stats, "total_deposits")
 	assert.Contains(t, stats, "total_deposited_usdc")
-}
-
-func TestLinkWallet_Success(t *testing.T) {
-	t.Skip("Wallet linking endpoint removed - wallets are generated server-side with KMS")
-}
-
-func TestLinkWallet_InvalidFormat(t *testing.T) {
-	t.Skip("Wallet linking endpoint removed - wallets are generated server-side with KMS")
 }
 
 func TestGetUsageStats_DateRange(t *testing.T) {
@@ -379,21 +372,21 @@ func TestAccount_NotAuthenticated(t *testing.T) {
 
 func TestCalculateFee(t *testing.T) {
 	testCases := []struct {
-		amount      float64
+		amount      decimal.Decimal
 		provider    db.DepositProvider
-		expectedFee float64
+		expectedFee decimal.Decimal
 	}{
-		{10.00, db.DepositProviderStripe, (10.00 * 0.029) + 0.30},
-		{100.00, db.DepositProviderStripe, (100.00 * 0.029) + 0.30},
-		{1000.00, db.DepositProviderStripe, (1000.00 * 0.029) + 0.30},
-		{100.00, db.DepositProviderDirect, 0},
-		{0.01, db.DepositProviderDirect, 0},
+		{decimal.NewFromFloat(10.00), db.DepositProviderStripe, decimal.NewFromFloat(10.00).Mul(decimal.NewFromFloat(0.029)).Add(decimal.NewFromFloat(0.30))},
+		{decimal.NewFromFloat(100.00), db.DepositProviderStripe, decimal.NewFromFloat(100.00).Mul(decimal.NewFromFloat(0.029)).Add(decimal.NewFromFloat(0.30))},
+		{decimal.NewFromFloat(1000.00), db.DepositProviderStripe, decimal.NewFromFloat(1000.00).Mul(decimal.NewFromFloat(0.029)).Add(decimal.NewFromFloat(0.30))},
+		{decimal.NewFromFloat(100.00), db.DepositProviderDirect, decimal.Zero},
+		{decimal.NewFromFloat(0.01), db.DepositProviderDirect, decimal.Zero},
 	}
 
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			fee := calculateFee(tc.amount, tc.provider)
-			assert.InDelta(t, tc.expectedFee, fee, 0.01)
+			assert.True(t, tc.expectedFee.Equal(fee), "expected %s, got %s", tc.expectedFee, fee)
 		})
 	}
 }
@@ -412,9 +405,9 @@ func TestGetAccount_WithDeposits(t *testing.T) {
 	deposit := &db.Deposit{
 		AccountID:     account.ID,
 		Provider:      db.DepositProviderDirect,
-		AmountUSDC:    100.00,
-		FeeUSDC:       0,
-		NetAmountUSDC: 100.00,
+		AmountUSDC:    decimal.NewFromFloat(100.00),
+		FeeUSDC:       decimal.Zero,
+		NetAmountUSDC: decimal.NewFromFloat(100.00),
 	}
 	err = database.CreateDeposit(t.Context(), deposit)
 	require.NoError(t, err)
@@ -439,6 +432,3 @@ func TestGetAccount_WithDeposits(t *testing.T) {
 	assert.GreaterOrEqual(t, stats["total_deposited_usdc"].(float64), float64(100))
 }
 
-func TestLinkWallet_AlreadyLinked(t *testing.T) {
-	t.Skip("Wallet linking endpoint removed - wallets are generated server-side with KMS")
-}

@@ -29,12 +29,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [account, setAccount] = useState<Account | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check auth status on mount by fetching account info
-  useEffect(() => {
-    checkAuth();
+  const refreshAuth = useCallback(async (): Promise<boolean> => {
+    try {
+      const response = await fetch(`${API_URL}/v1/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include', // Send refresh token cookie, receive new cookies
+      });
+
+      return response.ok;
+    } catch (error) {
+      console.error('Error refreshing auth:', error);
+      return false;
+    }
   }, []);
 
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/v1/auth/me`, {
         credentials: 'include', // Send httpOnly cookies
@@ -62,7 +71,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [refreshAuth]);
+
+  // Check auth status on mount by fetching account info
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
 
   const login = async (accountNumber: string) => {
     setIsLoading(true);
@@ -132,20 +146,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     setAccount(null);
   };
-
-  const refreshAuth = useCallback(async (): Promise<boolean> => {
-    try {
-      const response = await fetch(`${API_URL}/v1/auth/refresh`, {
-        method: 'POST',
-        credentials: 'include', // Send refresh token cookie, receive new cookies
-      });
-
-      return response.ok;
-    } catch (error) {
-      console.error('Error refreshing auth:', error);
-      return false;
-    }
-  }, []);
 
   return (
     <AuthContext.Provider

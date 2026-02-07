@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 // Environment represents the runtime environment
@@ -35,9 +37,11 @@ type Config struct {
 
 // ServerConfig holds HTTP server configuration
 type ServerConfig struct {
-	Port         string
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
+	Port           string
+	ReadTimeout    time.Duration
+	WriteTimeout   time.Duration
+	ProxyHeader    string
+	TrustedProxies []string
 }
 
 // DatabaseConfig holds PostgreSQL database configuration
@@ -48,6 +52,7 @@ type DatabaseConfig struct {
 	Password string
 	Name     string
 	SSLMode  string
+	MaxConns int32
 }
 
 // AuthConfig holds JWT authentication configuration
@@ -99,8 +104,8 @@ type StrongholdConfig struct {
 
 // PricingConfig holds endpoint pricing in USD
 type PricingConfig struct {
-	ScanContent float64
-	ScanOutput  float64
+	ScanContent decimal.Decimal
+	ScanOutput  decimal.Decimal
 }
 
 // RateLimitConfig holds rate limiting configuration
@@ -130,9 +135,11 @@ func Load() *Config {
 	return &Config{
 		Environment: env,
 		Server: ServerConfig{
-			Port:         getEnv("PORT", "8080"),
-			ReadTimeout:  getDuration("SERVER_READ_TIMEOUT", 10*time.Second),
-			WriteTimeout: getDuration("SERVER_WRITE_TIMEOUT", 30*time.Second),
+			Port:           getEnv("PORT", "8080"),
+			ReadTimeout:    getDuration("SERVER_READ_TIMEOUT", 10*time.Second),
+			WriteTimeout:   getDuration("SERVER_WRITE_TIMEOUT", 30*time.Second),
+			ProxyHeader:    getEnv("PROXY_HEADER", "X-Forwarded-For"),
+			TrustedProxies: getEnvSlice("TRUSTED_PROXIES", nil),
 		},
 		Database: DatabaseConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
@@ -141,6 +148,7 @@ func Load() *Config {
 			Password: getEnv("DB_PASSWORD", ""),
 			Name:     getEnv("DB_NAME", "stronghold"),
 			SSLMode:  getEnv("DB_SSLMODE", "require"),
+			MaxConns: int32(getInt("DB_MAX_CONNS", 0)),
 		},
 		Auth: AuthConfig{
 			JWTSecret:       getEnv("JWT_SECRET", ""),
@@ -178,8 +186,8 @@ func Load() *Config {
 			LLMAPIKey:       getEnv("STRONGHOLD_LLM_API_KEY", ""),
 		},
 		Pricing: PricingConfig{
-			ScanContent: getFloat("PRICE_SCAN_CONTENT", 0.002),
-			ScanOutput:  getFloat("PRICE_SCAN_OUTPUT", 0.002),
+			ScanContent: getDecimal("PRICE_SCAN_CONTENT", decimal.NewFromFloat(0.002)),
+			ScanOutput:  getDecimal("PRICE_SCAN_OUTPUT", decimal.NewFromFloat(0.002)),
 		},
 		RateLimit: RateLimitConfig{
 			Enabled:       getBool("RATE_LIMIT_ENABLED", true),
@@ -233,6 +241,15 @@ func getInt(key string, defaultValue int) int {
 func getDuration(key string, defaultValue time.Duration) time.Duration {
 	if value := os.Getenv(key); value != "" {
 		if d, err := time.ParseDuration(value); err == nil {
+			return d
+		}
+	}
+	return defaultValue
+}
+
+func getDecimal(key string, defaultValue decimal.Decimal) decimal.Decimal {
+	if value := os.Getenv(key); value != "" {
+		if d, err := decimal.NewFromString(value); err == nil {
 			return d
 		}
 	}
@@ -298,6 +315,14 @@ func (c *Config) Validate() error {
 		if c.KMS.KeyID == "" {
 			errs = append(errs, "KMS_KEY_ID is required in production")
 		}
+	}
+
+	// Validate scanner thresholds are within valid range
+	if c.Stronghold.BlockThreshold < 0.0 || c.Stronghold.BlockThreshold > 1.0 {
+		errs = append(errs, "STRONGHOLD_BLOCK_THRESHOLD must be between 0.0 and 1.0")
+	}
+	if c.Stronghold.WarnThreshold < 0.0 || c.Stronghold.WarnThreshold > 1.0 {
+		errs = append(errs, "STRONGHOLD_WARN_THRESHOLD must be between 0.0 and 1.0")
 	}
 
 	// CDP API keys are required in production for x402 facilitator

@@ -100,6 +100,14 @@ func (h *ScanHandler) ScanContent(c fiber.Ctx) error {
 		})
 	}
 
+	// Reject oversized payloads (500KB limit)
+	if len(req.Text) > 500*1024 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":      "Text too large, maximum size is 500KB",
+			"request_id": requestID,
+		})
+	}
+
 	result, err := h.scanner.ScanContent(c.Context(), req.Text, req.SourceURL, req.SourceType, req.ContentType)
 	if err != nil {
 		slog.Error("scan content failed", "request_id", requestID, "error", err)
@@ -153,6 +161,14 @@ func (h *ScanHandler) ScanOutput(c fiber.Ctx) error {
 	if req.Text == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":      "Text is required",
+			"request_id": requestID,
+		})
+	}
+
+	// Reject oversized payloads (500KB limit)
+	if len(req.Text) > 500*1024 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":      "Text too large, maximum size is 500KB",
 			"request_id": requestID,
 		})
 	}

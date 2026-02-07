@@ -73,17 +73,22 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Start server in a goroutine (includes settlement worker)
+	serverErr := make(chan error, 1)
 	go func() {
 		if err := srv.Start(ctx); err != nil {
 			slog.Error("server error", "error", err)
-			os.Exit(1)
+			serverErr <- err
 		}
 	}()
 
-	// Wait for interrupt signal
+	// Wait for interrupt signal or server error
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	select {
+	case <-quit:
+	case err := <-serverErr:
+		slog.Error("server failed, initiating shutdown", "error", err)
+	}
 
 	slog.Info("shutting down")
 

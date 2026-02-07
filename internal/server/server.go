@@ -46,6 +46,7 @@ func New(cfg *config.Config) (*Server, error) {
 		Password: cfg.Database.Password,
 		Name:     cfg.Database.Name,
 		SSLMode:  cfg.Database.SSLMode,
+		MaxConns: cfg.Database.MaxConns,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
@@ -82,12 +83,19 @@ func New(cfg *config.Config) (*Server, error) {
 	authHandler := handlers.NewAuthHandler(database, authConfig, kmsClient)
 
 	// Create Fiber app
-	app := fiber.New(fiber.Config{
+	fiberConfig := fiber.Config{
 		AppName:      "Stronghold API",
 		ReadTimeout:  cfg.Server.ReadTimeout,
 		WriteTimeout: cfg.Server.WriteTimeout,
 		ErrorHandler: errorHandler,
-	})
+	}
+
+	// Configure proxy header for correct client IP behind reverse proxy
+	if cfg.Server.ProxyHeader != "" {
+		fiberConfig.ProxyHeader = cfg.Server.ProxyHeader
+	}
+
+	app := fiber.New(fiberConfig)
 
 	// Create settlement worker for background retry of failed settlements
 	settlementWorker := settlement.NewWorker(database, &cfg.X402, nil)
@@ -122,9 +130,16 @@ func (s *Server) setupMiddleware() {
 	s.app.Use(middleware.SecurityHeaders())
 
 	// Logger middleware - includes request ID
-	s.app.Use(logger.New(logger.Config{
-		Format: "[${time}] ${status} - ${method} ${path} ${latency} [${locals:request_id}]\n",
-	}))
+	// Use JSON format in production for log aggregators, text format for development
+	if s.config.IsProduction() {
+		s.app.Use(logger.New(logger.Config{
+			Format: `{"time":"${time}","status":${status},"method":"${method}","path":"${path}","latency":"${latency}","ip":"${ip}","request_id":"${locals:request_id}"}` + "\n",
+		}))
+	} else {
+		s.app.Use(logger.New(logger.Config{
+			Format: "[${time}] ${status} - ${method} ${path} ${latency} [${locals:request_id}]\n",
+		}))
+	}
 
 	// Rate limiting middleware (general limits)
 	rateLimiter := middleware.NewRateLimitMiddleware(&s.config.RateLimit)

@@ -37,8 +37,9 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          go build -ldflags="-s -w" -o stronghold ./cmd/cli
-          go build -ldflags="-s -w" -o stronghold-proxy ./cmd/proxy
+          VERSION="${GITHUB_REF_NAME}"
+          go build -ldflags="-s -w -X stronghold/internal/handlers.Version=${VERSION}" -o stronghold ./cmd/cli
+          go build -ldflags="-s -w -X stronghold/internal/handlers.Version=${VERSION}" -o stronghold-proxy ./cmd/proxy
 
       - name: Create tarball
         run: |
@@ -63,8 +64,16 @@ jobs:
         with:
           path: artifacts
 
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          sha256sum */stronghold-*.tar.gz | sed 's|[^/]*/||' > checksums.txt
+          cat checksums.txt
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*.tar.gz
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/checksums.txt
           generate_release_notes: true

@@ -420,9 +420,6 @@ func TestIntegration_AccountManagement(t *testing.T) {
 		assert.Contains(t, body, "daily_breakdown")
 	})
 
-	t.Run("link wallet", func(t *testing.T) {
-		t.Skip("Wallet linking endpoint removed - wallets are generated server-side with KMS")
-	})
 }
 
 func TestIntegration_MultipleSessionsLogout(t *testing.T) {

@@ -1,8 +1,10 @@
 package proxy
 
 import (
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -18,15 +20,15 @@ import (
 // CA holds the certificate authority for MITM TLS interception
 type CA struct {
 	cert    *x509.Certificate
-	key     *rsa.PrivateKey
+	key     crypto.Signer
 	certPEM []byte
 	keyPEM  []byte
 }
 
-// NewCA generates a new root CA certificate
+// NewCA generates a new root CA certificate using ECDSA P-256
 func NewCA() (*CA, error) {
-	// Generate 2048-bit RSA key
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	// Generate ECDSA P-256 key (faster and more secure than RSA 2048)
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate CA key: %w", err)
 	}
@@ -50,6 +52,7 @@ func NewCA() (*CA, error) {
 		BasicConstraintsValid: true,
 		IsCA:                  true,
 		MaxPathLen:            0,
+		SignatureAlgorithm:    x509.ECDSAWithSHA256,
 	}
 
 	// Self-sign the CA certificate
@@ -69,9 +72,14 @@ func NewCA() (*CA, error) {
 		Bytes: certDER,
 	})
 
+	keyDER, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal CA key: %w", err)
+	}
+
 	keyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(key),
+		Type:  "EC PRIVATE KEY",
+		Bytes: keyDER,
 	})
 
 	return &CA{
@@ -105,13 +113,30 @@ func LoadCA(certPath, keyPath string) (*CA, error) {
 		return nil, fmt.Errorf("failed to parse CA certificate: %w", err)
 	}
 
-	// Parse key
+	// Parse key (support both ECDSA and RSA for backwards compatibility)
 	block, _ = pem.Decode(keyPEM)
 	if block == nil {
 		return nil, fmt.Errorf("failed to decode CA key PEM")
 	}
 
-	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	var key crypto.Signer
+	switch block.Type {
+	case "EC PRIVATE KEY":
+		key, err = x509.ParseECPrivateKey(block.Bytes)
+	case "RSA PRIVATE KEY":
+		key, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+	default:
+		// Try PKCS8 as fallback
+		parsed, pkcs8Err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if pkcs8Err != nil {
+			return nil, fmt.Errorf("failed to parse CA key (type %s): unsupported key format", block.Type)
+		}
+		signer, ok := parsed.(crypto.Signer)
+		if !ok {
+			return nil, fmt.Errorf("parsed key is not a crypto.Signer")
+		}
+		key = signer
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse CA key: %w", err)
 	}
@@ -160,8 +185,8 @@ func LoadOrCreateCA(caDir string) (*CA, error) {
 
 // GenerateCert creates a certificate for a specific host, signed by this CA
 func (ca *CA) GenerateCert(host string) (*tls.Certificate, error) {
-	// Generate key for this host
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	// Generate ECDSA P-256 key for this host
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate host key: %w", err)
 	}
@@ -178,11 +203,12 @@ func (ca *CA) GenerateCert(host string) (*tls.Certificate, error) {
 		Subject: pkix.Name{
 			CommonName: host,
 		},
-		NotBefore:   time.Now(),
-		NotAfter:    time.Now().AddDate(1, 0, 0), // 1 year
-		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		DNSNames:    []string{host},
+		NotBefore:          time.Now(),
+		NotAfter:           time.Now().AddDate(1, 0, 0), // 1 year
+		KeyUsage:           x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:           []string{host},
+		SignatureAlgorithm: x509.ECDSAWithSHA256,
 	}
 
 	// Sign with our CA

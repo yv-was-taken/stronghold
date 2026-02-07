@@ -4,10 +4,13 @@ package db
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/shopspring/decimal"
 )
 
 // PaymentStatus represents the state of a payment transaction
@@ -30,7 +33,7 @@ type PaymentTransaction struct {
 	PayerAddress           string                 `json:"payer_address"`
 	ReceiverAddress        string                 `json:"receiver_address"`
 	Endpoint               string                 `json:"endpoint"`
-	AmountUSDC             float64                `json:"amount_usdc"` // TODO: migrate to integer cents or string to avoid float64 precision issues with money
+	AmountUSDC             decimal.Decimal        `json:"amount_usdc"`
 	Network                string                 `json:"network"`
 	Status                 PaymentStatus          `json:"status"`
 	FacilitatorPaymentID   *string                `json:"facilitator_payment_id,omitempty"`
@@ -103,7 +106,7 @@ func (db *DB) CreateOrGetPaymentTransaction(ctx context.Context, tx *PaymentTran
 
 	if err != nil {
 		// No rows returned means the nonce already exists
-		if err.Error() == "no rows in result set" {
+		if errors.Is(err, pgx.ErrNoRows) {
 			// Fetch the existing transaction
 			existing, fetchErr := db.GetPaymentByNonce(ctx, tx.PaymentNonce)
 			if fetchErr != nil {
@@ -122,7 +125,7 @@ func (db *DB) CreateOrGetPaymentTransaction(ctx context.Context, tx *PaymentTran
 func (db *DB) GetPaymentByNonce(ctx context.Context, nonce string) (*PaymentTransaction, error) {
 	query := `
 		SELECT id, payment_nonce, payment_header, payer_address, receiver_address,
-			   endpoint, amount_usdc, network, status, facilitator_payment_id,
+			   endpoint, amount_usdc::text, network, status, facilitator_payment_id,
 			   settlement_attempts, last_error, service_result,
 			   created_at, executed_at, settled_at, expires_at
 		FROM payment_transactions
@@ -131,6 +134,7 @@ func (db *DB) GetPaymentByNonce(ctx context.Context, nonce string) (*PaymentTran
 
 	var tx PaymentTransaction
 	var serviceResultJSON []byte
+	var amountStr string
 	err := db.pool.QueryRow(ctx, query, nonce).Scan(
 		&tx.ID,
 		&tx.PaymentNonce,
@@ -138,7 +142,7 @@ func (db *DB) GetPaymentByNonce(ctx context.Context, nonce string) (*PaymentTran
 		&tx.PayerAddress,
 		&tx.ReceiverAddress,
 		&tx.Endpoint,
-		&tx.AmountUSDC,
+		&amountStr,
 		&tx.Network,
 		&tx.Status,
 		&tx.FacilitatorPaymentID,
@@ -153,6 +157,11 @@ func (db *DB) GetPaymentByNonce(ctx context.Context, nonce string) (*PaymentTran
 
 	if err != nil {
 		return nil, err
+	}
+
+	tx.AmountUSDC, err = decimal.NewFromString(amountStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse amount: %w", err)
 	}
 
 	if serviceResultJSON != nil {
@@ -168,7 +177,7 @@ func (db *DB) GetPaymentByNonce(ctx context.Context, nonce string) (*PaymentTran
 func (db *DB) GetPaymentByID(ctx context.Context, id uuid.UUID) (*PaymentTransaction, error) {
 	query := `
 		SELECT id, payment_nonce, payment_header, payer_address, receiver_address,
-			   endpoint, amount_usdc, network, status, facilitator_payment_id,
+			   endpoint, amount_usdc::text, network, status, facilitator_payment_id,
 			   settlement_attempts, last_error, service_result,
 			   created_at, executed_at, settled_at, expires_at
 		FROM payment_transactions
@@ -177,6 +186,7 @@ func (db *DB) GetPaymentByID(ctx context.Context, id uuid.UUID) (*PaymentTransac
 
 	var tx PaymentTransaction
 	var serviceResultJSON []byte
+	var amountStr string
 	err := db.pool.QueryRow(ctx, query, id).Scan(
 		&tx.ID,
 		&tx.PaymentNonce,
@@ -184,7 +194,7 @@ func (db *DB) GetPaymentByID(ctx context.Context, id uuid.UUID) (*PaymentTransac
 		&tx.PayerAddress,
 		&tx.ReceiverAddress,
 		&tx.Endpoint,
-		&tx.AmountUSDC,
+		&amountStr,
 		&tx.Network,
 		&tx.Status,
 		&tx.FacilitatorPaymentID,
@@ -199,6 +209,11 @@ func (db *DB) GetPaymentByID(ctx context.Context, id uuid.UUID) (*PaymentTransac
 
 	if err != nil {
 		return nil, err
+	}
+
+	tx.AmountUSDC, err = decimal.NewFromString(amountStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse amount: %w", err)
 	}
 
 	if serviceResultJSON != nil {
@@ -294,12 +309,18 @@ func (db *DB) FailSettlement(ctx context.Context, id uuid.UUID, errorMsg string)
 	return nil
 }
 
-// GetPendingSettlements returns payments that need settlement retry
-// This includes both failed payments and payments stuck in settling state for too long
-func (db *DB) GetPendingSettlements(ctx context.Context, maxAttempts int, limit int) ([]*PaymentTransaction, error) {
+// GetPendingSettlements returns payments that need settlement retry within a transaction.
+// The returned pgx.Tx holds FOR UPDATE SKIP LOCKED locks on the selected rows.
+// The caller MUST commit or rollback the transaction when done processing.
+func (db *DB) GetPendingSettlements(ctx context.Context, maxAttempts int, limit int) ([]*PaymentTransaction, pgx.Tx, error) {
+	tx, err := db.pool.Begin(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
 	query := `
 		SELECT id, payment_nonce, payment_header, payer_address, receiver_address,
-			   endpoint, amount_usdc, network, status, facilitator_payment_id,
+			   endpoint, amount_usdc::text, network, status, facilitator_payment_id,
 			   settlement_attempts, last_error, service_result,
 			   created_at, executed_at, settled_at, expires_at
 		FROM payment_transactions
@@ -310,60 +331,73 @@ func (db *DB) GetPendingSettlements(ctx context.Context, maxAttempts int, limit 
 		FOR UPDATE SKIP LOCKED
 	`
 
-	rows, err := db.pool.Query(ctx, query, PaymentStatusFailed, maxAttempts, PaymentStatusSettling, limit)
+	rows, err := tx.Query(ctx, query, PaymentStatusFailed, maxAttempts, PaymentStatusSettling, limit)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query pending settlements: %w", err)
+		_ = tx.Rollback(ctx)
+		return nil, nil, fmt.Errorf("failed to query pending settlements: %w", err)
 	}
 	defer rows.Close()
 
 	var transactions []*PaymentTransaction
 	for rows.Next() {
-		var tx PaymentTransaction
+		var ptx PaymentTransaction
 		var serviceResultJSON []byte
+		var amountStr string
 		err := rows.Scan(
-			&tx.ID,
-			&tx.PaymentNonce,
-			&tx.PaymentHeader,
-			&tx.PayerAddress,
-			&tx.ReceiverAddress,
-			&tx.Endpoint,
-			&tx.AmountUSDC,
-			&tx.Network,
-			&tx.Status,
-			&tx.FacilitatorPaymentID,
-			&tx.SettlementAttempts,
-			&tx.LastError,
+			&ptx.ID,
+			&ptx.PaymentNonce,
+			&ptx.PaymentHeader,
+			&ptx.PayerAddress,
+			&ptx.ReceiverAddress,
+			&ptx.Endpoint,
+			&amountStr,
+			&ptx.Network,
+			&ptx.Status,
+			&ptx.FacilitatorPaymentID,
+			&ptx.SettlementAttempts,
+			&ptx.LastError,
 			&serviceResultJSON,
-			&tx.CreatedAt,
-			&tx.ExecutedAt,
-			&tx.SettledAt,
-			&tx.ExpiresAt,
+			&ptx.CreatedAt,
+			&ptx.ExecutedAt,
+			&ptx.SettledAt,
+			&ptx.ExpiresAt,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan payment transaction: %w", err)
+			_ = tx.Rollback(ctx)
+			return nil, nil, fmt.Errorf("failed to scan payment transaction: %w", err)
+		}
+
+		ptx.AmountUSDC, err = decimal.NewFromString(amountStr)
+		if err != nil {
+			_ = tx.Rollback(ctx)
+			return nil, nil, fmt.Errorf("failed to parse amount: %w", err)
 		}
 
 		if serviceResultJSON != nil {
-			if err := json.Unmarshal(serviceResultJSON, &tx.ServiceResult); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal service result: %w", err)
+			if err := json.Unmarshal(serviceResultJSON, &ptx.ServiceResult); err != nil {
+				_ = tx.Rollback(ctx)
+				return nil, nil, fmt.Errorf("failed to unmarshal service result: %w", err)
 			}
 		}
 
-		transactions = append(transactions, &tx)
+		transactions = append(transactions, &ptx)
 	}
 
-	return transactions, nil
+	return transactions, tx, nil
 }
 
-// ExpireStaleReservations marks old reserved payments as expired
+// ExpireStaleReservations marks old reserved payments as expired.
+// Also expires payments stuck in 'executing' state for more than 5 minutes,
+// which indicates the handler crashed or timed out without completing.
 func (db *DB) ExpireStaleReservations(ctx context.Context) (int64, error) {
 	query := `
 		UPDATE payment_transactions
 		SET status = $1
-		WHERE status = $2 AND expires_at < NOW()
+		WHERE (status = $2 AND expires_at < NOW())
+		   OR (status = $3 AND created_at < NOW() - INTERVAL '5 minutes')
 	`
 
-	result, err := db.pool.Exec(ctx, query, PaymentStatusExpired, PaymentStatusReserved)
+	result, err := db.pool.Exec(ctx, query, PaymentStatusExpired, PaymentStatusReserved, PaymentStatusExecuting)
 	if err != nil {
 		return 0, fmt.Errorf("failed to expire stale reservations: %w", err)
 	}

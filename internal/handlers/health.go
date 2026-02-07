@@ -12,6 +12,9 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
+// Version is the application version, set at build time via ldflags.
+var Version = "dev"
+
 // facilitatorCache caches the result of the x402 facilitator health check
 // to avoid making an external HTTP call on every health/readiness request.
 var facilitatorCache struct {
@@ -90,7 +93,7 @@ func (h *HealthHandler) Health(c fiber.Ctx) error {
 
 	return c.JSON(HealthResponse{
 		Status:    overallStatus,
-		Version:   "1.0.0",
+		Version:   Version,
 		Services:  services,
 		Timestamp: time.Now().Unix(),
 	})

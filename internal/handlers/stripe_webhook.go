@@ -66,6 +66,23 @@ func (h *StripeWebhookHandler) HandleWebhook(c fiber.Ctx) error {
 
 	slog.Info("stripe webhook received", "type", event.Type, "id", event.ID)
 
+	// Check event ID idempotency - reject duplicates
+	alreadyProcessed, err := h.db.CheckAndRecordWebhookEvent(c.Context(), event.ID, string(event.Type))
+	if err != nil {
+		slog.Error("failed to check webhook event idempotency", "event_id", event.ID, "error", err)
+		// Return 500 to trigger Stripe retry
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Internal error",
+		})
+	}
+	if alreadyProcessed {
+		slog.Info("duplicate stripe webhook event, skipping", "event_id", event.ID)
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"received":  true,
+			"duplicate": true,
+		})
+	}
+
 	// Route to event-specific handlers
 	switch event.Type {
 	case "crypto.onramp_session.updated":

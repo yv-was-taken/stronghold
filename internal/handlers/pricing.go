@@ -4,6 +4,7 @@ import (
 	"stronghold/internal/middleware"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/shopspring/decimal"
 )
 
 // PricingHandler handles pricing-related endpoints
@@ -20,10 +21,10 @@ type PricingResponse struct {
 
 // RoutePrice represents a single route's pricing
 type RoutePrice struct {
-	Path        string  `json:"path"`
-	Method      string  `json:"method"`
-	Price       float64 `json:"price_usd"`
-	Description string  `json:"description"`
+	Path        string          `json:"path"`
+	Method      string          `json:"method"`
+	Price       decimal.Decimal `json:"price_usd"`
+	Description string          `json:"description"`
 }
 
 // NewPricingHandler creates a new pricing handler

@@ -215,12 +215,39 @@ func (db *DB) CleanupExpiredSessions(ctx context.Context) (int64, error) {
 	return result.RowsAffected(), nil
 }
 
-// RotateRefreshToken creates a new refresh token for a session
+// RotateRefreshToken atomically rotates a refresh token within a transaction.
+// Uses SELECT ... FOR UPDATE to prevent concurrent rotation of the same token.
 func (db *DB) RotateRefreshToken(ctx context.Context, oldRefreshToken string, duration time.Duration) (*Session, string, error) {
-	// Get the session first
-	session, err := db.GetSessionByRefreshToken(ctx, oldRefreshToken)
+	tx, err := db.pool.Begin(ctx)
 	if err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback on committed tx is a no-op
+
+	oldTokenHash := HashToken(oldRefreshToken)
+
+	// SELECT ... FOR UPDATE to lock the session row and prevent concurrent rotation
+	session := &Session{}
+	err = tx.QueryRow(ctx, `
+		SELECT id, account_id, refresh_token_hash, expires_at, created_at, last_used_at, ip_address, user_agent
+		FROM sessions
+		WHERE refresh_token_hash = $1
+		FOR UPDATE
+	`, oldTokenHash).Scan(
+		&session.ID, &session.AccountID, &session.RefreshTokenHash,
+		&session.ExpiresAt, &session.CreatedAt, &session.LastUsedAt,
+		&session.IPAddress, &session.UserAgent,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, "", errors.New("session not found")
+		}
+		return nil, "", fmt.Errorf("failed to get session: %w", err)
+	}
+
+	// Check if session is expired
+	if time.Now().UTC().After(session.ExpiresAt) {
+		return nil, "", errors.New("session expired")
 	}
 
 	// Generate new refresh token
@@ -233,8 +260,8 @@ func (db *DB) RotateRefreshToken(ctx context.Context, oldRefreshToken string, du
 	now := time.Now().UTC()
 	newExpiresAt := now.Add(duration)
 
-	// Update the session with new token
-	_, err = db.pool.Exec(ctx, `
+	// Update the session with new token within the same transaction
+	_, err = tx.Exec(ctx, `
 		UPDATE sessions
 		SET refresh_token_hash = $1, expires_at = $2, last_used_at = $3
 		WHERE id = $4
@@ -242,6 +269,10 @@ func (db *DB) RotateRefreshToken(ctx context.Context, oldRefreshToken string, du
 
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to rotate refresh token: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, "", fmt.Errorf("failed to commit token rotation: %w", err)
 	}
 
 	// Update session object

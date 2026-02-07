@@ -72,12 +72,44 @@ func (w *Worker) Start(ctx context.Context) {
 	// Settlement retry worker
 	go func() {
 		defer w.wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("settlement retry worker panicked, restarting", "panic", r)
+				time.Sleep(1 * time.Second)
+				w.wg.Add(1)
+				go func() {
+					defer w.wg.Done()
+					defer func() {
+						if r := recover(); r != nil {
+							slog.Error("settlement retry worker panicked again", "panic", r)
+						}
+					}()
+					w.runRetryLoop(ctx)
+				}()
+			}
+		}()
 		w.runRetryLoop(ctx)
 	}()
 
 	// Expiration cleanup worker
 	go func() {
 		defer w.wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("settlement expiration worker panicked, restarting", "panic", r)
+				time.Sleep(1 * time.Second)
+				w.wg.Add(1)
+				go func() {
+					defer w.wg.Done()
+					defer func() {
+						if r := recover(); r != nil {
+							slog.Error("settlement expiration worker panicked again", "panic", r)
+						}
+					}()
+					w.runExpirationLoop(ctx)
+				}()
+			}
+		}()
 		w.runExpirationLoop(ctx)
 	}()
 
@@ -127,12 +159,18 @@ func (w *Worker) runExpirationLoop(ctx context.Context) {
 
 // retryFailedSettlements processes payments that failed settlement
 func (w *Worker) retryFailedSettlements(ctx context.Context) {
-	// Get failed payments that haven't exceeded max retries
-	payments, err := w.db.GetPendingSettlements(ctx, w.config.MaxRetryAttempts, w.config.BatchSize)
+	// Get failed payments that haven't exceeded max retries (returns a transaction holding row locks)
+	payments, tx, err := w.db.GetPendingSettlements(ctx, w.config.MaxRetryAttempts, w.config.BatchSize)
 	if err != nil {
 		slog.Error("failed to get pending settlements", "error", err)
 		return
 	}
+	// Commit the transaction after processing to release FOR UPDATE locks
+	defer func() {
+		if err := tx.Commit(ctx); err != nil {
+			slog.Error("failed to commit settlement transaction", "error", err)
+		}
+	}()
 
 	if len(payments) == 0 {
 		return
@@ -276,6 +314,11 @@ func (w *Worker) settlePayment(paymentHeader string) (string, error) {
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&settleResult); err != nil {
 		return "", fmt.Errorf("failed to decode settle response: %w", err)
+	}
+
+	// Check if the facilitator reported failure despite 200 status
+	if !settleResult.Success {
+		return "", fmt.Errorf("facilitator returned success=false")
 	}
 
 	// Return txHash or paymentId as the payment identifier

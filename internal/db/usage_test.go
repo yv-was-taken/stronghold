@@ -8,6 +8,7 @@ import (
 	"stronghold/internal/db/testutil"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,15 +25,15 @@ func TestGetUsageStats_Aggregation(t *testing.T) {
 
 	// Create usage logs
 	logs := []struct {
-		cost     float64
-		threat   bool
-		latency  int
+		cost    decimal.Decimal
+		threat  bool
+		latency int
 	}{
-		{0.001, false, 50},
-		{0.002, true, 100},
-		{0.001, false, 75},
-		{0.005, true, 150},
-		{0.001, false, 60},
+		{decimal.NewFromFloat(0.001), false, 50},
+		{decimal.NewFromFloat(0.002), true, 100},
+		{decimal.NewFromFloat(0.001), false, 75},
+		{decimal.NewFromFloat(0.005), true, 150},
+		{decimal.NewFromFloat(0.001), false, 60},
 	}
 
 	for _, l := range logs {
@@ -60,7 +61,7 @@ func TestGetUsageStats_Aggregation(t *testing.T) {
 
 	// Verify aggregation
 	assert.Equal(t, int64(5), stats.TotalRequests)
-	assert.InDelta(t, 0.010, stats.TotalCostUSDC, 0.001) // 0.001+0.002+0.001+0.005+0.001
+	assert.True(t, decimal.NewFromFloat(0.010).Equal(stats.TotalCostUSDC)) // 0.001+0.002+0.001+0.005+0.001
 	assert.Equal(t, int64(2), stats.ThreatsDetected)
 	assert.InDelta(t, 87.0, stats.AvgLatencyMs, 1.0) // (50+100+75+150+60)/5 = 87
 }
@@ -82,7 +83,7 @@ func TestGetDailyStats_DateRange(t *testing.T) {
 			RequestID:      uuid.New().String(),
 			Endpoint:       "/v1/scan",
 			Method:         "POST",
-			CostUSDC:       0.001,
+			CostUSDC:       decimal.NewFromFloat(0.001),
 			Status:         "success",
 			ThreatDetected: false,
 		}
@@ -127,7 +128,7 @@ func TestPagination_Limits(t *testing.T) {
 			RequestID:      uuid.New().String(),
 			Endpoint:       "/v1/scan",
 			Method:         "POST",
-			CostUSDC:       0.001,
+			CostUSDC:       decimal.NewFromFloat(0.001),
 			Status:         "success",
 			ThreatDetected: false,
 		}
@@ -202,11 +203,11 @@ func TestGetEndpointUsageStats(t *testing.T) {
 	endpoints := []struct {
 		path  string
 		count int
-		cost  float64
+		cost  decimal.Decimal
 	}{
-		{"/v1/scan/content", 10, 0.001},
-		{"/v1/scan/output", 5, 0.001},
-		{"/v1/scan", 3, 0.002},
+		{"/v1/scan/content", 10, decimal.NewFromFloat(0.001)},
+		{"/v1/scan/output", 5, decimal.NewFromFloat(0.001)},
+		{"/v1/scan", 3, decimal.NewFromFloat(0.002)},
 	}
 
 	for _, ep := range endpoints {
@@ -262,7 +263,7 @@ func TestGetUsageLogsByDateRange(t *testing.T) {
 			RequestID:      uuid.New().String(),
 			Endpoint:       "/v1/scan",
 			Method:         "POST",
-			CostUSDC:       0.001,
+			CostUSDC:       decimal.NewFromFloat(0.001),
 			Status:         "success",
 			ThreatDetected: false,
 		}
@@ -274,7 +275,7 @@ func TestGetUsageLogsByDateRange(t *testing.T) {
 	end := time.Now().UTC().Add(time.Hour)
 	start := time.Now().UTC().Add(-24 * time.Hour)
 
-	logs, err := db.GetUsageLogsByDateRange(ctx, account.ID, start, end)
+	logs, err := db.GetUsageLogsByDateRange(ctx, account.ID, start, end, 0, 0)
 	require.NoError(t, err)
 	assert.Len(t, logs, 5)
 
@@ -282,7 +283,7 @@ func TestGetUsageLogsByDateRange(t *testing.T) {
 	futureStart := time.Now().UTC().Add(24 * time.Hour)
 	futureEnd := time.Now().UTC().Add(48 * time.Hour)
 
-	logs, err = db.GetUsageLogsByDateRange(ctx, account.ID, futureStart, futureEnd)
+	logs, err = db.GetUsageLogsByDateRange(ctx, account.ID, futureStart, futureEnd, 0, 0)
 	require.NoError(t, err)
 	assert.Len(t, logs, 0)
 }
@@ -307,7 +308,7 @@ func TestCreateUsageLog_AllFields(t *testing.T) {
 		RequestID:         "req-12345",
 		Endpoint:          "/v1/scan/content",
 		Method:            "POST",
-		CostUSDC:          0.001,
+		CostUSDC:          decimal.NewFromFloat(0.001),
 		Status:            "success",
 		ThreatDetected:    true,
 		ThreatType:        &threatType,
@@ -332,7 +333,7 @@ func TestCreateUsageLog_AllFields(t *testing.T) {
 	assert.Equal(t, "req-12345", retrieved.RequestID)
 	assert.Equal(t, "/v1/scan/content", retrieved.Endpoint)
 	assert.Equal(t, "POST", retrieved.Method)
-	assert.Equal(t, 0.001, retrieved.CostUSDC)
+	assert.True(t, decimal.NewFromFloat(0.001).Equal(retrieved.CostUSDC))
 	assert.True(t, retrieved.ThreatDetected)
 	require.NotNil(t, retrieved.ThreatType)
 	assert.Equal(t, "prompt_injection", *retrieved.ThreatType)
@@ -361,7 +362,7 @@ func TestUsageStats_EmptyAccount(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, int64(0), stats.TotalRequests)
-	assert.Equal(t, float64(0), stats.TotalCostUSDC)
+	assert.True(t, decimal.Zero.Equal(stats.TotalCostUSDC))
 	assert.Equal(t, int64(0), stats.ThreatsDetected)
 	assert.Equal(t, float64(0), stats.AvgLatencyMs)
 }
@@ -384,7 +385,7 @@ func TestGetUsageLogs_OrderedByCreatedAtDesc(t *testing.T) {
 			RequestID:      uuid.New().String(),
 			Endpoint:       "/v1/scan",
 			Method:         "POST",
-			CostUSDC:       0.001,
+			CostUSDC:       decimal.NewFromFloat(0.001),
 			Status:         "success",
 			ThreatDetected: false,
 		}

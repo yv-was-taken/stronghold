@@ -26,7 +26,7 @@ CREATE TABLE payment_transactions (
     settlement_attempts INT DEFAULT 0,
     last_error TEXT,
     service_result JSONB,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     executed_at TIMESTAMPTZ,
     settled_at TIMESTAMPTZ,
     expires_at TIMESTAMPTZ NOT NULL,

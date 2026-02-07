@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -125,6 +126,7 @@ type Server struct {
 	httpServer     *http.Server
 	listener       net.Listener
 	logger         *slog.Logger
+	logFile        *os.File
 	httpClient     *http.Client
 	ca             *CA
 	certCache      *CertCache
@@ -133,17 +135,21 @@ type Server struct {
 	blockedCount   int64
 	warnedCount    int64
 	mu             sync.RWMutex
+	connSem        chan struct{}   // semaphore to limit concurrent connections
+	connWg         sync.WaitGroup // tracks active connections for graceful drain
 }
 
 // NewServer creates a new proxy server
 func NewServer(config *Config) (*Server, error) {
 	// Setup logging
 	var handler slog.Handler
+	var logFile *os.File
 	output := os.Stdout
 
 	if config.Logging.File != "" {
 		if f, err := os.OpenFile(config.Logging.File, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
 			output = f
+			logFile = f
 		}
 	}
 
@@ -170,7 +176,9 @@ func NewServer(config *Config) (*Server, error) {
 		config:     config,
 		scanner:    scanner,
 		logger:     logger,
+		logFile:    logFile,
 		httpClient: httpClient,
+		connSem:    make(chan struct{}, 10000),
 	}
 
 	// Load wallet if configured
@@ -349,7 +357,23 @@ func (s *Server) acceptConnections(ctx context.Context) {
 			continue
 		}
 
-		go s.handleConnection(conn)
+		// Acquire semaphore slot to limit concurrent connections
+		select {
+		case s.connSem <- struct{}{}:
+			// Got a slot
+		default:
+			// At capacity -- reject this connection
+			s.logger.Warn("connection limit reached, rejecting connection")
+			conn.Close()
+			continue
+		}
+
+		s.connWg.Add(1)
+		go func() {
+			defer s.connWg.Done()
+			defer func() { <-s.connSem }()
+			s.handleConnection(conn)
+		}()
 	}
 }
 
@@ -550,14 +574,45 @@ func (l *singleConnListener) Addr() net.Addr {
 	return l.conn.LocalAddr()
 }
 
-// Shutdown gracefully shuts down the server
+// Shutdown gracefully shuts down the server, draining active connections
 func (s *Server) Shutdown(ctx context.Context) error {
 	if s.certCache != nil {
 		s.certCache.Stop()
 	}
+
+	// Close the listener to stop accepting new connections
 	if s.listener != nil {
-		return s.httpServer.Shutdown(ctx)
+		s.listener.Close()
 	}
+
+	// Wait for active connections to drain with a 30s timeout
+	drainDone := make(chan struct{})
+	go func() {
+		s.connWg.Wait()
+		close(drainDone)
+	}()
+
+	drainTimeout := 30 * time.Second
+	select {
+	case <-drainDone:
+		s.logger.Info("all connections drained")
+	case <-time.After(drainTimeout):
+		s.logger.Warn("connection drain timed out after 30s, forcing shutdown")
+	case <-ctx.Done():
+		s.logger.Warn("shutdown context cancelled during drain")
+	}
+
+	if s.httpServer != nil {
+		if err := s.httpServer.Shutdown(ctx); err != nil {
+			return err
+		}
+	}
+
+	// Close log file handle if we opened one
+	if s.logFile != nil {
+		s.logFile.Close()
+	}
+
 	return nil
 }
 
@@ -896,7 +951,12 @@ func copyResponseHeaders(dst, src http.Header) {
 	}
 }
 
-// generateRequestID generates a simple request ID
+// generateRequestID generates a collision-resistant request ID using crypto/rand
 func generateRequestID() string {
-	return fmt.Sprintf("req-%d", time.Now().UnixNano())
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		// Fallback to timestamp if crypto/rand fails (should never happen)
+		return fmt.Sprintf("req-%d", time.Now().UnixNano())
+	}
+	return fmt.Sprintf("req-%x", b)
 }

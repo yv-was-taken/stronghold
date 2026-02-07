@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"stronghold/internal/proxy"
 )
@@ -57,9 +58,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Graceful shutdown
+	// Graceful shutdown with timeout
 	slog.Info("shutting down proxy")
-	if err := server.Shutdown(context.Background()); err != nil {
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
 		slog.Error("error during shutdown", "error", err)
 	}
 

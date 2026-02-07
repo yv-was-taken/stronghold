@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 )
 
 // TestAccount represents an account created for testing
@@ -123,7 +124,7 @@ func (f *Fixtures) CreateExpiredSession(accountID uuid.UUID) *TestSession {
 }
 
 // CreateTestDeposit creates a test deposit for an account
-func (f *Fixtures) CreateTestDeposit(accountID uuid.UUID, amount float64, provider DepositProvider) *Deposit {
+func (f *Fixtures) CreateTestDeposit(accountID uuid.UUID, amount decimal.Decimal, provider DepositProvider) *Deposit {
 	f.t.Helper()
 
 	ctx := context.Background()
@@ -131,7 +132,7 @@ func (f *Fixtures) CreateTestDeposit(accountID uuid.UUID, amount float64, provid
 		AccountID:     accountID,
 		Provider:      provider,
 		AmountUSDC:    amount,
-		FeeUSDC:       0,
+		FeeUSDC:       decimal.Zero,
 		NetAmountUSDC: amount,
 		Status:        DepositStatusPending,
 	}
@@ -144,7 +145,7 @@ func (f *Fixtures) CreateTestDeposit(accountID uuid.UUID, amount float64, provid
 }
 
 // CreateCompletedDeposit creates a deposit and completes it
-func (f *Fixtures) CreateCompletedDeposit(accountID uuid.UUID, amount float64) *Deposit {
+func (f *Fixtures) CreateCompletedDeposit(accountID uuid.UUID, amount decimal.Decimal) *Deposit {
 	f.t.Helper()
 
 	deposit := f.CreateTestDeposit(accountID, amount, DepositProviderDirect)
@@ -164,17 +165,19 @@ func (f *Fixtures) CreateCompletedDeposit(accountID uuid.UUID, amount float64) *
 }
 
 // CreateStripeDeposit creates a Stripe deposit with proper fee calculation
-func (f *Fixtures) CreateStripeDeposit(accountID uuid.UUID, amount float64) *Deposit {
+func (f *Fixtures) CreateStripeDeposit(accountID uuid.UUID, amount decimal.Decimal) *Deposit {
 	f.t.Helper()
 
 	ctx := context.Background()
-	fee := (amount * 0.029) + 0.30
+	rate := decimal.NewFromFloat(0.029)
+	flat := decimal.NewFromFloat(0.30)
+	fee := amount.Mul(rate).Add(flat)
 	deposit := &Deposit{
 		AccountID:     accountID,
 		Provider:      DepositProviderStripe,
 		AmountUSDC:    amount,
 		FeeUSDC:       fee,
-		NetAmountUSDC: amount - fee,
+		NetAmountUSDC: amount.Sub(fee),
 		Status:        DepositStatusPending,
 	}
 
@@ -186,7 +189,7 @@ func (f *Fixtures) CreateStripeDeposit(accountID uuid.UUID, amount float64) *Dep
 }
 
 // CreateTestUsageLog creates a test usage log entry
-func (f *Fixtures) CreateTestUsageLog(accountID uuid.UUID, endpoint string, cost float64, threatDetected bool) *UsageLog {
+func (f *Fixtures) CreateTestUsageLog(accountID uuid.UUID, endpoint string, cost decimal.Decimal, threatDetected bool) *UsageLog {
 	f.t.Helper()
 
 	ctx := context.Background()
@@ -208,7 +211,7 @@ func (f *Fixtures) CreateTestUsageLog(accountID uuid.UUID, endpoint string, cost
 }
 
 // CreateTestPaymentTransaction creates a test payment transaction
-func (f *Fixtures) CreateTestPaymentTransaction(endpoint string, amount float64) *PaymentTransaction {
+func (f *Fixtures) CreateTestPaymentTransaction(endpoint string, amount decimal.Decimal) *PaymentTransaction {
 	f.t.Helper()
 
 	ctx := context.Background()
@@ -231,7 +234,7 @@ func (f *Fixtures) CreateTestPaymentTransaction(endpoint string, amount float64)
 }
 
 // CreateExpiredPaymentTransaction creates an already-expired payment transaction
-func (f *Fixtures) CreateExpiredPaymentTransaction(endpoint string, amount float64) *PaymentTransaction {
+func (f *Fixtures) CreateExpiredPaymentTransaction(endpoint string, amount decimal.Decimal) *PaymentTransaction {
 	f.t.Helper()
 
 	ctx := context.Background()

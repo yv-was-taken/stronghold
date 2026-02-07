@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/shopspring/decimal"
 )
 
 // DepositStatus represents the status of a deposit
@@ -30,18 +31,18 @@ const (
 
 // Deposit represents a payment deposit
 type Deposit struct {
-	ID                  uuid.UUID       `json:"id"`
-	AccountID           uuid.UUID       `json:"account_id"`
-	Provider            DepositProvider `json:"provider"`
-	AmountUSDC          float64         `json:"amount_usdc"`
-	FeeUSDC             float64         `json:"fee_usdc"`
-	NetAmountUSDC       float64         `json:"net_amount_usdc"`
-	Status              DepositStatus   `json:"status"`
-	ProviderTransactionID *string       `json:"provider_transaction_id,omitempty"`
-	WalletAddress       *string         `json:"wallet_address,omitempty"`
-	Metadata            map[string]any  `json:"metadata,omitempty"`
-	CreatedAt           time.Time       `json:"created_at"`
-	CompletedAt         *time.Time      `json:"completed_at,omitempty"`
+	ID                  uuid.UUID        `json:"id"`
+	AccountID           uuid.UUID        `json:"account_id"`
+	Provider            DepositProvider  `json:"provider"`
+	AmountUSDC          decimal.Decimal  `json:"amount_usdc"`
+	FeeUSDC             decimal.Decimal  `json:"fee_usdc"`
+	NetAmountUSDC       decimal.Decimal  `json:"net_amount_usdc"`
+	Status              DepositStatus    `json:"status"`
+	ProviderTransactionID *string        `json:"provider_transaction_id,omitempty"`
+	WalletAddress       *string          `json:"wallet_address,omitempty"`
+	Metadata            map[string]any   `json:"metadata,omitempty"`
+	CreatedAt           time.Time        `json:"created_at"`
+	CompletedAt         *time.Time       `json:"completed_at,omitempty"`
 }
 
 // CreateDeposit creates a new deposit record
@@ -54,9 +55,9 @@ func (db *DB) CreateDeposit(ctx context.Context, deposit *Deposit) error {
 		INSERT INTO deposits (
 			id, account_id, provider, amount_usdc, fee_usdc, net_amount_usdc,
 			status, provider_transaction_id, wallet_address, metadata, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-	`, deposit.ID, deposit.AccountID, deposit.Provider, deposit.AmountUSDC,
-		deposit.FeeUSDC, deposit.NetAmountUSDC, deposit.Status,
+		) VALUES ($1, $2, $3, $4::numeric, $5::numeric, $6::numeric, $7, $8, $9, $10, $11)
+	`, deposit.ID, deposit.AccountID, deposit.Provider, deposit.AmountUSDC.String(),
+		deposit.FeeUSDC.String(), deposit.NetAmountUSDC.String(), deposit.Status,
 		deposit.ProviderTransactionID, deposit.WalletAddress,
 		deposit.Metadata, deposit.CreatedAt)
 
@@ -70,14 +71,15 @@ func (db *DB) CreateDeposit(ctx context.Context, deposit *Deposit) error {
 // GetDepositByID retrieves a deposit by its ID
 func (db *DB) GetDepositByID(ctx context.Context, id uuid.UUID) (*Deposit, error) {
 	deposit := &Deposit{}
+	var amountStr, feeStr, netStr string
 	err := db.QueryRow(ctx, `
-		SELECT id, account_id, provider, amount_usdc, fee_usdc, net_amount_usdc,
+		SELECT id, account_id, provider, amount_usdc::text, fee_usdc::text, net_amount_usdc::text,
 		       status, provider_transaction_id, wallet_address, metadata, created_at, completed_at
 		FROM deposits
 		WHERE id = $1
 	`, id).Scan(
-		&deposit.ID, &deposit.AccountID, &deposit.Provider, &deposit.AmountUSDC,
-		&deposit.FeeUSDC, &deposit.NetAmountUSDC, &deposit.Status,
+		&deposit.ID, &deposit.AccountID, &deposit.Provider, &amountStr,
+		&feeStr, &netStr, &deposit.Status,
 		&deposit.ProviderTransactionID, &deposit.WalletAddress,
 		&deposit.Metadata, &deposit.CreatedAt, &deposit.CompletedAt,
 	)
@@ -89,20 +91,43 @@ func (db *DB) GetDepositByID(ctx context.Context, id uuid.UUID) (*Deposit, error
 		return nil, fmt.Errorf("failed to get deposit: %w", err)
 	}
 
+	if err := scanDepositAmounts(deposit, amountStr, feeStr, netStr); err != nil {
+		return nil, err
+	}
+
 	return deposit, nil
+}
+
+// scanDepositAmounts parses decimal strings into a Deposit's amount fields
+func scanDepositAmounts(deposit *Deposit, amountStr, feeStr, netStr string) error {
+	var err error
+	deposit.AmountUSDC, err = decimal.NewFromString(amountStr)
+	if err != nil {
+		return fmt.Errorf("failed to parse amount: %w", err)
+	}
+	deposit.FeeUSDC, err = decimal.NewFromString(feeStr)
+	if err != nil {
+		return fmt.Errorf("failed to parse fee: %w", err)
+	}
+	deposit.NetAmountUSDC, err = decimal.NewFromString(netStr)
+	if err != nil {
+		return fmt.Errorf("failed to parse net amount: %w", err)
+	}
+	return nil
 }
 
 // GetDepositByProviderTransactionID retrieves a deposit by provider transaction ID
 func (db *DB) GetDepositByProviderTransactionID(ctx context.Context, providerTxID string) (*Deposit, error) {
 	deposit := &Deposit{}
+	var amountStr, feeStr, netStr string
 	err := db.QueryRow(ctx, `
-		SELECT id, account_id, provider, amount_usdc, fee_usdc, net_amount_usdc,
+		SELECT id, account_id, provider, amount_usdc::text, fee_usdc::text, net_amount_usdc::text,
 		       status, provider_transaction_id, wallet_address, metadata, created_at, completed_at
 		FROM deposits
 		WHERE provider_transaction_id = $1
 	`, providerTxID).Scan(
-		&deposit.ID, &deposit.AccountID, &deposit.Provider, &deposit.AmountUSDC,
-		&deposit.FeeUSDC, &deposit.NetAmountUSDC, &deposit.Status,
+		&deposit.ID, &deposit.AccountID, &deposit.Provider, &amountStr,
+		&feeStr, &netStr, &deposit.Status,
 		&deposit.ProviderTransactionID, &deposit.WalletAddress,
 		&deposit.Metadata, &deposit.CreatedAt, &deposit.CompletedAt,
 	)
@@ -112,6 +137,10 @@ func (db *DB) GetDepositByProviderTransactionID(ctx context.Context, providerTxI
 			return nil, errors.New("deposit not found")
 		}
 		return nil, fmt.Errorf("failed to get deposit: %w", err)
+	}
+
+	if err := scanDepositAmounts(deposit, amountStr, feeStr, netStr); err != nil {
+		return nil, err
 	}
 
 	return deposit, nil
@@ -127,7 +156,7 @@ func (db *DB) GetDepositsByAccount(ctx context.Context, accountID uuid.UUID, lim
 	}
 
 	rows, err := db.pool.Query(ctx, `
-		SELECT id, account_id, provider, amount_usdc, fee_usdc, net_amount_usdc,
+		SELECT id, account_id, provider, amount_usdc::text, fee_usdc::text, net_amount_usdc::text,
 		       status, provider_transaction_id, wallet_address, metadata, created_at, completed_at
 		FROM deposits
 		WHERE account_id = $1
@@ -143,14 +172,18 @@ func (db *DB) GetDepositsByAccount(ctx context.Context, accountID uuid.UUID, lim
 	var deposits []*Deposit
 	for rows.Next() {
 		deposit := &Deposit{}
+		var amountStr, feeStr, netStr string
 		err := rows.Scan(
-			&deposit.ID, &deposit.AccountID, &deposit.Provider, &deposit.AmountUSDC,
-			&deposit.FeeUSDC, &deposit.NetAmountUSDC, &deposit.Status,
+			&deposit.ID, &deposit.AccountID, &deposit.Provider, &amountStr,
+			&feeStr, &netStr, &deposit.Status,
 			&deposit.ProviderTransactionID, &deposit.WalletAddress,
 			&deposit.Metadata, &deposit.CreatedAt, &deposit.CompletedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan deposit: %w", err)
+		}
+		if err := scanDepositAmounts(deposit, amountStr, feeStr, netStr); err != nil {
+			return nil, err
 		}
 		deposits = append(deposits, deposit)
 	}
@@ -195,18 +228,24 @@ func (db *DB) CompleteDeposit(ctx context.Context, depositID uuid.UUID) error {
 
 	// Get the deposit
 	deposit := &Deposit{}
+	var netStr string
 	err = tx.QueryRow(ctx, `
-		SELECT id, account_id, status, net_amount_usdc
+		SELECT id, account_id, status, net_amount_usdc::text
 		FROM deposits
 		WHERE id = $1
 		FOR UPDATE
-	`, depositID).Scan(&deposit.ID, &deposit.AccountID, &deposit.Status, &deposit.NetAmountUSDC)
+	`, depositID).Scan(&deposit.ID, &deposit.AccountID, &deposit.Status, &netStr)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return errors.New("deposit not found")
 		}
 		return fmt.Errorf("failed to get deposit: %w", err)
+	}
+
+	deposit.NetAmountUSDC, err = decimal.NewFromString(netStr)
+	if err != nil {
+		return fmt.Errorf("failed to parse net amount: %w", err)
 	}
 
 	if deposit.Status != DepositStatusPending {
@@ -255,7 +294,7 @@ func (db *DB) GetPendingDeposits(ctx context.Context, limit int) ([]*Deposit, er
 	}
 
 	rows, err := db.pool.Query(ctx, `
-		SELECT id, account_id, provider, amount_usdc, fee_usdc, net_amount_usdc,
+		SELECT id, account_id, provider, amount_usdc::text, fee_usdc::text, net_amount_usdc::text,
 		       status, provider_transaction_id, wallet_address, metadata, created_at, completed_at
 		FROM deposits
 		WHERE status = $1
@@ -271,14 +310,18 @@ func (db *DB) GetPendingDeposits(ctx context.Context, limit int) ([]*Deposit, er
 	var deposits []*Deposit
 	for rows.Next() {
 		deposit := &Deposit{}
+		var amountStr, feeStr, netStr string
 		err := rows.Scan(
-			&deposit.ID, &deposit.AccountID, &deposit.Provider, &deposit.AmountUSDC,
-			&deposit.FeeUSDC, &deposit.NetAmountUSDC, &deposit.Status,
+			&deposit.ID, &deposit.AccountID, &deposit.Provider, &amountStr,
+			&feeStr, &netStr, &deposit.Status,
 			&deposit.ProviderTransactionID, &deposit.WalletAddress,
 			&deposit.Metadata, &deposit.CreatedAt, &deposit.CompletedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan deposit: %w", err)
+		}
+		if err := scanDepositAmounts(deposit, amountStr, feeStr, netStr); err != nil {
+			return nil, err
 		}
 		deposits = append(deposits, deposit)
 	}
@@ -308,22 +351,33 @@ func (db *DB) UpdateDepositProviderTransaction(ctx context.Context, depositID uu
 // GetDepositStats retrieves deposit statistics for an account
 func (db *DB) GetDepositStats(ctx context.Context, accountID uuid.UUID) (*DepositStats, error) {
 	stats := &DepositStats{}
+	var totalDepositedStr, pendingAmountStr string
 
 	err := db.QueryRow(ctx, `
 		SELECT
 			COALESCE(COUNT(*), 0) as total_deposits,
-			COALESCE(SUM(CASE WHEN status = 'completed' THEN net_amount_usdc ELSE 0 END), 0) as total_deposited_usdc,
-			COALESCE(SUM(CASE WHEN status = 'pending' THEN amount_usdc ELSE 0 END), 0) as pending_amount_usdc
+			COALESCE(SUM(CASE WHEN status = 'completed' THEN net_amount_usdc ELSE 0 END), 0)::text as total_deposited_usdc,
+			COALESCE(SUM(CASE WHEN status = 'pending' THEN amount_usdc ELSE 0 END), 0)::text as pending_amount_usdc
 		FROM deposits
 		WHERE account_id = $1
 	`, accountID).Scan(
 		&stats.TotalDeposits,
-		&stats.TotalDepositedUSDC,
-		&stats.PendingAmountUSDC,
+		&totalDepositedStr,
+		&pendingAmountStr,
 	)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get deposit stats: %w", err)
+	}
+
+	var parseErr error
+	stats.TotalDepositedUSDC, parseErr = decimal.NewFromString(totalDepositedStr)
+	if parseErr != nil {
+		return nil, fmt.Errorf("failed to parse total deposited: %w", parseErr)
+	}
+	stats.PendingAmountUSDC, parseErr = decimal.NewFromString(pendingAmountStr)
+	if parseErr != nil {
+		return nil, fmt.Errorf("failed to parse pending amount: %w", parseErr)
 	}
 
 	return stats, nil
@@ -331,7 +385,7 @@ func (db *DB) GetDepositStats(ctx context.Context, accountID uuid.UUID) (*Deposi
 
 // DepositStats represents deposit statistics
 type DepositStats struct {
-	TotalDeposits     int64   `json:"total_deposits"`
-	TotalDepositedUSDC float64 `json:"total_deposited_usdc"`
-	PendingAmountUSDC  float64 `json:"pending_amount_usdc"`
+	TotalDeposits      int64           `json:"total_deposits"`
+	TotalDepositedUSDC decimal.Decimal `json:"total_deposited_usdc"`
+	PendingAmountUSDC  decimal.Decimal `json:"pending_amount_usdc"`
 }

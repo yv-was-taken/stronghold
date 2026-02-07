@@ -296,25 +296,63 @@ download_and_install() {
     print_info "Downloading Stronghold..."
 
     # Determine download URL
+    TARBALL_NAME="stronghold-$PLATFORM-$ARCH.tar.gz"
     if [ "$VERSION" = "latest" ]; then
-        DOWNLOAD_URL="$REPO_URL/releases/latest/download/stronghold-$PLATFORM-$ARCH.tar.gz"
+        DOWNLOAD_URL="$REPO_URL/releases/latest/download/$TARBALL_NAME"
+        CHECKSUMS_URL="$REPO_URL/releases/latest/download/checksums.txt"
     else
-        DOWNLOAD_URL="$REPO_URL/releases/download/$VERSION/stronghold-$PLATFORM-$ARCH.tar.gz"
+        DOWNLOAD_URL="$REPO_URL/releases/download/$VERSION/$TARBALL_NAME"
+        CHECKSUMS_URL="$REPO_URL/releases/download/$VERSION/checksums.txt"
     fi
 
     # Create temp directory
     TMP_DIR=$(mktemp -d)
     trap "rm -rf $TMP_DIR" EXIT
 
-    # Download
-    if ! curl -fsSL "$DOWNLOAD_URL" -o "$TMP_DIR/stronghold.tar.gz"; then
+    # Download tarball
+    if ! curl -fsSL "$DOWNLOAD_URL" -o "$TMP_DIR/$TARBALL_NAME"; then
         print_error "Failed to download Stronghold"
         print_info "If you're building from source, run: go build ./cmd/cli && go build ./cmd/proxy"
         exit 1
     fi
 
+    # Download and verify checksums
+    if curl -fsSL "$CHECKSUMS_URL" -o "$TMP_DIR/checksums.txt" 2>/dev/null; then
+        print_info "Verifying download integrity..."
+
+        # Use sha256sum on Linux, shasum on macOS
+        if command -v sha256sum &> /dev/null; then
+            SHA_CMD="sha256sum"
+        elif command -v shasum &> /dev/null; then
+            SHA_CMD="shasum -a 256"
+        else
+            print_warning "No sha256sum or shasum found, skipping checksum verification"
+            SHA_CMD=""
+        fi
+
+        if [ -n "$SHA_CMD" ]; then
+            # Extract the expected checksum for our tarball
+            EXPECTED=$(grep "$TARBALL_NAME" "$TMP_DIR/checksums.txt" | awk '{print $1}')
+            if [ -z "$EXPECTED" ]; then
+                print_error "Tarball not found in checksums.txt"
+                exit 1
+            fi
+
+            ACTUAL=$($SHA_CMD "$TMP_DIR/$TARBALL_NAME" | awk '{print $1}')
+            if [ "$EXPECTED" != "$ACTUAL" ]; then
+                print_error "Checksum verification failed!"
+                print_error "Expected: $EXPECTED"
+                print_error "Actual:   $ACTUAL"
+                exit 1
+            fi
+            print_success "Checksum verified"
+        fi
+    else
+        print_warning "Checksums not available for this release, skipping verification"
+    fi
+
     # Extract
-    tar -xzf "$TMP_DIR/stronghold.tar.gz" -C "$TMP_DIR"
+    tar -xzf "$TMP_DIR/$TARBALL_NAME" -C "$TMP_DIR"
 
     # Install binaries
     print_info "Installing binaries..."

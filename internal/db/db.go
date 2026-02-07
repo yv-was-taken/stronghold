@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -30,10 +31,18 @@ type Config struct {
 	Password string
 	Name     string
 	SSLMode  string
+	MaxConns int32
 }
 
 // LoadConfig loads database configuration from environment variables
 func LoadConfig() *Config {
+	var maxConns int32
+	if v := os.Getenv("DB_MAX_CONNS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxConns = int32(n)
+		}
+	}
+
 	return &Config{
 		Host:     getEnv("DB_HOST", "localhost"),
 		Port:     getEnv("DB_PORT", "5432"),
@@ -41,6 +50,7 @@ func LoadConfig() *Config {
 		Password: getEnv("DB_PASSWORD", ""),
 		Name:     getEnv("DB_NAME", "stronghold"),
 		SSLMode:  getEnv("DB_SSLMODE", "require"),
+		MaxConns: maxConns,
 	}
 }
 
@@ -63,7 +73,11 @@ func New(cfg *Config) (*DB, error) {
 	}
 
 	// Configure pool settings
-	poolConfig.MaxConns = 25
+	maxConns := cfg.MaxConns
+	if maxConns <= 0 {
+		maxConns = 25
+	}
+	poolConfig.MaxConns = maxConns
 	poolConfig.MinConns = 5
 	poolConfig.MaxConnLifetime = time.Hour
 	poolConfig.MaxConnIdleTime = 30 * time.Minute
