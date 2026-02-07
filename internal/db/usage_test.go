@@ -8,7 +8,6 @@ import (
 	"stronghold/internal/db/testutil"
 
 	"github.com/google/uuid"
-	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,17 +22,21 @@ func TestGetUsageStats_Aggregation(t *testing.T) {
 	account, err := db.CreateAccount(ctx, nil)
 	require.NoError(t, err)
 
+	// Fund the account so usage deductions don't violate balance constraint
+	err = db.UpdateBalance(ctx, account.ID, 100.0)
+	require.NoError(t, err)
+
 	// Create usage logs
 	logs := []struct {
-		cost    decimal.Decimal
+		cost    float64
 		threat  bool
 		latency int
 	}{
-		{decimal.NewFromFloat(0.001), false, 50},
-		{decimal.NewFromFloat(0.002), true, 100},
-		{decimal.NewFromFloat(0.001), false, 75},
-		{decimal.NewFromFloat(0.005), true, 150},
-		{decimal.NewFromFloat(0.001), false, 60},
+		{0.001, false, 50},
+		{0.002, true, 100},
+		{0.001, false, 75},
+		{0.005, true, 150},
+		{0.001, false, 60},
 	}
 
 	for _, l := range logs {
@@ -61,7 +64,7 @@ func TestGetUsageStats_Aggregation(t *testing.T) {
 
 	// Verify aggregation
 	assert.Equal(t, int64(5), stats.TotalRequests)
-	assert.True(t, decimal.NewFromFloat(0.010).Equal(stats.TotalCostUSDC)) // 0.001+0.002+0.001+0.005+0.001
+	assert.InDelta(t, 0.010, stats.TotalCostUSDC, 0.001) // 0.001+0.002+0.001+0.005+0.001
 	assert.Equal(t, int64(2), stats.ThreatsDetected)
 	assert.InDelta(t, 87.0, stats.AvgLatencyMs, 1.0) // (50+100+75+150+60)/5 = 87
 }
@@ -76,6 +79,10 @@ func TestGetDailyStats_DateRange(t *testing.T) {
 	account, err := db.CreateAccount(ctx, nil)
 	require.NoError(t, err)
 
+	// Fund the account so usage deductions don't violate balance constraint
+	err = db.UpdateBalance(ctx, account.ID, 100.0)
+	require.NoError(t, err)
+
 	// Create usage logs for today only
 	for i := 0; i < 5; i++ {
 		log := &UsageLog{
@@ -83,7 +90,7 @@ func TestGetDailyStats_DateRange(t *testing.T) {
 			RequestID:      uuid.New().String(),
 			Endpoint:       "/v1/scan",
 			Method:         "POST",
-			CostUSDC:       decimal.NewFromFloat(0.001),
+			CostUSDC:       0.001,
 			Status:         "success",
 			ThreatDetected: false,
 		}
@@ -121,6 +128,10 @@ func TestPagination_Limits(t *testing.T) {
 	account, err := db.CreateAccount(ctx, nil)
 	require.NoError(t, err)
 
+	// Fund the account so usage deductions don't violate balance constraint
+	err = db.UpdateBalance(ctx, account.ID, 100.0)
+	require.NoError(t, err)
+
 	// Create some usage logs
 	for i := 0; i < 10; i++ {
 		log := &UsageLog{
@@ -128,7 +139,7 @@ func TestPagination_Limits(t *testing.T) {
 			RequestID:      uuid.New().String(),
 			Endpoint:       "/v1/scan",
 			Method:         "POST",
-			CostUSDC:       decimal.NewFromFloat(0.001),
+			CostUSDC:       0.001,
 			Status:         "success",
 			ThreatDetected: false,
 		}
@@ -199,15 +210,19 @@ func TestGetEndpointUsageStats(t *testing.T) {
 	account, err := db.CreateAccount(ctx, nil)
 	require.NoError(t, err)
 
+	// Fund the account so usage deductions don't violate balance constraint
+	err = db.UpdateBalance(ctx, account.ID, 100.0)
+	require.NoError(t, err)
+
 	// Create logs for different endpoints
 	endpoints := []struct {
 		path  string
 		count int
-		cost  decimal.Decimal
+		cost  float64
 	}{
-		{"/v1/scan/content", 10, decimal.NewFromFloat(0.001)},
-		{"/v1/scan/output", 5, decimal.NewFromFloat(0.001)},
-		{"/v1/scan", 3, decimal.NewFromFloat(0.002)},
+		{"/v1/scan/content", 10, 0.001},
+		{"/v1/scan/output", 5, 0.001},
+		{"/v1/scan", 3, 0.002},
 	}
 
 	for _, ep := range endpoints {
@@ -256,6 +271,10 @@ func TestGetUsageLogsByDateRange(t *testing.T) {
 	account, err := db.CreateAccount(ctx, nil)
 	require.NoError(t, err)
 
+	// Fund the account so usage deductions don't violate balance constraint
+	err = db.UpdateBalance(ctx, account.ID, 100.0)
+	require.NoError(t, err)
+
 	// Create logs
 	for i := 0; i < 5; i++ {
 		log := &UsageLog{
@@ -263,7 +282,7 @@ func TestGetUsageLogsByDateRange(t *testing.T) {
 			RequestID:      uuid.New().String(),
 			Endpoint:       "/v1/scan",
 			Method:         "POST",
-			CostUSDC:       decimal.NewFromFloat(0.001),
+			CostUSDC:       0.001,
 			Status:         "success",
 			ThreatDetected: false,
 		}
@@ -298,6 +317,10 @@ func TestCreateUsageLog_AllFields(t *testing.T) {
 	account, err := db.CreateAccount(ctx, nil)
 	require.NoError(t, err)
 
+	// Fund the account so usage deductions don't violate balance constraint
+	err = db.UpdateBalance(ctx, account.ID, 100.0)
+	require.NoError(t, err)
+
 	requestSize := 500
 	responseSize := 1000
 	latencyMs := 75
@@ -308,7 +331,7 @@ func TestCreateUsageLog_AllFields(t *testing.T) {
 		RequestID:         "req-12345",
 		Endpoint:          "/v1/scan/content",
 		Method:            "POST",
-		CostUSDC:          decimal.NewFromFloat(0.001),
+		CostUSDC:          0.001,
 		Status:            "success",
 		ThreatDetected:    true,
 		ThreatType:        &threatType,
@@ -333,7 +356,7 @@ func TestCreateUsageLog_AllFields(t *testing.T) {
 	assert.Equal(t, "req-12345", retrieved.RequestID)
 	assert.Equal(t, "/v1/scan/content", retrieved.Endpoint)
 	assert.Equal(t, "POST", retrieved.Method)
-	assert.True(t, decimal.NewFromFloat(0.001).Equal(retrieved.CostUSDC))
+	assert.InDelta(t, 0.001, retrieved.CostUSDC, 0.0001)
 	assert.True(t, retrieved.ThreatDetected)
 	require.NotNil(t, retrieved.ThreatType)
 	assert.Equal(t, "prompt_injection", *retrieved.ThreatType)
@@ -362,7 +385,7 @@ func TestUsageStats_EmptyAccount(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, int64(0), stats.TotalRequests)
-	assert.True(t, decimal.Zero.Equal(stats.TotalCostUSDC))
+	assert.Equal(t, 0.0, stats.TotalCostUSDC)
 	assert.Equal(t, int64(0), stats.ThreatsDetected)
 	assert.Equal(t, float64(0), stats.AvgLatencyMs)
 }
@@ -377,6 +400,10 @@ func TestGetUsageLogs_OrderedByCreatedAtDesc(t *testing.T) {
 	account, err := db.CreateAccount(ctx, nil)
 	require.NoError(t, err)
 
+	// Fund the account so usage deductions don't violate balance constraint
+	err = db.UpdateBalance(ctx, account.ID, 100.0)
+	require.NoError(t, err)
+
 	// Create logs with slight delay to ensure different timestamps
 	var ids []uuid.UUID
 	for i := 0; i < 5; i++ {
@@ -385,7 +412,7 @@ func TestGetUsageLogs_OrderedByCreatedAtDesc(t *testing.T) {
 			RequestID:      uuid.New().String(),
 			Endpoint:       "/v1/scan",
 			Method:         "POST",
-			CostUSDC:       decimal.NewFromFloat(0.001),
+			CostUSDC:       0.001,
 			Status:         "success",
 			ThreatDetected: false,
 		}

@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/shopspring/decimal"
 )
 
 // PaymentStatus represents the state of a payment transaction
@@ -33,7 +32,7 @@ type PaymentTransaction struct {
 	PayerAddress           string                 `json:"payer_address"`
 	ReceiverAddress        string                 `json:"receiver_address"`
 	Endpoint               string                 `json:"endpoint"`
-	AmountUSDC             decimal.Decimal        `json:"amount_usdc"`
+	AmountUSDC             float64                `json:"amount_usdc"`
 	Network                string                 `json:"network"`
 	Status                 PaymentStatus          `json:"status"`
 	FacilitatorPaymentID   *string                `json:"facilitator_payment_id,omitempty"`
@@ -125,7 +124,7 @@ func (db *DB) CreateOrGetPaymentTransaction(ctx context.Context, tx *PaymentTran
 func (db *DB) GetPaymentByNonce(ctx context.Context, nonce string) (*PaymentTransaction, error) {
 	query := `
 		SELECT id, payment_nonce, payment_header, payer_address, receiver_address,
-			   endpoint, amount_usdc::text, network, status, facilitator_payment_id,
+			   endpoint, amount_usdc, network, status, facilitator_payment_id,
 			   settlement_attempts, last_error, service_result,
 			   created_at, executed_at, settled_at, expires_at
 		FROM payment_transactions
@@ -134,7 +133,6 @@ func (db *DB) GetPaymentByNonce(ctx context.Context, nonce string) (*PaymentTran
 
 	var tx PaymentTransaction
 	var serviceResultJSON []byte
-	var amountStr string
 	err := db.pool.QueryRow(ctx, query, nonce).Scan(
 		&tx.ID,
 		&tx.PaymentNonce,
@@ -142,7 +140,7 @@ func (db *DB) GetPaymentByNonce(ctx context.Context, nonce string) (*PaymentTran
 		&tx.PayerAddress,
 		&tx.ReceiverAddress,
 		&tx.Endpoint,
-		&amountStr,
+		&tx.AmountUSDC,
 		&tx.Network,
 		&tx.Status,
 		&tx.FacilitatorPaymentID,
@@ -157,11 +155,6 @@ func (db *DB) GetPaymentByNonce(ctx context.Context, nonce string) (*PaymentTran
 
 	if err != nil {
 		return nil, err
-	}
-
-	tx.AmountUSDC, err = decimal.NewFromString(amountStr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse amount: %w", err)
 	}
 
 	if serviceResultJSON != nil {
@@ -177,7 +170,7 @@ func (db *DB) GetPaymentByNonce(ctx context.Context, nonce string) (*PaymentTran
 func (db *DB) GetPaymentByID(ctx context.Context, id uuid.UUID) (*PaymentTransaction, error) {
 	query := `
 		SELECT id, payment_nonce, payment_header, payer_address, receiver_address,
-			   endpoint, amount_usdc::text, network, status, facilitator_payment_id,
+			   endpoint, amount_usdc, network, status, facilitator_payment_id,
 			   settlement_attempts, last_error, service_result,
 			   created_at, executed_at, settled_at, expires_at
 		FROM payment_transactions
@@ -186,7 +179,6 @@ func (db *DB) GetPaymentByID(ctx context.Context, id uuid.UUID) (*PaymentTransac
 
 	var tx PaymentTransaction
 	var serviceResultJSON []byte
-	var amountStr string
 	err := db.pool.QueryRow(ctx, query, id).Scan(
 		&tx.ID,
 		&tx.PaymentNonce,
@@ -194,7 +186,7 @@ func (db *DB) GetPaymentByID(ctx context.Context, id uuid.UUID) (*PaymentTransac
 		&tx.PayerAddress,
 		&tx.ReceiverAddress,
 		&tx.Endpoint,
-		&amountStr,
+		&tx.AmountUSDC,
 		&tx.Network,
 		&tx.Status,
 		&tx.FacilitatorPaymentID,
@@ -209,11 +201,6 @@ func (db *DB) GetPaymentByID(ctx context.Context, id uuid.UUID) (*PaymentTransac
 
 	if err != nil {
 		return nil, err
-	}
-
-	tx.AmountUSDC, err = decimal.NewFromString(amountStr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse amount: %w", err)
 	}
 
 	if serviceResultJSON != nil {
@@ -320,7 +307,7 @@ func (db *DB) GetPendingSettlements(ctx context.Context, maxAttempts int, limit 
 
 	query := `
 		SELECT id, payment_nonce, payment_header, payer_address, receiver_address,
-			   endpoint, amount_usdc::text, network, status, facilitator_payment_id,
+			   endpoint, amount_usdc, network, status, facilitator_payment_id,
 			   settlement_attempts, last_error, service_result,
 			   created_at, executed_at, settled_at, expires_at
 		FROM payment_transactions
@@ -342,7 +329,6 @@ func (db *DB) GetPendingSettlements(ctx context.Context, maxAttempts int, limit 
 	for rows.Next() {
 		var ptx PaymentTransaction
 		var serviceResultJSON []byte
-		var amountStr string
 		err := rows.Scan(
 			&ptx.ID,
 			&ptx.PaymentNonce,
@@ -350,7 +336,7 @@ func (db *DB) GetPendingSettlements(ctx context.Context, maxAttempts int, limit 
 			&ptx.PayerAddress,
 			&ptx.ReceiverAddress,
 			&ptx.Endpoint,
-			&amountStr,
+			&ptx.AmountUSDC,
 			&ptx.Network,
 			&ptx.Status,
 			&ptx.FacilitatorPaymentID,
@@ -365,12 +351,6 @@ func (db *DB) GetPendingSettlements(ctx context.Context, maxAttempts int, limit 
 		if err != nil {
 			_ = tx.Rollback(ctx)
 			return nil, nil, fmt.Errorf("failed to scan payment transaction: %w", err)
-		}
-
-		ptx.AmountUSDC, err = decimal.NewFromString(amountStr)
-		if err != nil {
-			_ = tx.Rollback(ctx)
-			return nil, nil, fmt.Errorf("failed to parse amount: %w", err)
 		}
 
 		if serviceResultJSON != nil {

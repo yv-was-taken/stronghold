@@ -12,7 +12,6 @@ import (
 	"stronghold/internal/db/testutil"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -372,21 +371,21 @@ func TestAccount_NotAuthenticated(t *testing.T) {
 
 func TestCalculateFee(t *testing.T) {
 	testCases := []struct {
-		amount      decimal.Decimal
+		amount      float64
 		provider    db.DepositProvider
-		expectedFee decimal.Decimal
+		expectedFee float64
 	}{
-		{decimal.NewFromFloat(10.00), db.DepositProviderStripe, decimal.NewFromFloat(10.00).Mul(decimal.NewFromFloat(0.029)).Add(decimal.NewFromFloat(0.30))},
-		{decimal.NewFromFloat(100.00), db.DepositProviderStripe, decimal.NewFromFloat(100.00).Mul(decimal.NewFromFloat(0.029)).Add(decimal.NewFromFloat(0.30))},
-		{decimal.NewFromFloat(1000.00), db.DepositProviderStripe, decimal.NewFromFloat(1000.00).Mul(decimal.NewFromFloat(0.029)).Add(decimal.NewFromFloat(0.30))},
-		{decimal.NewFromFloat(100.00), db.DepositProviderDirect, decimal.Zero},
-		{decimal.NewFromFloat(0.01), db.DepositProviderDirect, decimal.Zero},
+		{10.00, db.DepositProviderStripe, 10.00*0.029 + 0.30},
+		{100.00, db.DepositProviderStripe, 100.00*0.029 + 0.30},
+		{1000.00, db.DepositProviderStripe, 1000.00*0.029 + 0.30},
+		{100.00, db.DepositProviderDirect, 0},
+		{0.01, db.DepositProviderDirect, 0},
 	}
 
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			fee := calculateFee(tc.amount, tc.provider)
-			assert.True(t, tc.expectedFee.Equal(fee), "expected %s, got %s", tc.expectedFee, fee)
+			assert.InDelta(t, tc.expectedFee, fee, 0.001, "expected %f, got %f", tc.expectedFee, fee)
 		})
 	}
 }
@@ -405,9 +404,9 @@ func TestGetAccount_WithDeposits(t *testing.T) {
 	deposit := &db.Deposit{
 		AccountID:     account.ID,
 		Provider:      db.DepositProviderDirect,
-		AmountUSDC:    decimal.NewFromFloat(100.00),
-		FeeUSDC:       decimal.Zero,
-		NetAmountUSDC: decimal.NewFromFloat(100.00),
+		AmountUSDC:    100.00,
+		FeeUSDC:       0,
+		NetAmountUSDC: 100.00,
 	}
 	err = database.CreateDeposit(t.Context(), deposit)
 	require.NoError(t, err)

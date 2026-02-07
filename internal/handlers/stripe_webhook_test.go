@@ -16,7 +16,6 @@ import (
 	"stronghold/internal/db/testutil"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -143,9 +142,9 @@ func TestStripeWebhook_FulfillmentComplete(t *testing.T) {
 	deposit := &db.Deposit{
 		AccountID:     account.ID,
 		Provider:      db.DepositProviderStripe,
-		AmountUSDC:    decimal.NewFromFloat(50.00),
-		FeeUSDC:       decimal.NewFromFloat(1.75),
-		NetAmountUSDC: decimal.NewFromFloat(48.25),
+		AmountUSDC:    50.00,
+		FeeUSDC:       1.75,
+		NetAmountUSDC: 48.25,
 	}
 	err = database.CreateDeposit(t.Context(), deposit)
 	require.NoError(t, err)
@@ -208,9 +207,9 @@ func TestStripeWebhook_Idempotency(t *testing.T) {
 	deposit := &db.Deposit{
 		AccountID:     account.ID,
 		Provider:      db.DepositProviderStripe,
-		AmountUSDC:    decimal.NewFromFloat(100.00),
-		FeeUSDC:       decimal.NewFromFloat(3.20),
-		NetAmountUSDC: decimal.NewFromFloat(96.80),
+		AmountUSDC:    100.00,
+		FeeUSDC:       3.20,
+		NetAmountUSDC: 96.80,
 	}
 	err = database.CreateDeposit(t.Context(), deposit)
 	require.NoError(t, err)
@@ -277,9 +276,9 @@ func TestStripeWebhook_Rejected(t *testing.T) {
 	deposit := &db.Deposit{
 		AccountID:     account.ID,
 		Provider:      db.DepositProviderStripe,
-		AmountUSDC:    decimal.NewFromFloat(25.00),
-		FeeUSDC:       decimal.NewFromFloat(1.03),
-		NetAmountUSDC: decimal.NewFromFloat(23.97),
+		AmountUSDC:    25.00,
+		FeeUSDC:       1.03,
+		NetAmountUSDC: 23.97,
 	}
 	err = database.CreateDeposit(t.Context(), deposit)
 	require.NoError(t, err)
@@ -336,9 +335,9 @@ func TestStripeWebhook_IntermediateStatus(t *testing.T) {
 	deposit := &db.Deposit{
 		AccountID:     account.ID,
 		Provider:      db.DepositProviderStripe,
-		AmountUSDC:    decimal.NewFromFloat(75.00),
-		FeeUSDC:       decimal.NewFromFloat(2.48),
-		NetAmountUSDC: decimal.NewFromFloat(72.52),
+		AmountUSDC:    75.00,
+		FeeUSDC:       2.48,
+		NetAmountUSDC: 72.52,
 	}
 	err = database.CreateDeposit(t.Context(), deposit)
 	require.NoError(t, err)

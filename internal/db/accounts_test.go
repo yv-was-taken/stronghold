@@ -8,7 +8,6 @@ import (
 	"stronghold/internal/db/testutil"
 
 	"github.com/google/uuid"
-	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -267,16 +266,15 @@ func TestUpdateBalance(t *testing.T) {
 
 	account, err := db.CreateAccount(ctx, nil)
 	require.NoError(t, err)
-	assert.True(t, decimal.Zero.Equal(account.BalanceUSDC))
+	assert.Equal(t, 0.0, account.BalanceUSDC)
 
 	// Update balance
-	newBalance := decimal.NewFromFloat(100.50)
-	err = db.UpdateBalance(ctx, account.ID, newBalance)
+	err = db.UpdateBalance(ctx, account.ID, 100.50)
 	require.NoError(t, err)
 
 	found, err := db.GetAccountByID(ctx, account.ID)
 	require.NoError(t, err)
-	assert.True(t, newBalance.Equal(found.BalanceUSDC))
+	assert.Equal(t, 100.50, found.BalanceUSDC)
 }
 
 func TestAccountExists(t *testing.T) {

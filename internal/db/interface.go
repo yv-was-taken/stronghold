@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/shopspring/decimal"
 )
 
 // Database defines the interface for all database operations
@@ -25,7 +24,7 @@ type Database interface {
 	UpdateAccount(ctx context.Context, account *Account) error
 	UpdateLastLogin(ctx context.Context, accountID uuid.UUID) error
 	LinkWallet(ctx context.Context, accountID uuid.UUID, walletAddress string) error
-	UpdateBalance(ctx context.Context, accountID uuid.UUID, newBalance decimal.Decimal) error
+	UpdateBalance(ctx context.Context, accountID uuid.UUID, newBalance float64) error
 	SuspendAccount(ctx context.Context, accountID uuid.UUID) error
 	CloseAccount(ctx context.Context, accountID uuid.UUID) error
 	AccountExists(ctx context.Context, accountNumber string) (bool, error)

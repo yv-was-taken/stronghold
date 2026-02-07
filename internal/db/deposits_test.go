@@ -7,7 +7,6 @@ import (
 	"stronghold/internal/db/testutil"
 
 	"github.com/google/uuid"
-	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,16 +21,15 @@ func TestCompleteDeposit_UpdatesBalance(t *testing.T) {
 	// Create account with 0 balance
 	account, err := db.CreateAccount(ctx, nil)
 	require.NoError(t, err)
-	assert.True(t, decimal.Zero.Equal(account.BalanceUSDC))
+	assert.Equal(t, 0.0, account.BalanceUSDC)
 
 	// Create a direct deposit (no fee)
-	amount := decimal.NewFromFloat(50.00)
 	deposit := &Deposit{
 		AccountID:     account.ID,
 		Provider:      DepositProviderDirect,
-		AmountUSDC:    amount,
-		FeeUSDC:       decimal.Zero,
-		NetAmountUSDC: amount,
+		AmountUSDC:    50.00,
+		FeeUSDC:       0.0,
+		NetAmountUSDC: 50.00,
 	}
 
 	err = db.CreateDeposit(ctx, deposit)
@@ -45,7 +43,7 @@ func TestCompleteDeposit_UpdatesBalance(t *testing.T) {
 	// Verify account balance increased by net amount
 	updatedAccount, err := db.GetAccountByID(ctx, account.ID)
 	require.NoError(t, err)
-	assert.True(t, amount.Equal(updatedAccount.BalanceUSDC))
+	assert.InDelta(t, 50.00, updatedAccount.BalanceUSDC, 0.01)
 
 	// Verify deposit status
 	updatedDeposit, err := db.GetDepositByID(ctx, deposit.ID)
@@ -69,9 +67,9 @@ func TestCompleteDeposit_Atomic(t *testing.T) {
 	deposit := &Deposit{
 		AccountID:     account.ID,
 		Provider:      DepositProviderDirect,
-		AmountUSDC:    decimal.NewFromFloat(100.00),
-		FeeUSDC:       decimal.Zero,
-		NetAmountUSDC: decimal.NewFromFloat(100.00),
+		AmountUSDC:    100.00,
+		FeeUSDC:       0.0,
+		NetAmountUSDC: 100.00,
 	}
 	err = db.CreateDeposit(ctx, deposit)
 	require.NoError(t, err)
@@ -88,22 +86,22 @@ func TestCompleteDeposit_Atomic(t *testing.T) {
 	// Verify balance only increased once
 	updatedAccount, err := db.GetAccountByID(ctx, account.ID)
 	require.NoError(t, err)
-	assert.True(t, decimal.NewFromFloat(100.00).Equal(updatedAccount.BalanceUSDC))
+	assert.InDelta(t, 100.00, updatedAccount.BalanceUSDC, 0.01)
 }
 
 func TestStripeFeeCalculation(t *testing.T) {
 	// Test the fee calculation formula: 2.9% + $0.30
-	rate := decimal.NewFromFloat(0.029)
-	flat := decimal.NewFromFloat(0.30)
+	rate := 0.029
+	flat := 0.30
 	testCases := []struct {
-		name           string
-		amount         decimal.Decimal
-		expectedFee    decimal.Decimal
-		expectedNet    decimal.Decimal
+		name        string
+		amount      float64
+		expectedFee float64
+		expectedNet float64
 	}{
-		{"$10 deposit", decimal.NewFromFloat(10.00), decimal.NewFromFloat(10.00).Mul(rate).Add(flat), decimal.NewFromFloat(10.00).Sub(decimal.NewFromFloat(10.00).Mul(rate).Add(flat))},
-		{"$100 deposit", decimal.NewFromFloat(100.00), decimal.NewFromFloat(100.00).Mul(rate).Add(flat), decimal.NewFromFloat(100.00).Sub(decimal.NewFromFloat(100.00).Mul(rate).Add(flat))},
-		{"$1000 deposit", decimal.NewFromFloat(1000.00), decimal.NewFromFloat(1000.00).Mul(rate).Add(flat), decimal.NewFromFloat(1000.00).Sub(decimal.NewFromFloat(1000.00).Mul(rate).Add(flat))},
+		{"$10 deposit", 10.00, 10.00*rate + flat, 10.00 - (10.00*rate + flat)},
+		{"$100 deposit", 100.00, 100.00*rate + flat, 100.00 - (100.00*rate + flat)},
+		{"$1000 deposit", 1000.00, 1000.00*rate + flat, 1000.00 - (1000.00*rate + flat)},
 	}
 
 	for _, tc := range testCases {
@@ -118,21 +116,21 @@ func TestStripeFeeCalculation(t *testing.T) {
 			require.NoError(t, err)
 
 			// Create Stripe deposit with calculated fee
-			fee := tc.amount.Mul(rate).Add(flat)
+			fee := tc.amount*rate + flat
 			deposit := &Deposit{
 				AccountID:     account.ID,
 				Provider:      DepositProviderStripe,
 				AmountUSDC:    tc.amount,
 				FeeUSDC:       fee,
-				NetAmountUSDC: tc.amount.Sub(fee),
+				NetAmountUSDC: tc.amount - fee,
 			}
 
 			err = db.CreateDeposit(ctx, deposit)
 			require.NoError(t, err)
 
 			// Verify fee calculation
-			assert.True(t, tc.expectedFee.Equal(deposit.FeeUSDC), "expected fee %s, got %s", tc.expectedFee, deposit.FeeUSDC)
-			assert.True(t, tc.expectedNet.Equal(deposit.NetAmountUSDC), "expected net %s, got %s", tc.expectedNet, deposit.NetAmountUSDC)
+			assert.InDelta(t, tc.expectedFee, deposit.FeeUSDC, 0.001, "expected fee %f, got %f", tc.expectedFee, deposit.FeeUSDC)
+			assert.InDelta(t, tc.expectedNet, deposit.NetAmountUSDC, 0.001, "expected net %f, got %f", tc.expectedNet, deposit.NetAmountUSDC)
 
 			// Complete and verify account receives net amount
 			err = db.CompleteDeposit(ctx, deposit.ID)
@@ -140,7 +138,7 @@ func TestStripeFeeCalculation(t *testing.T) {
 
 			updatedAccount, err := db.GetAccountByID(ctx, account.ID)
 			require.NoError(t, err)
-			assert.True(t, tc.expectedNet.Equal(updatedAccount.BalanceUSDC), "expected balance %s, got %s", tc.expectedNet, updatedAccount.BalanceUSDC)
+			assert.InDelta(t, tc.expectedNet, updatedAccount.BalanceUSDC, 0.01, "expected balance %f, got %f", tc.expectedNet, updatedAccount.BalanceUSDC)
 		})
 	}
 }
@@ -157,12 +155,12 @@ func TestGetDepositsByAccount_Pagination(t *testing.T) {
 
 	// Create multiple deposits
 	for i := 0; i < 10; i++ {
-		amt := decimal.NewFromInt(int64((i + 1) * 10))
+		amt := float64((i + 1) * 10)
 		deposit := &Deposit{
 			AccountID:     account.ID,
 			Provider:      DepositProviderDirect,
 			AmountUSDC:    amt,
-			FeeUSDC:       decimal.Zero,
+			FeeUSDC:       0.0,
 			NetAmountUSDC: amt,
 		}
 		err = db.CreateDeposit(ctx, deposit)
@@ -212,9 +210,9 @@ func TestFailDeposit(t *testing.T) {
 	deposit := &Deposit{
 		AccountID:     account.ID,
 		Provider:      DepositProviderStripe,
-		AmountUSDC:    decimal.NewFromFloat(100.00),
-		FeeUSDC:       decimal.NewFromFloat(3.20),
-		NetAmountUSDC: decimal.NewFromFloat(96.80),
+		AmountUSDC:    100.00,
+		FeeUSDC:       3.20,
+		NetAmountUSDC: 96.80,
 	}
 	err = db.CreateDeposit(ctx, deposit)
 	require.NoError(t, err)
@@ -234,7 +232,7 @@ func TestFailDeposit(t *testing.T) {
 	// Account balance should NOT have changed
 	acc, err := db.GetAccountByID(ctx, account.ID)
 	require.NoError(t, err)
-	assert.True(t, decimal.Zero.Equal(acc.BalanceUSDC))
+	assert.Equal(t, 0.0, acc.BalanceUSDC)
 }
 
 func TestGetDepositByProviderTransactionID(t *testing.T) {
@@ -251,9 +249,9 @@ func TestGetDepositByProviderTransactionID(t *testing.T) {
 	deposit := &Deposit{
 		AccountID:             account.ID,
 		Provider:              DepositProviderStripe,
-		AmountUSDC:            decimal.NewFromFloat(50.00),
-		FeeUSDC:               decimal.NewFromFloat(1.75),
-		NetAmountUSDC:         decimal.NewFromFloat(48.25),
+		AmountUSDC:            50.00,
+		FeeUSDC:               1.75,
+		NetAmountUSDC:         48.25,
 		ProviderTransactionID: &providerTxID,
 	}
 	err = db.CreateDeposit(ctx, deposit)
@@ -276,13 +274,13 @@ func TestGetDepositStats(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create and complete some deposits
-	completedAmounts := []decimal.Decimal{decimal.NewFromFloat(100.00), decimal.NewFromFloat(50.00), decimal.NewFromFloat(25.00)}
+	completedAmounts := []float64{100.00, 50.00, 25.00}
 	for _, amount := range completedAmounts {
 		deposit := &Deposit{
 			AccountID:     account.ID,
 			Provider:      DepositProviderDirect,
 			AmountUSDC:    amount,
-			FeeUSDC:       decimal.Zero,
+			FeeUSDC:       0.0,
 			NetAmountUSDC: amount,
 		}
 		err = db.CreateDeposit(ctx, deposit)
@@ -295,9 +293,9 @@ func TestGetDepositStats(t *testing.T) {
 	pendingDeposit := &Deposit{
 		AccountID:     account.ID,
 		Provider:      DepositProviderStripe,
-		AmountUSDC:    decimal.NewFromFloat(200.00),
-		FeeUSDC:       decimal.NewFromFloat(6.10),
-		NetAmountUSDC: decimal.NewFromFloat(193.90),
+		AmountUSDC:    200.00,
+		FeeUSDC:       6.10,
+		NetAmountUSDC: 193.90,
 	}
 	err = db.CreateDeposit(ctx, pendingDeposit)
 	require.NoError(t, err)
@@ -307,8 +305,8 @@ func TestGetDepositStats(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, int64(4), stats.TotalDeposits)
-	assert.True(t, decimal.NewFromFloat(175.00).Equal(stats.TotalDepositedUSDC)) // 100+50+25
-	assert.True(t, decimal.NewFromFloat(200.00).Equal(stats.PendingAmountUSDC))  // The pending Stripe deposit amount
+	assert.InDelta(t, 175.00, stats.TotalDepositedUSDC, 0.01) // 100+50+25
+	assert.InDelta(t, 200.00, stats.PendingAmountUSDC, 0.01)  // The pending Stripe deposit amount
 }
 
 func TestGetPendingDeposits(t *testing.T) {
@@ -323,12 +321,12 @@ func TestGetPendingDeposits(t *testing.T) {
 
 	// Create pending deposits
 	for i := 0; i < 3; i++ {
-		amt := decimal.NewFromInt(int64((i + 1) * 10))
+		amt := float64((i + 1) * 10)
 		deposit := &Deposit{
 			AccountID:     account.ID,
 			Provider:      DepositProviderDirect,
 			AmountUSDC:    amt,
-			FeeUSDC:       decimal.Zero,
+			FeeUSDC:       0.0,
 			NetAmountUSDC: amt,
 		}
 		err = db.CreateDeposit(ctx, deposit)
@@ -339,9 +337,9 @@ func TestGetPendingDeposits(t *testing.T) {
 	completedDeposit := &Deposit{
 		AccountID:     account.ID,
 		Provider:      DepositProviderDirect,
-		AmountUSDC:    decimal.NewFromFloat(100.00),
-		FeeUSDC:       decimal.Zero,
-		NetAmountUSDC: decimal.NewFromFloat(100.00),
+		AmountUSDC:    100.00,
+		FeeUSDC:       0.0,
+		NetAmountUSDC: 100.00,
 	}
 	err = db.CreateDeposit(ctx, completedDeposit)
 	require.NoError(t, err)
@@ -384,9 +382,9 @@ func TestUpdateDepositStatus(t *testing.T) {
 	deposit := &Deposit{
 		AccountID:     account.ID,
 		Provider:      DepositProviderDirect,
-		AmountUSDC:    decimal.NewFromFloat(50.00),
-		FeeUSDC:       decimal.Zero,
-		NetAmountUSDC: decimal.NewFromFloat(50.00),
+		AmountUSDC:    50.00,
+		FeeUSDC:       0.0,
+		NetAmountUSDC: 50.00,
 	}
 	err = db.CreateDeposit(ctx, deposit)
 	require.NoError(t, err)
@@ -411,14 +409,14 @@ func TestDeposit_NetAmountCalculatedCorrectly(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create deposit where net should equal amount - fee
-	amount := decimal.NewFromFloat(100.00)
-	fee := decimal.NewFromFloat(3.20)
+	amount := 100.00
+	fee := 3.20
 	deposit := &Deposit{
 		AccountID:     account.ID,
 		Provider:      DepositProviderStripe,
 		AmountUSDC:    amount,
 		FeeUSDC:       fee,
-		NetAmountUSDC: amount.Sub(fee), // This should be set correctly
+		NetAmountUSDC: amount - fee,
 	}
 
 	err = db.CreateDeposit(ctx, deposit)
@@ -427,5 +425,5 @@ func TestDeposit_NetAmountCalculatedCorrectly(t *testing.T) {
 	// Verify net amount
 	retrieved, err := db.GetDepositByID(ctx, deposit.ID)
 	require.NoError(t, err)
-	assert.True(t, amount.Sub(fee).Equal(retrieved.NetAmountUSDC))
+	assert.InDelta(t, amount-fee, retrieved.NetAmountUSDC, 0.001)
 }

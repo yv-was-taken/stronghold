@@ -6,33 +6,32 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/shopspring/decimal"
 )
 
 // UsageLog represents a single API usage record
 type UsageLog struct {
-	ID                uuid.UUID       `json:"id"`
-	AccountID         uuid.UUID       `json:"account_id"`
-	RequestID         string          `json:"request_id"`
-	Endpoint          string          `json:"endpoint"`
-	Method            string          `json:"method"`
-	CostUSDC          decimal.Decimal `json:"cost_usdc"`
-	Status            string          `json:"status"`
-	ThreatDetected    bool            `json:"threat_detected"`
-	ThreatType        *string         `json:"threat_type,omitempty"`
-	RequestSizeBytes  *int            `json:"request_size_bytes,omitempty"`
-	ResponseSizeBytes *int            `json:"response_size_bytes,omitempty"`
-	LatencyMs         *int            `json:"latency_ms,omitempty"`
-	Metadata          map[string]any  `json:"metadata,omitempty"`
-	CreatedAt         time.Time       `json:"created_at"`
+	ID                uuid.UUID      `json:"id"`
+	AccountID         uuid.UUID      `json:"account_id"`
+	RequestID         string         `json:"request_id"`
+	Endpoint          string         `json:"endpoint"`
+	Method            string         `json:"method"`
+	CostUSDC          float64        `json:"cost_usdc"`
+	Status            string         `json:"status"`
+	ThreatDetected    bool           `json:"threat_detected"`
+	ThreatType        *string        `json:"threat_type,omitempty"`
+	RequestSizeBytes  *int           `json:"request_size_bytes,omitempty"`
+	ResponseSizeBytes *int           `json:"response_size_bytes,omitempty"`
+	LatencyMs         *int           `json:"latency_ms,omitempty"`
+	Metadata          map[string]any `json:"metadata,omitempty"`
+	CreatedAt         time.Time      `json:"created_at"`
 }
 
 // UsageStats represents aggregated usage statistics
 type UsageStats struct {
-	TotalRequests   int64           `json:"total_requests"`
-	TotalCostUSDC   decimal.Decimal `json:"total_cost_usdc"`
-	ThreatsDetected int64           `json:"threats_detected"`
-	AvgLatencyMs    float64         `json:"avg_latency_ms"`
+	TotalRequests   int64   `json:"total_requests"`
+	TotalCostUSDC   float64 `json:"total_cost_usdc"`
+	ThreatsDetected int64   `json:"threats_detected"`
+	AvgLatencyMs    float64 `json:"avg_latency_ms"`
 }
 
 // CreateUsageLog creates a new usage log entry
@@ -45,9 +44,9 @@ func (db *DB) CreateUsageLog(ctx context.Context, log *UsageLog) error {
 			id, account_id, request_id, endpoint, method, cost_usdc, status,
 			threat_detected, threat_type, request_size_bytes, response_size_bytes,
 			latency_ms, metadata, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6::numeric, $7, $8, $9, $10, $11, $12, $13, $14)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 	`, log.ID, log.AccountID, log.RequestID, log.Endpoint, log.Method,
-		log.CostUSDC.String(), log.Status, log.ThreatDetected, log.ThreatType,
+		log.CostUSDC, log.Status, log.ThreatDetected, log.ThreatType,
 		log.RequestSizeBytes, log.ResponseSizeBytes, log.LatencyMs,
 		log.Metadata, log.CreatedAt)
 
@@ -68,7 +67,7 @@ func (db *DB) GetUsageLogs(ctx context.Context, accountID uuid.UUID, limit, offs
 	}
 
 	rows, err := db.pool.Query(ctx, `
-		SELECT id, account_id, request_id, endpoint, method, cost_usdc::text, status,
+		SELECT id, account_id, request_id, endpoint, method, cost_usdc, status,
 		       threat_detected, threat_type, request_size_bytes, response_size_bytes,
 		       latency_ms, metadata, created_at
 		FROM usage_logs
@@ -85,19 +84,14 @@ func (db *DB) GetUsageLogs(ctx context.Context, accountID uuid.UUID, limit, offs
 	var logs []*UsageLog
 	for rows.Next() {
 		log := &UsageLog{}
-		var costStr string
 		err := rows.Scan(
 			&log.ID, &log.AccountID, &log.RequestID, &log.Endpoint, &log.Method,
-			&costStr, &log.Status, &log.ThreatDetected, &log.ThreatType,
+			&log.CostUSDC, &log.Status, &log.ThreatDetected, &log.ThreatType,
 			&log.RequestSizeBytes, &log.ResponseSizeBytes, &log.LatencyMs,
 			&log.Metadata, &log.CreatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan usage log: %w", err)
-		}
-		log.CostUSDC, err = decimal.NewFromString(costStr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse cost: %w", err)
 		}
 		logs = append(logs, log)
 	}
@@ -120,7 +114,7 @@ func (db *DB) GetUsageLogsByDateRange(ctx context.Context, accountID uuid.UUID, 
 	}
 
 	rows, err := db.pool.Query(ctx, `
-		SELECT id, account_id, request_id, endpoint, method, cost_usdc::text, status,
+		SELECT id, account_id, request_id, endpoint, method, cost_usdc, status,
 		       threat_detected, threat_type, request_size_bytes, response_size_bytes,
 		       latency_ms, metadata, created_at
 		FROM usage_logs
@@ -137,19 +131,14 @@ func (db *DB) GetUsageLogsByDateRange(ctx context.Context, accountID uuid.UUID, 
 	var logs []*UsageLog
 	for rows.Next() {
 		log := &UsageLog{}
-		var costStr string
 		err := rows.Scan(
 			&log.ID, &log.AccountID, &log.RequestID, &log.Endpoint, &log.Method,
-			&costStr, &log.Status, &log.ThreatDetected, &log.ThreatType,
+			&log.CostUSDC, &log.Status, &log.ThreatDetected, &log.ThreatType,
 			&log.RequestSizeBytes, &log.ResponseSizeBytes, &log.LatencyMs,
 			&log.Metadata, &log.CreatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan usage log: %w", err)
-		}
-		log.CostUSDC, err = decimal.NewFromString(costStr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse cost: %w", err)
 		}
 		logs = append(logs, log)
 	}
@@ -164,30 +153,24 @@ func (db *DB) GetUsageLogsByDateRange(ctx context.Context, accountID uuid.UUID, 
 // GetUsageStats retrieves aggregated usage statistics for an account
 func (db *DB) GetUsageStats(ctx context.Context, accountID uuid.UUID, start, end time.Time) (*UsageStats, error) {
 	stats := &UsageStats{}
-	var totalCostStr string
 
 	err := db.QueryRow(ctx, `
 		SELECT
 			COALESCE(COUNT(*), 0) as total_requests,
-			COALESCE(SUM(cost_usdc), 0)::text as total_cost_usdc,
+			COALESCE(SUM(cost_usdc), 0) as total_cost_usdc,
 			COALESCE(SUM(CASE WHEN threat_detected THEN 1 ELSE 0 END), 0) as threats_detected,
 			COALESCE(AVG(latency_ms), 0) as avg_latency_ms
 		FROM usage_logs
 		WHERE account_id = $1 AND created_at >= $2 AND created_at <= $3
 	`, accountID, start, end).Scan(
 		&stats.TotalRequests,
-		&totalCostStr,
+		&stats.TotalCostUSDC,
 		&stats.ThreatsDetected,
 		&stats.AvgLatencyMs,
 	)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get usage stats: %w", err)
-	}
-
-	stats.TotalCostUSDC, err = decimal.NewFromString(totalCostStr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse total cost: %w", err)
 	}
 
 	return stats, nil
@@ -208,7 +191,7 @@ func (db *DB) GetDailyUsageStats(ctx context.Context, accountID uuid.UUID, days 
 		SELECT
 			DATE(created_at) as date,
 			COUNT(*) as request_count,
-			SUM(cost_usdc)::text as total_cost_usdc,
+			SUM(cost_usdc) as total_cost_usdc,
 			SUM(CASE WHEN threat_detected THEN 1 ELSE 0 END) as threats_detected
 		FROM usage_logs
 		WHERE account_id = $1 AND created_at >= $2
@@ -225,16 +208,11 @@ func (db *DB) GetDailyUsageStats(ctx context.Context, accountID uuid.UUID, days 
 	for rows.Next() {
 		stat := &DailyUsageStats{}
 		var date time.Time
-		var totalCostStr string
-		err := rows.Scan(&date, &stat.RequestCount, &totalCostStr, &stat.ThreatsDetected)
+		err := rows.Scan(&date, &stat.RequestCount, &stat.TotalCostUSDC, &stat.ThreatsDetected)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan daily usage stats: %w", err)
 		}
 		stat.Date = date.Format("2006-01-02")
-		stat.TotalCostUSDC, err = decimal.NewFromString(totalCostStr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse daily total cost: %w", err)
-		}
 		stats = append(stats, stat)
 	}
 
@@ -247,10 +225,10 @@ func (db *DB) GetDailyUsageStats(ctx context.Context, accountID uuid.UUID, days 
 
 // DailyUsageStats represents usage statistics for a single day
 type DailyUsageStats struct {
-	Date            string          `json:"date"`
-	RequestCount    int64           `json:"request_count"`
-	TotalCostUSDC   decimal.Decimal `json:"total_cost_usdc"`
-	ThreatsDetected int64           `json:"threats_detected"`
+	Date            string  `json:"date"`
+	RequestCount    int64   `json:"request_count"`
+	TotalCostUSDC   float64 `json:"total_cost_usdc"`
+	ThreatsDetected int64   `json:"threats_detected"`
 }
 
 // GetEndpointUsageStats retrieves usage statistics grouped by endpoint
@@ -260,7 +238,7 @@ func (db *DB) GetEndpointUsageStats(ctx context.Context, accountID uuid.UUID, st
 			endpoint,
 			method,
 			COUNT(*) as request_count,
-			SUM(cost_usdc)::text as total_cost_usdc,
+			SUM(cost_usdc) as total_cost_usdc,
 			AVG(latency_ms) as avg_latency_ms
 		FROM usage_logs
 		WHERE account_id = $1 AND created_at >= $2 AND created_at <= $3
@@ -276,17 +254,12 @@ func (db *DB) GetEndpointUsageStats(ctx context.Context, accountID uuid.UUID, st
 	var stats []*EndpointUsageStats
 	for rows.Next() {
 		stat := &EndpointUsageStats{}
-		var totalCostStr string
 		err := rows.Scan(
 			&stat.Endpoint, &stat.Method, &stat.RequestCount,
-			&totalCostStr, &stat.AvgLatencyMs,
+			&stat.TotalCostUSDC, &stat.AvgLatencyMs,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan endpoint usage stats: %w", err)
-		}
-		stat.TotalCostUSDC, err = decimal.NewFromString(totalCostStr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse endpoint total cost: %w", err)
 		}
 		stats = append(stats, stat)
 	}
@@ -300,9 +273,9 @@ func (db *DB) GetEndpointUsageStats(ctx context.Context, accountID uuid.UUID, st
 
 // EndpointUsageStats represents usage statistics for a single endpoint
 type EndpointUsageStats struct {
-	Endpoint      string          `json:"endpoint"`
-	Method        string          `json:"method"`
-	RequestCount  int64           `json:"request_count"`
-	TotalCostUSDC decimal.Decimal `json:"total_cost_usdc"`
-	AvgLatencyMs  float64         `json:"avg_latency_ms"`
+	Endpoint      string  `json:"endpoint"`
+	Method        string  `json:"method"`
+	RequestCount  int64   `json:"request_count"`
+	TotalCostUSDC float64 `json:"total_cost_usdc"`
+	AvgLatencyMs  float64 `json:"avg_latency_ms"`
 }

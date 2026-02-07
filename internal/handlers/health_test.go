@@ -58,7 +58,7 @@ func TestHealth_AllUp(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "healthy", body.Status)
-	assert.Equal(t, "1.0.0", body.Version)
+	assert.Equal(t, "dev", body.Version)
 	assert.Equal(t, "up", body.Services["database"])
 	assert.Equal(t, "up", body.Services["api"])
 	assert.Equal(t, "up", body.Services["x402"])
@@ -147,6 +147,9 @@ func TestHealth_X402Down(t *testing.T) {
 
 	database := createTestDBWrapper(testDB)
 
+	// Clear cached facilitator status from previous tests
+	resetFacilitatorCache()
+
 	// Use a non-existent URL for the facilitator
 	cfg := &config.Config{
 		X402: config.X402Config{
@@ -178,6 +181,9 @@ func TestHealthReady_X402Down(t *testing.T) {
 	defer testDB.Close(t)
 
 	database := createTestDBWrapper(testDB)
+
+	// Clear cached facilitator status from previous tests
+	resetFacilitatorCache()
 
 	cfg := &config.Config{
 		X402: config.X402Config{

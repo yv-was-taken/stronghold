@@ -6,8 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/shopspring/decimal"
 )
 
 // Environment represents the runtime environment
@@ -104,8 +102,8 @@ type StrongholdConfig struct {
 
 // PricingConfig holds endpoint pricing in USD
 type PricingConfig struct {
-	ScanContent decimal.Decimal
-	ScanOutput  decimal.Decimal
+	ScanContent float64
+	ScanOutput  float64
 }
 
 // RateLimitConfig holds rate limiting configuration
@@ -186,8 +184,8 @@ func Load() *Config {
 			LLMAPIKey:       getEnv("STRONGHOLD_LLM_API_KEY", ""),
 		},
 		Pricing: PricingConfig{
-			ScanContent: getDecimal("PRICE_SCAN_CONTENT", decimal.NewFromFloat(0.002)),
-			ScanOutput:  getDecimal("PRICE_SCAN_OUTPUT", decimal.NewFromFloat(0.002)),
+			ScanContent: getFloat("PRICE_SCAN_CONTENT", 0.002),
+			ScanOutput:  getFloat("PRICE_SCAN_OUTPUT", 0.002),
 		},
 		RateLimit: RateLimitConfig{
 			Enabled:       getBool("RATE_LIMIT_ENABLED", true),
@@ -241,15 +239,6 @@ func getInt(key string, defaultValue int) int {
 func getDuration(key string, defaultValue time.Duration) time.Duration {
 	if value := os.Getenv(key); value != "" {
 		if d, err := time.ParseDuration(value); err == nil {
-			return d
-		}
-	}
-	return defaultValue
-}
-
-func getDecimal(key string, defaultValue decimal.Decimal) decimal.Decimal {
-	if value := os.Getenv(key); value != "" {
-		if d, err := decimal.NewFromString(value); err == nil {
 			return d
 		}
 	}

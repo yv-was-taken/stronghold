@@ -16,7 +16,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gofiber/fiber/v3"
-	"github.com/shopspring/decimal"
 )
 
 // X402Middleware creates x402 payment verification middleware
@@ -72,7 +71,7 @@ func (m *X402Middleware) createFacilitatorRequest(method, url string, body []byt
 type PriceRoute struct {
 	Path   string
 	Method string
-	Price  decimal.Decimal
+	Price  float64
 }
 
 // GetRoutes returns all priced routes
@@ -89,7 +88,7 @@ func (m *X402Middleware) GetNetwork() string {
 }
 
 // RequirePayment returns middleware that requires x402 payment
-func (m *X402Middleware) RequirePayment(price decimal.Decimal) fiber.Handler {
+func (m *X402Middleware) RequirePayment(price float64) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		// Skip if wallet address not configured (allow all in dev mode)
 		if m.config.WalletAddress == "" {
@@ -120,7 +119,7 @@ func (m *X402Middleware) RequirePayment(price decimal.Decimal) fiber.Handler {
 // AtomicPayment returns middleware that implements the reserve-commit pattern for atomic payments.
 // It ensures that either both service execution and payment settlement succeed, or neither does.
 // If settlement fails, a 503 is returned and the service result is not delivered.
-func (m *X402Middleware) AtomicPayment(price decimal.Decimal) fiber.Handler {
+func (m *X402Middleware) AtomicPayment(price float64) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		// Skip if wallet address not configured (allow all in dev mode)
 		if m.config.WalletAddress == "" {
@@ -482,10 +481,10 @@ func (m *X402Middleware) PaymentResponse(c fiber.Ctx, paymentID string) {
 
 // decimalToWei converts a dollar amount to USDC atomic units (6 decimals)
 // For example: $0.001 -> 1000 units, $1.00 -> 1000000 units
-func decimalToWei(amount decimal.Decimal) *big.Int {
+func decimalToWei(amount float64) *big.Int {
 	// USDC has 6 decimals, so multiply by 10^6
-	shifted := amount.Shift(6)
-	return shifted.BigInt()
+	units := int64(amount * 1e6)
+	return big.NewInt(units)
 }
 
 // IsFreeRoute checks if a route doesn't require payment
@@ -520,7 +519,7 @@ func (m *X402Middleware) Middleware() fiber.Handler {
 
 		// Get price for this route
 		price := m.getPriceForRoute(path, c.Method())
-		if price.IsZero() {
+		if price == 0 {
 			// No price set, allow through
 			return c.Next()
 		}
@@ -544,13 +543,13 @@ func (m *X402Middleware) Middleware() fiber.Handler {
 }
 
 // getPriceForRoute returns the price for a given route
-func (m *X402Middleware) getPriceForRoute(path, method string) decimal.Decimal {
+func (m *X402Middleware) getPriceForRoute(path, method string) float64 {
 	routes := m.GetRoutes()
 	for _, route := range routes {
 		if strings.HasPrefix(path, route.Path) && method == route.Method {
 			return route.Price
 		}
 	}
-	return decimal.Zero
+	return 0
 }
 
