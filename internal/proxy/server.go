@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -391,8 +392,10 @@ func (s *Server) handleConnection(conn net.Conn) {
 		return
 	}
 
-	// Reset deadline
-	conn.SetReadDeadline(time.Time{})
+	// Set a handshake deadline instead of clearing completely.
+	// This prevents the TLS handshake or SNI extraction from hanging indefinitely.
+	// The MITM handler sets its own tighter deadline and clears it after handshake.
+	conn.SetDeadline(time.Now().Add(30 * time.Second))
 
 	// Create a connection that includes the peeked byte
 	prefixedConn := newPrefixedConn(conn, buf[:n])
@@ -496,18 +499,25 @@ func (s *Server) tunnelConnection(conn net.Conn) {
 	}
 	defer destConn.Close()
 
-	// Bidirectional copy
+	// Bidirectional copy with error logging and half-close propagation
 	done := make(chan struct{})
 	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				s.logger.Error("panic in tunnel goroutine", "panic", r)
-			}
-			close(done)
-		}()
-		io.Copy(destConn, tunnelConn)
+		defer close(done)
+		_, err := io.Copy(destConn, tunnelConn)
+		if err != nil && !errors.Is(err, net.ErrClosed) {
+			s.logger.Debug("tunnel upstream copy error", "error", err)
+		}
+		if tc, ok := destConn.(*net.TCPConn); ok {
+			tc.CloseWrite()
+		}
 	}()
-	io.Copy(tunnelConn, destConn)
+	_, err = io.Copy(tunnelConn, destConn)
+	if err != nil && !errors.Is(err, net.ErrClosed) {
+		s.logger.Debug("tunnel downstream copy error", "error", err)
+	}
+	if tc, ok := tunnelConn.(*net.TCPConn); ok {
+		tc.CloseWrite()
+	}
 	<-done
 }
 

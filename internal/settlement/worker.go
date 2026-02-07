@@ -187,6 +187,12 @@ func (w *Worker) retryFailedSettlements(ctx context.Context) {
 		default:
 		}
 
+		// Skip payments with nil ExecutedAt (shouldn't happen but prevents panic)
+		if payment.ExecutedAt == nil {
+			slog.Warn("payment has nil ExecutedAt, skipping", "id", payment.ID)
+			continue
+		}
+
 		// Calculate backoff delay based on attempt number
 		backoff := w.calculateBackoff(payment.SettlementAttempts)
 		timeSinceExecution := time.Since(*payment.ExecutedAt)

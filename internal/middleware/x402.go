@@ -433,6 +433,25 @@ func (m *X402Middleware) settlePayment(paymentHeader string) (string, error) {
 		return "", fmt.Errorf("failed to create settle request: %w", err)
 	}
 	resp, err := m.httpClient.Do(req)
+
+	// Retry once on transient errors (connection errors, timeouts, 5xx)
+	if err != nil || (resp != nil && resp.StatusCode >= 500) {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		if err != nil {
+			slog.Warn("facilitator settle failed, retrying once", "error", err)
+		} else {
+			slog.Warn("facilitator settle returned 5xx, retrying once", "status", resp.StatusCode)
+		}
+		time.Sleep(500 * time.Millisecond)
+		retryReq, retryErr := m.createFacilitatorRequest("POST", facilitatorURL+"/settle", settleBody)
+		if retryErr != nil {
+			return "", fmt.Errorf("failed to create settle retry request: %w", retryErr)
+		}
+		resp, err = m.httpClient.Do(retryReq)
+	}
+
 	if err != nil {
 		return "", fmt.Errorf("failed to call facilitator: %w", err)
 	}
@@ -475,7 +494,11 @@ func (m *X402Middleware) PaymentResponse(c fiber.Ctx, paymentID string) {
 		"status":     "settled",
 	}
 
-	responseJSON, _ := json.Marshal(response)
+	responseJSON, err := json.Marshal(response)
+	if err != nil {
+		slog.Error("failed to marshal payment response", "error", err)
+		return
+	}
 	c.Set("X-Payment-Response", string(responseJSON))
 }
 
