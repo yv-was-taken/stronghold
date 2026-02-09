@@ -51,7 +51,7 @@ export default function Pricing() {
               <div className="text-center">
                 <div className="flex items-baseline gap-3 justify-center mb-6">
                   <span className="font-display text-6xl sm:text-7xl font-bold">
-                    $1
+                    $2
                   </span>
                   <span className="text-gray-400 text-lg">
                     per 1,000 scans
