@@ -16,7 +16,7 @@ External content -> [PROXY scans] -> Agent -> [API scans] -> Output
 **Proxy**: Scans INCOMING content, blocks prompt injection before agent sees it
 **API**: Scans OUTGOING content, catches credential leaks in agent responses
 
-Both require an account with USDC balance. $0.002 per scan.
+Both require an account with USDC balance. $0.001 per scan.
 
 ---
 
@@ -164,7 +164,7 @@ Both proxy and API require a funded account:
 
 1. **Create account**: https://stronghold.security/dashboard or `stronghold init`
 2. **Deposit USDC**: Via dashboard (Stripe, Coinbase Pay) or direct transfer
-3. **Pay-per-request**: $0.002 per scan
+3. **Pay-per-request**: $0.001 per scan
 
 Check balance: `stronghold account balance`
 Add funds: `stronghold account deposit`

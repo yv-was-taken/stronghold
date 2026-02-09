@@ -75,11 +75,9 @@ type DashboardConfig struct {
 
 // X402Config holds x402 payment configuration
 type X402Config struct {
-	WalletAddress   string
-	FacilitatorURL  string
-	Network         string
-	CDPAPIKeyID     string // CDP API Key ID for x402 facilitator authentication
-	CDPAPIKeySecret string // CDP API Key Secret for x402 facilitator authentication
+	WalletAddress  string
+	FacilitatorURL string
+	Network        string
 }
 
 // StripeConfig holds Stripe payment configuration
@@ -164,10 +162,8 @@ func Load() *Config {
 		},
 		X402: X402Config{
 			WalletAddress:   getEnv("X402_WALLET_ADDRESS", ""),
-			FacilitatorURL:  getEnv("X402_FACILITATOR_URL", "https://x402.org/facilitator"),
-			Network:         getEnv("X402_NETWORK", "base"),
-			CDPAPIKeyID:     getEnv("CDP_API_KEY_ID", ""),
-			CDPAPIKeySecret: getEnv("CDP_API_KEY_SECRET", ""),
+			FacilitatorURL: getEnv("X402_FACILITATOR_URL", "https://x402.org/facilitator"),
+			Network:        getEnv("X402_NETWORK", "base"),
 		},
 		Stripe: StripeConfig{
 			SecretKey:      getEnv("STRIPE_SECRET_KEY", ""),
@@ -184,8 +180,8 @@ func Load() *Config {
 			LLMAPIKey:       getEnv("STRONGHOLD_LLM_API_KEY", ""),
 		},
 		Pricing: PricingConfig{
-			ScanContent: getFloat("PRICE_SCAN_CONTENT", 0.002),
-			ScanOutput:  getFloat("PRICE_SCAN_OUTPUT", 0.002),
+			ScanContent: getFloat("PRICE_SCAN_CONTENT", 0.001),
+			ScanOutput:  getFloat("PRICE_SCAN_OUTPUT", 0.001),
 		},
 		RateLimit: RateLimitConfig{
 			Enabled:       getBool("RATE_LIMIT_ENABLED", true),
@@ -312,16 +308,6 @@ func (c *Config) Validate() error {
 	}
 	if c.Stronghold.WarnThreshold < 0.0 || c.Stronghold.WarnThreshold > 1.0 {
 		errs = append(errs, "STRONGHOLD_WARN_THRESHOLD must be between 0.0 and 1.0")
-	}
-
-	// CDP API keys are required in production for x402 facilitator
-	if c.Environment == EnvProduction && c.X402.WalletAddress != "" {
-		if c.X402.CDPAPIKeyID == "" {
-			errs = append(errs, "CDP_API_KEY_ID is required in production when x402 is enabled")
-		}
-		if c.X402.CDPAPIKeySecret == "" {
-			errs = append(errs, "CDP_API_KEY_SECRET is required in production when x402 is enabled")
-		}
 	}
 
 	if len(errs) > 0 {

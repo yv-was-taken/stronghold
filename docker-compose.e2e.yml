@@ -36,6 +36,24 @@ services:
     networks:
       - e2e_network
 
+  # Self-hosted x402 facilitator for settlement
+  x402-facilitator:
+    build:
+      context: ./facilitator
+      dockerfile: Dockerfile
+    environment:
+      FACILITATOR_PRIVATE_KEY: ${FACILITATOR_PRIVATE_KEY:-}
+      RPC_URL_BASE: ${RPC_URL_BASE:-https://mainnet.base.org}
+      RPC_URL_BASE_SEPOLIA: ${RPC_URL_BASE_SEPOLIA:-https://sepolia.base.org}
+      RUST_LOG: debug
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8402/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - e2e_network
+
   # Stronghold API server configured for Base Sepolia testnet
   api:
     build:
@@ -54,11 +72,7 @@ services:
       # This address receives payments - use a real address to verify funds transfer
       X402_NETWORK: base-sepolia
       X402_WALLET_ADDRESS: ${API_WALLET_ADDRESS:-0x0000000000000000000000000000000000000001}
-      X402_FACILITATOR_URL: https://x402.org/facilitator
-
-      # CDP API for payment verification (optional for basic tests)
-      CDP_API_KEY_ID: ${CDP_API_KEY_ID:-}
-      CDP_API_KEY_SECRET: ${CDP_API_KEY_SECRET:-}
+      X402_FACILITATOR_URL: http://x402-facilitator:8402
 
       # JWT secret for sessions
       JWT_SECRET: e2e_test_jwt_secret_not_for_production
@@ -70,9 +84,9 @@ services:
       STRONGHOLD_ENABLE_SEMANTICS: "false"
       STRONGHOLD_ENABLE_LLM: "false"
 
-      # Pricing - $0.002 per scan (2000 USDC atomic units)
-      PRICE_SCAN_CONTENT: "0.002"
-      PRICE_SCAN_OUTPUT: "0.002"
+      # Pricing - $0.001 per scan (1000 USDC atomic units)
+      PRICE_SCAN_CONTENT: "0.001"
+      PRICE_SCAN_OUTPUT: "0.001"
 
       # Logging
       LOG_LEVEL: debug
@@ -80,6 +94,8 @@ services:
       - "8080:8080"
     depends_on:
       postgres:
+        condition: service_healthy
+      x402-facilitator:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
@@ -104,8 +120,8 @@ services:
       # Pass through test credentials
       TEST_PRIVATE_KEY: ${TEST_PRIVATE_KEY:-}
 
-      # Facilitator URL
-      X402_FACILITATOR_URL: https://x402.org/facilitator
+      # Facilitator URL (self-hosted)
+      X402_FACILITATOR_URL: http://x402-facilitator:8402
     volumes:
       # Mount scripts directory for running tests
       - ./scripts:/app/scripts:ro

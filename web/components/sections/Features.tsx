@@ -32,7 +32,7 @@ const features = [
     icon: Wallet,
     title: 'Pay As You Go',
     description: 'Pay-per-scan with no subscriptions or upfront costs. Only pay for what you use. Top up via dashboard with card or crypto.',
-    highlight: '$0.002/scan',
+    highlight: '$0.001/scan',
   },
   {
     icon: Zap,

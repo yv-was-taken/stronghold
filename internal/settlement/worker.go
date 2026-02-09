@@ -296,21 +296,12 @@ func (w *Worker) settlePayment(paymentHeader string) (string, error) {
 	}
 
 	facilitatorURL := w.x402Config.FacilitatorURL
-	if facilitatorURL == "" {
-		facilitatorURL = "https://x402.org/facilitator"
-	}
 
 	req, err := http.NewRequest("POST", facilitatorURL+"/settle", bytes.NewReader(settleBody))
 	if err != nil {
 		return "", fmt.Errorf("failed to create settle request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-
-	// Add CDP API key authentication if configured
-	if w.x402Config.CDPAPIKeyID != "" && w.x402Config.CDPAPIKeySecret != "" {
-		req.Header.Set("X-Api-Key-Id", w.x402Config.CDPAPIKeyID)
-		req.Header.Set("X-Api-Key-Secret", w.x402Config.CDPAPIKeySecret)
-	}
 
 	resp, err := w.httpClient.Do(req)
 	if err != nil {

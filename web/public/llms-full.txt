@@ -15,7 +15,7 @@ For a concise overview, see: https://stronghold.security/llms.txt
 5. x402 Payment Flow
 6. Account Management
 7. Configuration Reference
-8. Deployment Guide
+8. Self-Hosting
 
 ---
 
@@ -342,8 +342,8 @@ Response:
 ```json
 {
   "endpoints": {
-    "/v1/scan/content": {"price": "0.002", "currency": "USD"},
-    "/v1/scan/output": {"price": "0.002", "currency": "USD"}
+    "/v1/scan/content": {"price": "0.001", "currency": "USD"},
+    "/v1/scan/output": {"price": "0.001", "currency": "USD"}
   }
 }
 ```
@@ -590,14 +590,13 @@ The proxy shows warnings when balance drops below 1 USDC.
 
 ## 7. Configuration Reference
 
-### Server Environment Variables
+### API Server Environment Variables
 
 | Variable                    | Required | Default      | Description                    |
 |-----------------------------|----------|--------------|--------------------------------|
 | PORT                        | No       | 8080         | HTTP server port               |
 | X402_WALLET_ADDRESS         | Yes*     | -            | USDC receiving address         |
-| X402_FACILITATOR_URL        | No       | x402.org     | Payment facilitator            |
-| X402_NETWORK                | No       | base (set explicitly in deploy) | base or base-sepolia         |
+| X402_NETWORK                | No       | base         | base or base-sepolia           |
 | STRONGHOLD_BLOCK_THRESHOLD  | No       | 0.55         | Score threshold for BLOCK      |
 | STRONGHOLD_WARN_THRESHOLD   | No       | 0.35         | Score threshold for WARN       |
 | STRONGHOLD_ENABLE_HUGOT     | No       | true         | Enable ML classification       |
@@ -608,6 +607,20 @@ The proxy shows warnings when balance drops below 1 USDC.
 
 *If X402_WALLET_ADDRESS is not set, server runs in development mode
 without payment requirements.
+
+### x402 Facilitator Environment Variables
+
+The facilitator settles x402 payments on-chain. It runs as a separate
+service alongside the API (docker-compose handles this automatically).
+
+| Variable                    | Required | Default      | Description                    |
+|-----------------------------|----------|--------------|--------------------------------|
+| FACILITATOR_PRIVATE_KEY     | Yes      | -            | Settlement wallet private key  |
+| RPC_URL_BASE                | Yes      | -            | Base mainnet RPC endpoint      |
+| RPC_URL_BASE_SEPOLIA        | No       | -            | Base Sepolia RPC (testnet)     |
+
+The facilitator wallet needs a small ETH balance on Base for gas
+(~0.01 ETH lasts ~90,000 settlements).
 
 ### Scoring Layers
 
@@ -627,48 +640,22 @@ Default thresholds:
 
 ---
 
-## 8. Deployment Guide
+## 8. Self-Hosting
 
-### Fly.io (Recommended)
-
-```bash
-# Install Fly CLI
-curl -L https://fly.io/install.sh | sh
-fly auth login
-
-# Clone and deploy
-git clone https://github.com/yv-was-taken/stronghold.git
-cd stronghold
-fly launch --name stronghold-api --region iad
-
-# Set secrets
-fly secrets set X402_WALLET_ADDRESS=0xYOUR_WALLET
-fly secrets set X402_NETWORK=base
-
-# Deploy
-fly deploy
-```
-
-### Docker Compose
+Docker Compose brings up the complete stack: PostgreSQL, the API server,
+and the x402 payment facilitator.
 
 ```bash
 git clone https://github.com/yv-was-taken/stronghold.git
 cd stronghold
-
-# Configure
-cat > .env << 'EOF'
-X402_WALLET_ADDRESS=0xYOUR_WALLET
-X402_NETWORK=base
-STRONGHOLD_ENABLE_HUGOT=true
-STRONGHOLD_ENABLE_SEMANTICS=true
-EOF
-
-# Deploy
+cp .env.example .env  # Configure environment variables
 docker-compose up -d
 
 # With HTTPS (Caddy)
 docker-compose --profile with-proxy up -d
 ```
+
+See `.env.example` for full configuration documentation.
 
 ### VPS Requirements
 

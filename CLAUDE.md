@@ -137,8 +137,8 @@ internal/
 
 - `/health`, `/health/live`, `/health/ready` - Health checks (no auth)
 - `/v1/pricing` - Endpoint pricing (no auth)
-- `/v1/scan/content` - Prompt injection detection ($0.002)
-- `/v1/scan/output` - Credential leak detection ($0.002)
+- `/v1/scan/content` - Prompt injection detection ($0.001)
+- `/v1/scan/output` - Credential leak detection ($0.001)
 
 ## Payment Architecture
 

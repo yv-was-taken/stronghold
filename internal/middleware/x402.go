@@ -50,7 +50,7 @@ func NewX402MiddlewareWithDB(cfg *config.X402Config, pricing *config.PricingConf
 	}
 }
 
-// createFacilitatorRequest creates an HTTP request with CDP authentication headers
+// createFacilitatorRequest creates an HTTP request to the facilitator
 func (m *X402Middleware) createFacilitatorRequest(method, url string, body []byte) (*http.Request, error) {
 	req, err := http.NewRequest(method, url, bytes.NewReader(body))
 	if err != nil {
@@ -58,12 +58,6 @@ func (m *X402Middleware) createFacilitatorRequest(method, url string, body []byt
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-
-	// Add CDP API key authentication if configured
-	if m.config.CDPAPIKeyID != "" && m.config.CDPAPIKeySecret != "" {
-		req.Header.Set("X-Api-Key-Id", m.config.CDPAPIKeyID)
-		req.Header.Set("X-Api-Key-Secret", m.config.CDPAPIKeySecret)
-	}
 
 	return req, nil
 }
@@ -393,9 +387,6 @@ func (m *X402Middleware) verifyPayment(paymentHeader string, expectedAmount *big
 	}
 
 	facilitatorURL := m.config.FacilitatorURL
-	if facilitatorURL == "" {
-		facilitatorURL = "https://x402.org/facilitator"
-	}
 
 	req, err := m.createFacilitatorRequest("POST", facilitatorURL+"/verify", verifyBody)
 	if err != nil {
@@ -477,9 +468,6 @@ func (m *X402Middleware) settlePayment(paymentHeader string) (string, error) {
 	}
 
 	facilitatorURL := m.config.FacilitatorURL
-	if facilitatorURL == "" {
-		facilitatorURL = "https://x402.org/facilitator"
-	}
 
 	req, err := m.createFacilitatorRequest("POST", facilitatorURL+"/settle", settleBody)
 	if err != nil {

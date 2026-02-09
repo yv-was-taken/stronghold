@@ -1,0 +1,38 @@
+{
+  "port": 8402,
+  "host": "::",
+  "chains": {
+    "eip155:8453": {
+      "_comment": "Base Mainnet",
+      "eip1559": true,
+      "signers": ["$FACILITATOR_PRIVATE_KEY"],
+      "rpc": [
+        {
+          "http": "$RPC_URL_BASE",
+          "rate_limit": 25
+        }
+      ]
+    },
+    "eip155:84532": {
+      "_comment": "Base Sepolia",
+      "eip1559": true,
+      "signers": ["$FACILITATOR_PRIVATE_KEY"],
+      "rpc": [
+        {
+          "http": "$RPC_URL_BASE_SEPOLIA",
+          "rate_limit": 25
+        }
+      ]
+    }
+  },
+  "schemes": [
+    {
+      "id": "v1-eip155-exact",
+      "chains": "eip155:*"
+    },
+    {
+      "id": "v2-eip155-exact",
+      "chains": "eip155:*"
+    }
+  ]
+}

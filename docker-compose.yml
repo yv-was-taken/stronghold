@@ -19,6 +19,25 @@ services:
       retries: 5
     restart: unless-stopped
 
+  x402-facilitator:
+    build:
+      context: ./facilitator
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8402:8402"
+    environment:
+      - FACILITATOR_PRIVATE_KEY=${FACILITATOR_PRIVATE_KEY:-}
+      - RPC_URL_BASE=${RPC_URL_BASE:-https://mainnet.base.org}
+      - RPC_URL_BASE_SEPOLIA=${RPC_URL_BASE_SEPOLIA:-https://sepolia.base.org}
+      - RUST_LOG=${RUST_LOG:-info}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8402/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
   citadel-api:
     build:
       context: .
@@ -43,10 +62,8 @@ services:
       - DASHBOARD_ALLOWED_ORIGINS=${DASHBOARD_ALLOWED_ORIGINS:-http://localhost:3000}
       # x402
       - X402_WALLET_ADDRESS=${X402_WALLET_ADDRESS}
-      - X402_FACILITATOR_URL=${X402_FACILITATOR_URL:-https://x402.org/facilitator}
+      - X402_FACILITATOR_URL=${X402_FACILITATOR_URL:-http://x402-facilitator:8402}
       - X402_NETWORK=${X402_NETWORK:-base}
-      - CDP_API_KEY_ID=${CDP_API_KEY_ID:-}
-      - CDP_API_KEY_SECRET=${CDP_API_KEY_SECRET:-}
       # Stronghold
       - STRONGHOLD_BLOCK_THRESHOLD=${STRONGHOLD_BLOCK_THRESHOLD:-0.55}
       - STRONGHOLD_WARN_THRESHOLD=${STRONGHOLD_WARN_THRESHOLD:-0.35}
@@ -59,6 +76,8 @@ services:
       - ./models:/app/models:ro
     depends_on:
       postgres:
+        condition: service_healthy
+      x402-facilitator:
         condition: service_healthy
     restart: unless-stopped
     deploy:

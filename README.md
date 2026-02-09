@@ -45,7 +45,7 @@ All HTTP/HTTPS traffic is now routed through the transparent proxy for real-time
 - **Multi-Layer Detection**: Four-layer scanning pipeline (heuristics, ML classification, semantic similarity, and optional LLM classification) delivers sub-50ms latency
 - **Network-Level Protection**: Transparent proxy intercepts traffic at the kernel level, blocking threats before they reach your models
 - **Bidirectional Scanning**: Detects prompt injection on inbound content and credential leaks on outbound responses
-- **Pay-Per-Request Pricing**: $0.002 per scan via x402 protocol using USDC on Base, with no API keys or subscriptions required
+- **Pay-Per-Request Pricing**: $0.001 per scan via x402 protocol using USDC on Base, with no API keys or subscriptions required
 - **Open Source**: MIT licensed and fully self-hostable
 
 ---
@@ -238,8 +238,8 @@ Payment via x402 protocol is required for the following endpoints.
 
 | Endpoint | Method | Price | Description |
 |----------|--------|-------|-------------|
-| `/v1/scan/content` | POST | $0.002 | Prompt injection detection |
-| `/v1/scan/output` | POST | $0.002 | Credential leak detection |
+| `/v1/scan/content` | POST | $0.001 | Prompt injection detection |
+| `/v1/scan/output` | POST | $0.001 | Credential leak detection |
 
 ### POST /v1/scan/content
 
@@ -320,8 +320,8 @@ stronghold account deposit    # Display deposit options
 
 | Endpoint | Price per Request |
 |----------|-------------------|
-| `/v1/scan/content` | $0.002 |
-| `/v1/scan/output` | $0.002 |
+| `/v1/scan/content` | $0.001 |
+| `/v1/scan/output` | $0.001 |
 
 ### Credential Security
 
@@ -368,20 +368,9 @@ if (scanResult.decision === "BLOCK") {
 
 ---
 
-## Deployment
+## Self-Hosting
 
-### Fly.io
-
-```bash
-fly auth login
-git clone https://github.com/yv-was-taken/stronghold.git && cd stronghold
-fly launch --name stronghold-api --region iad
-fly secrets set X402_WALLET_ADDRESS=0xYOUR_WALLET_ADDRESS
-fly secrets set X402_NETWORK=base
-fly deploy
-```
-
-### Docker Compose
+Stronghold is fully self-hostable. Docker Compose brings up the complete stack: PostgreSQL, the API server, and the x402 payment facilitator.
 
 ```bash
 git clone https://github.com/yv-was-taken/stronghold.git && cd stronghold
@@ -392,14 +381,16 @@ docker-compose up -d
 docker-compose --profile with-proxy up -d
 ```
 
-### Environment Variables
+### Configuration
+
+Copy `.env.example` to `.env` and configure the required values. See `.env.example` for full documentation.
+
+**API Server:**
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `X402_WALLET_ADDRESS` | Yes* | - | USDC receiving address |
-| `X402_NETWORK` | No | `base` (set explicitly in deployment) | Network identifier: `base` or `base-sepolia` |
-| `CDP_API_KEY_ID` | Yes** | - | CDP API key ID for x402 facilitator |
-| `CDP_API_KEY_SECRET` | Yes** | - | CDP API key secret for x402 facilitator |
+| `X402_NETWORK` | No | `base` | Network identifier: `base` or `base-sepolia` |
 | `STRONGHOLD_ENABLE_HUGOT` | No | `true` | Enable ML classification layer |
 | `STRONGHOLD_ENABLE_SEMANTICS` | No | `true` | Enable semantic similarity layer |
 | `STRONGHOLD_BLOCK_THRESHOLD` | No | `0.55` | Score threshold for BLOCK decisions |
@@ -407,7 +398,15 @@ docker-compose --profile with-proxy up -d
 
 *When `X402_WALLET_ADDRESS` is not configured, the server runs in development mode without payment verification.
 
-**Required in production when `X402_WALLET_ADDRESS` is configured. Get keys from [CDP Portal](https://portal.cdp.coinbase.com/).
+**x402 Facilitator** (settles payments on-chain):
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `FACILITATOR_PRIVATE_KEY` | Yes | - | Private key for the settlement wallet (funded with ETH for gas) |
+| `RPC_URL_BASE` | Yes | - | Base mainnet RPC endpoint |
+| `RPC_URL_BASE_SEPOLIA` | No | - | Base Sepolia RPC endpoint (for testnet) |
+
+The facilitator wallet needs a small ETH balance on Base for gas (~0.01 ETH lasts ~90,000 settlements at current gas prices). You can use any RPC provider; [Alchemy's free tier](https://dashboard.alchemy.com/) (30M compute units/month) is sufficient for most deployments.
 
 ---
 
@@ -419,6 +418,7 @@ docker-compose --profile with-proxy up -d
 │   ├── api/           # API server entry point
 │   ├── cli/           # CLI client entry point
 │   └── proxy/         # Proxy daemon entry point
+├── facilitator/       # x402 payment settlement service
 ├── internal/
 │   ├── server/        # HTTP server setup
 │   ├── handlers/      # API endpoint handlers

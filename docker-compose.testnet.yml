@@ -33,6 +33,22 @@ services:
       timeout: 5s
       retries: 5
 
+  # Self-hosted x402 facilitator
+  x402-facilitator:
+    build:
+      context: ./facilitator
+      dockerfile: Dockerfile
+    environment:
+      FACILITATOR_PRIVATE_KEY: ${FACILITATOR_PRIVATE_KEY:-}
+      RPC_URL_BASE: ${RPC_URL_BASE:-https://mainnet.base.org}
+      RPC_URL_BASE_SEPOLIA: ${RPC_URL_BASE_SEPOLIA:-https://sepolia.base.org}
+      RUST_LOG: debug
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8402/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   # Stronghold API server configured for Base Sepolia
   api:
     build:
@@ -49,9 +65,7 @@ services:
       # x402 Configuration - Base Sepolia testnet
       X402_NETWORK: base-sepolia
       X402_WALLET_ADDRESS: ${API_WALLET_ADDRESS:-0x0000000000000000000000000000000000000000}
-      X402_FACILITATOR_URL: https://x402.org/facilitator
-      CDP_API_KEY_ID: ${CDP_API_KEY_ID:-}
-      CDP_API_KEY_SECRET: ${CDP_API_KEY_SECRET:-}
+      X402_FACILITATOR_URL: http://x402-facilitator:8402
       # JWT (generate with: openssl rand -base64 32)
       JWT_SECRET: testnet_jwt_secret_change_in_production
       # Scanner settings
@@ -60,12 +74,14 @@ services:
       STRONGHOLD_ENABLE_HUGOT: "false"
       STRONGHOLD_ENABLE_SEMANTICS: "false"
       # Pricing
-      PRICE_SCAN_CONTENT: "0.002"
-      PRICE_SCAN_OUTPUT: "0.002"
+      PRICE_SCAN_CONTENT: "0.001"
+      PRICE_SCAN_OUTPUT: "0.001"
     ports:
       - "8080:8080"
     depends_on:
       postgres:
+        condition: service_healthy
+      x402-facilitator:
         condition: service_healthy
 
   # CLI testing container with network capabilities
