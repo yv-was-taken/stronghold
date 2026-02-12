@@ -272,7 +272,7 @@ func TestAtomicPayment_WithDB_IdempotencyCache(t *testing.T) {
 	// Mock settle to succeed
 	httpmock.RegisterResponder("POST", "https://x402.org/facilitator/settle",
 		httpmock.NewJsonResponderOrPanic(200, map[string]interface{}{
-			"success": true, "paymentId": "test-payment-123",
+			"success": true, "transaction": "test-payment-123",
 		}))
 
 	// Create payment header
@@ -347,7 +347,7 @@ func TestAtomicPayment_DuplicateInProgress(t *testing.T) {
 		func(req *http.Request) (*http.Response, error) {
 			time.Sleep(100 * time.Millisecond)
 			return httpmock.NewJsonResponse(200, map[string]interface{}{
-				"success": true, "paymentId": "test-payment-123",
+				"success": true, "transaction": "test-payment-123",
 			})
 		})
 
@@ -500,7 +500,7 @@ func TestAtomicPayment_HandlerError(t *testing.T) {
 		func(req *http.Request) (*http.Response, error) {
 			settleCalled = true
 			return httpmock.NewJsonResponse(200, map[string]interface{}{
-				"success": true, "paymentId": "test-payment-123",
+				"success": true, "transaction": "test-payment-123",
 			})
 		})
 
@@ -695,7 +695,7 @@ func TestAtomicPayment_FullFlow_Integration(t *testing.T) {
 
 	httpmock.RegisterResponder("POST", "https://x402.org/facilitator/settle",
 		httpmock.NewJsonResponderOrPanic(200, map[string]interface{}{
-			"success": true, "paymentId": "test-payment-456",
+			"success": true, "transaction": "test-payment-456",
 		}))
 
 	paymentHeader, err := testWallet.CreateTestPaymentHeader(receiverAddress, "1000", "base-sepolia")
@@ -835,7 +835,7 @@ func TestVerifyPayment_AddressNormalization(t *testing.T) {
 
 	httpmock.RegisterResponder("POST", "https://x402.org/facilitator/settle",
 		httpmock.NewJsonResponderOrPanic(200, map[string]interface{}{
-			"success": true, "paymentId": "test-123",
+			"success": true, "transaction": "test-123",
 		}))
 
 	// Create payment with uppercase address (should still match)

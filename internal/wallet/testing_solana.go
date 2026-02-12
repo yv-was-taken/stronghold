@@ -1,6 +1,7 @@
 package wallet
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
@@ -11,15 +12,19 @@ import (
 	"github.com/gagliardetto/solana-go"
 	associatedtokenaccount "github.com/gagliardetto/solana-go/programs/associated-token-account"
 	computebudget "github.com/gagliardetto/solana-go/programs/compute-budget"
+	"github.com/gagliardetto/solana-go/programs/memo"
 	"github.com/gagliardetto/solana-go/programs/token"
+	"github.com/gagliardetto/solana-go/rpc"
 )
 
-// TestSolanaWallet is a Solana wallet that doesn't require OS keyring or RPC access.
-// Use this for unit and integration tests.
+// TestSolanaWallet is a Solana wallet that doesn't require OS keyring access.
+// For unit tests, it uses a dummy blockhash (no RPC needed).
+// For E2E tests, call SetRPCURL to fetch a real blockhash from the network.
 type TestSolanaWallet struct {
 	privateKey ed25519.PrivateKey
 	PublicKey  solana.PublicKey
 	network    string
+	rpcURL     string // When set, fetches real blockhash from this RPC endpoint
 }
 
 // NewTestSolanaWallet creates a new test Solana wallet with a random keypair
@@ -31,6 +36,24 @@ func NewTestSolanaWallet() (*TestSolanaWallet, error) {
 
 	return &TestSolanaWallet{
 		privateKey: priv,
+		PublicKey:  solana.PublicKeyFromBytes(pub),
+		network:    "solana-devnet",
+	}, nil
+}
+
+// NewTestSolanaWalletFromKey creates a test Solana wallet from a base58-encoded private key.
+// The key is a standard 64-byte Solana keypair (first 32 bytes = private seed, last 32 = public key).
+func NewTestSolanaWalletFromKey(base58Key string) (*TestSolanaWallet, error) {
+	solanaPriv, err := solana.PrivateKeyFromBase58(base58Key)
+	if err != nil {
+		return nil, fmt.Errorf("invalid base58 private key: %w", err)
+	}
+
+	edPriv := ed25519.PrivateKey(solanaPriv)
+	pub := edPriv.Public().(ed25519.PublicKey)
+
+	return &TestSolanaWallet{
+		privateKey: edPriv,
 		PublicKey:  solana.PublicKeyFromBytes(pub),
 		network:    "solana-devnet",
 	}, nil
@@ -49,6 +72,13 @@ func (w *TestSolanaWallet) Exists() bool {
 // SetNetwork sets the network for this wallet
 func (w *TestSolanaWallet) SetNetwork(network string) {
 	w.network = network
+}
+
+// SetRPCURL sets the RPC endpoint for fetching real blockhashes.
+// When set, transactions will use a real recent blockhash instead of a dummy one,
+// making them valid for submission to the network.
+func (w *TestSolanaWallet) SetRPCURL(url string) {
+	w.rpcURL = url
 }
 
 // CreateX402Payment creates a signed x402 payment for Solana testing.
@@ -95,7 +125,9 @@ func (w *TestSolanaWallet) CreateX402Payment(req *PaymentRequirements) (string, 
 	return payment, nil
 }
 
-// buildTestTransaction constructs a Solana transaction with a dummy blockhash for testing
+// buildTestTransaction constructs a Solana transaction for testing.
+// When rpcURL is set, fetches a real blockhash (for E2E tests against real facilitator).
+// When rpcURL is empty, uses a dummy blockhash (for offline unit tests).
 func (w *TestSolanaWallet) buildTestTransaction(req *PaymentRequirements, x402Config X402Config, amount *big.Int) (string, error) {
 	mintPubkey := solana.MustPublicKeyFromBase58(x402Config.TokenAddress)
 	recipientPubkey := solana.MustPublicKeyFromBase58(req.Recipient)
@@ -121,14 +153,35 @@ func (w *TestSolanaWallet) buildTestTransaction(req *PaymentRequirements, x402Co
 		).Build(),
 	}
 
+	// Add memo for anti-replay (matches real SolanaWallet behavior)
+	memoNonce := make([]byte, 16)
+	if _, err := rand.Read(memoNonce); err != nil {
+		return "", fmt.Errorf("failed to generate memo nonce: %w", err)
+	}
+	instructions = append(instructions, memo.NewMemoInstruction(
+		[]byte(fmt.Sprintf("x402:%x", memoNonce)),
+		w.PublicKey,
+	).Build())
+
 	feePayer := w.PublicKey
 	if req.FeePayer != "" {
 		feePayer = solana.MustPublicKeyFromBase58(req.FeePayer)
 	}
 
+	// Get blockhash: real from RPC if available, dummy otherwise
+	blockhash := solana.Hash{} // Dummy for offline unit tests
+	if w.rpcURL != "" {
+		client := rpc.New(w.rpcURL)
+		result, err := client.GetLatestBlockhash(context.Background(), rpc.CommitmentFinalized)
+		if err != nil {
+			return "", fmt.Errorf("failed to get blockhash from %s: %w", w.rpcURL, err)
+		}
+		blockhash = result.Value.Blockhash
+	}
+
 	tx, err := solana.NewTransaction(
 		instructions,
-		solana.Hash{}, // Dummy blockhash for testing
+		blockhash,
 		solana.TransactionPayer(feePayer),
 	)
 	if err != nil {

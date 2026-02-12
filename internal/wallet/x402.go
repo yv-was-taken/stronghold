@@ -223,8 +223,10 @@ func (w *Wallet) CreateX402Payment(req *PaymentRequirements) (string, error) {
 	return payment, nil
 }
 
-// FacilitatorRequest represents the request body for facilitator /verify and /settle endpoints
+// FacilitatorRequest represents the request body for facilitator /verify and /settle endpoints.
+// x402-rs reads x402Version from the root JSON to route v1 vs v2 requests.
 type FacilitatorRequest struct {
+	X402Version         int                   `json:"x402Version"`
 	PaymentPayload      PaymentPayloadV2      `json:"paymentPayload"`
 	PaymentRequirements PaymentRequirementsV2 `json:"paymentRequirements"`
 }
@@ -283,6 +285,7 @@ func buildEVMFacilitatorRequest(payload *X402Payload, caip2Network string) *Faci
 	}
 
 	return &FacilitatorRequest{
+		X402Version:         2,
 		PaymentPayload:      paymentPayload,
 		PaymentRequirements: paymentReqs,
 	}
@@ -311,6 +314,7 @@ func buildSolanaFacilitatorRequest(payload *X402Payload, caip2Network string) *F
 	}
 
 	return &FacilitatorRequest{
+		X402Version:         2,
 		PaymentPayload:      paymentPayload,
 		PaymentRequirements: paymentReqs,
 	}

@@ -472,23 +472,18 @@ func (m *X402Middleware) verifyPayment(paymentHeader string, expectedAmount *big
 		return false, fmt.Errorf("facilitator verification failed: %s", resp.Status)
 	}
 
-	// x402 v2 response format
+	// x402-rs VerifyResponseWire uses rename_all = "camelCase"
 	var verifyResult struct {
-		IsValid        bool   `json:"isValid"`
-		InvalidReason  string `json:"invalidReason,omitempty"`
-		InvalidMessage string `json:"invalidMessage,omitempty"`
-		Payer          string `json:"payer,omitempty"`
+		IsValid       bool   `json:"isValid"`
+		InvalidReason string `json:"invalidReason,omitempty"`
+		Payer         string `json:"payer,omitempty"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&verifyResult); err != nil {
 		return false, fmt.Errorf("failed to decode verify response: %w", err)
 	}
 
 	if !verifyResult.IsValid {
-		reason := verifyResult.InvalidReason
-		if verifyResult.InvalidMessage != "" {
-			reason = verifyResult.InvalidMessage
-		}
-		return false, fmt.Errorf("payment invalid: %s", reason)
+		return false, fmt.Errorf("payment invalid: %s", verifyResult.InvalidReason)
 	}
 
 	return true, nil
@@ -559,26 +554,27 @@ func (m *X402Middleware) settlePayment(paymentHeader string) (string, error) {
 		return "", fmt.Errorf("facilitator settlement failed: %s", resp.Status)
 	}
 
-	// x402 v2 settle response format
+	// x402-rs SettleResponseWire does NOT use rename_all, so fields are snake_case
 	var settleResult struct {
-		Success   bool   `json:"success"`
-		TxHash    string `json:"txHash,omitempty"`
-		PaymentID string `json:"paymentId,omitempty"`
+		Success     bool   `json:"success"`
+		Transaction string `json:"transaction,omitempty"`
+		Network     string `json:"network,omitempty"`
+		Payer       string `json:"payer,omitempty"`
+		ErrorReason string `json:"error_reason,omitempty"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&settleResult); err != nil {
 		return "", fmt.Errorf("failed to decode settle response: %w", err)
 	}
 
-	// Check if the facilitator reported failure despite 200 status
 	if !settleResult.Success {
-		return "", fmt.Errorf("facilitator returned success=false")
+		reason := settleResult.ErrorReason
+		if reason == "" {
+			reason = "unknown"
+		}
+		return "", fmt.Errorf("facilitator returned success=false: %s", reason)
 	}
 
-	// Return txHash or paymentId as the payment identifier
-	if settleResult.TxHash != "" {
-		return settleResult.TxHash, nil
-	}
-	return settleResult.PaymentID, nil
+	return settleResult.Transaction, nil
 }
 
 // PaymentResponse adds payment response header after successful processing

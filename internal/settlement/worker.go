@@ -319,24 +319,25 @@ func (w *Worker) settlePayment(paymentHeader string) (string, error) {
 		return "", fmt.Errorf("facilitator settlement failed: %s", resp.Status)
 	}
 
-	// x402 v2 settle response format
+	// x402-rs SettleResponseWire does NOT use rename_all, so fields are snake_case
 	var settleResult struct {
-		Success   bool   `json:"success"`
-		TxHash    string `json:"txHash,omitempty"`
-		PaymentID string `json:"paymentId,omitempty"`
+		Success     bool   `json:"success"`
+		Transaction string `json:"transaction,omitempty"`
+		Network     string `json:"network,omitempty"`
+		Payer       string `json:"payer,omitempty"`
+		ErrorReason string `json:"error_reason,omitempty"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&settleResult); err != nil {
 		return "", fmt.Errorf("failed to decode settle response: %w", err)
 	}
 
-	// Check if the facilitator reported failure despite 200 status
 	if !settleResult.Success {
-		return "", fmt.Errorf("facilitator returned success=false")
+		reason := settleResult.ErrorReason
+		if reason == "" {
+			reason = "unknown"
+		}
+		return "", fmt.Errorf("facilitator returned success=false: %s", reason)
 	}
 
-	// Return txHash or paymentId as the payment identifier
-	if settleResult.TxHash != "" {
-		return settleResult.TxHash, nil
-	}
-	return settleResult.PaymentID, nil
+	return settleResult.Transaction, nil
 }
