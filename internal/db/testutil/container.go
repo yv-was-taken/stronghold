@@ -4,14 +4,15 @@ package testutil
 import (
 	"context"
 	"fmt"
-	"os"
+	"io/fs"
 	"os/exec"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"stronghold/internal/db/migrations"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
@@ -87,6 +88,28 @@ func NewTestDB(t *testing.T) *TestDB {
 func NewTestDBWithConfig(t *testing.T, cfg ContainerConfig) *TestDB {
 	t.Helper()
 
+	testDB := newContainer(t, cfg)
+
+	// Apply migrations
+	if err := testDB.ApplyMigrations(t); err != nil {
+		testDB.Close(t)
+		t.Fatalf("Failed to apply migrations: %v", err)
+	}
+
+	return testDB
+}
+
+// NewBareTestDB creates a new PostgreSQL test container without applying migrations.
+// This is useful for testing the migration runner itself.
+func NewBareTestDB(t *testing.T) *TestDB {
+	t.Helper()
+	return newContainer(t, DefaultContainerConfig())
+}
+
+// newContainer creates a PostgreSQL test container and returns a connected TestDB.
+func newContainer(t *testing.T, cfg ContainerConfig) *TestDB {
+	t.Helper()
+
 	// Skip test if Docker is not available
 	SkipIfNoDocker(t)
 
@@ -152,7 +175,7 @@ func NewTestDBWithConfig(t *testing.T, cfg ContainerConfig) *TestDB {
 		t.Fatalf("Failed to ping database: %v", err)
 	}
 
-	testDB := &TestDB{
+	return &TestDB{
 		Container: container,
 		Pool:      pool,
 		Host:      host,
@@ -161,32 +184,19 @@ func NewTestDBWithConfig(t *testing.T, cfg ContainerConfig) *TestDB {
 		Password:  cfg.Password,
 		Database:  cfg.Database,
 	}
-
-	// Apply migrations
-	if err := testDB.ApplyMigrations(t); err != nil {
-		testDB.Close(t)
-		t.Fatalf("Failed to apply migrations: %v", err)
-	}
-
-	return testDB
 }
 
-// ApplyMigrations applies all migrations from the migrations directory
+// ApplyMigrations applies all migrations from the embedded migrations FS
 func (tdb *TestDB) ApplyMigrations(t *testing.T) error {
 	t.Helper()
 
 	ctx := context.Background()
-
-	// Find migrations directory
-	migrationsDir, err := findMigrationsDir()
-	if err != nil {
-		return fmt.Errorf("failed to find migrations directory: %w", err)
-	}
+	migrationsFS := migrations.FS()
 
 	// Read migration files
-	entries, err := os.ReadDir(migrationsDir)
+	entries, err := fs.ReadDir(migrationsFS, ".")
 	if err != nil {
-		return fmt.Errorf("failed to read migrations directory: %w", err)
+		return fmt.Errorf("failed to read embedded migrations: %w", err)
 	}
 
 	// Sort files to ensure correct order
@@ -200,8 +210,7 @@ func (tdb *TestDB) ApplyMigrations(t *testing.T) error {
 
 	// Apply each migration
 	for _, migration := range migrations {
-		migrationPath := filepath.Join(migrationsDir, migration)
-		content, err := os.ReadFile(migrationPath)
+		content, err := fs.ReadFile(migrationsFS, migration)
 		if err != nil {
 			return fmt.Errorf("failed to read migration %s: %w", migration, err)
 		}
@@ -215,47 +224,6 @@ func (tdb *TestDB) ApplyMigrations(t *testing.T) error {
 	}
 
 	return nil
-}
-
-// findMigrationsDir finds the migrations directory relative to the test file
-func findMigrationsDir() (string, error) {
-	// Try different relative paths
-	paths := []string{
-		"migrations",
-		"../migrations",
-		"../../db/migrations",
-		"../../../db/migrations",
-		"internal/db/migrations",
-		"../../internal/db/migrations",
-	}
-
-	for _, path := range paths {
-		if _, err := os.Stat(path); err == nil {
-			return filepath.Abs(path)
-		}
-	}
-
-	// Try finding from working directory
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("failed to get working directory: %w", err)
-	}
-
-	// Walk up to find migrations
-	dir := wd
-	for i := 0; i < 10; i++ {
-		migrationsPath := filepath.Join(dir, "internal", "db", "migrations")
-		if _, err := os.Stat(migrationsPath); err == nil {
-			return migrationsPath, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-
-	return "", fmt.Errorf("migrations directory not found from %s", wd)
 }
 
 // Close terminates the container and closes the connection pool

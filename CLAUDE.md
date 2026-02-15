@@ -228,6 +228,26 @@ When reporting test results, ALWAYS specify:
 
 PostgreSQL 16 with auto-migrations in `internal/db/migrations/`. Tables: accounts, sessions, usage, deposits.
 
+### Migrations
+
+Migration files live in `internal/db/migrations/` and are embedded into the binary at compile time via `go:embed`. The migration runner (`internal/db/migrate.go`) runs automatically on API server startup — no manual intervention needed.
+
+**How it works:**
+- Acquires a PostgreSQL advisory lock to prevent concurrent runs across instances
+- Creates `schema_migrations` tracking table if it doesn't exist
+- Bootstraps existing databases (detects pre-migration-infrastructure DBs and records them)
+- Applies un-applied `.sql` files in lexicographic order, each in its own transaction
+
+**Adding a new migration:**
+1. Create a new file: `internal/db/migrations/NNN_description.sql` (e.g., `002_add_api_keys.sql`)
+2. Write forward-only SQL (no down migrations). Use `IF NOT EXISTS` / `IF EXISTS` guards where appropriate.
+3. Run `go test ./internal/db/... -v` to verify the migration applies cleanly
+4. Run `go test ./...` to verify the full suite still passes
+
+**Naming convention:** `NNN_snake_case_description.sql` where NNN is a zero-padded sequence number.
+
+**Local dev:** `docker-compose up -d` starts a bare PostgreSQL container. The API server applies migrations on startup. No `initdb.d` volume mount is needed.
+
 ## Deployment
 
 - **API (Fly.io)**: `fly deploy` from repo root (app: `stronghold-api`, configured in `fly.toml`)

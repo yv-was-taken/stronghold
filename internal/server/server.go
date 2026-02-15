@@ -52,6 +52,11 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
+	// Run database migrations
+	if err := database.Migrate(context.Background()); err != nil {
+		return nil, fmt.Errorf("failed to run database migrations: %w", err)
+	}
+
 	// Initialize KMS client for wallet key encryption (optional in dev, required in prod)
 	var kmsClient *kms.Client
 	if cfg.KMS.Region != "" && cfg.KMS.KeyID != "" {
