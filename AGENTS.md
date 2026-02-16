@@ -1,33 +1,89 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
-Stronghold is split across Go services and a Next.js dashboard.
+## Scope and Source of Truth
+This file is the contributor guide for repository workflows. It is synchronized with `CLAUDE.md`. If this file and `CLAUDE.md` ever diverge, treat `CLAUDE.md` as authoritative and update this file immediately.
 
-- `cmd/`: executable entry points (`api`, `cli`, `proxy`, `x402test`).
-- `internal/`: core Go packages (`handlers`, `middleware`, `db`, `wallet`, `proxy`, `cli`, `server`).
-- `internal/db/migrations/`: SQL migrations (apply incrementally; do not rewrite old migrations).
-- `web/`: Next.js app, UI components, and Vitest tests.
-- `scripts/`: local/e2e helpers such as `scripts/e2e-x402-test.sh`.
-- Root deployment files: `docker-compose*.yml`, `Dockerfile`, `facilitator/`.
+## Project Structure & Module Organization
+- `cmd/`: binary entry points (`api`, `cli`, `proxy`, `x402test`).
+- `internal/`: core Go modules (`handlers`, `middleware`, `db`, `wallet`, `proxy`, `cli`, `server`, `config`, `stronghold`).
+- `internal/db/migrations/`: forward-only SQL migrations embedded into the API binary.
+- `web/`: Next.js frontend with tests under `web/__tests__/`.
+- `scripts/`: e2e and setup helpers.
+- `facilitator/`: x402 settlement service deployment assets.
 
 ## Build, Test, and Development Commands
-- `go build -o stronghold ./cmd/cli`: build CLI.
-- `go build -o stronghold-api ./cmd/api`: build API server.
-- `go build -o stronghold-proxy ./cmd/proxy`: build proxy daemon.
-- `go test ./...`: run Go test suite.
-- `go test -race -coverprofile=coverage.out -covermode=atomic ./...`: CI-equivalent Go verification.
-- `docker-compose up -d`: start local API stack dependencies.
-- `cd web && bun install`: install frontend dependencies.
-- `cd web && bun run dev|build|lint|test:run`: run dashboard locally, build, lint, and test.
+- Build:
+  - `go build -o stronghold-api ./cmd/api`
+  - `go build -o stronghold ./cmd/cli`
+  - `go build -o stronghold-proxy ./cmd/proxy`
+- Core tests:
+  - `go test ./...`
+  - `go test ./internal/handlers -run TestScanContent` (targeted run)
+- Frontend (use Bun, not npm):
+  - `cd web && bun run dev`
+  - `cd web && bun run lint`
+  - `cd web && bun run test`
+- Local services:
+  - `docker-compose up -d`
+  - `docker-compose --profile with-proxy up -d`
+  - `go run ./cmd/api`
+  - `go run ./cmd/cli doctor`
 
 ## Coding Style & Naming Conventions
-Use Go defaults: tabs, `gofmt` formatting, and idiomatic package structure. Keep package names lowercase and exported identifiers in `PascalCase`. For TypeScript/React, use `PascalCase` for components (`web/components/...`) and `useX` naming for hooks (`web/lib/hooks/...`). Prefer explicit chain-specific wallet fields (`evm_wallet_address`, `solana_wallet_address`) instead of ambiguous generic names.
+- Go: idiomatic structure, `gofmt` formatting, lowercase package names, `PascalCase` exports.
+- TypeScript/React: `PascalCase` components and `useX` hooks.
+- Wallet fields must be explicit per chain (`evm_wallet_address`, `solana_wallet_address`), not generic ambiguous names.
 
-## Testing Guidelines
-Go tests use the standard `testing` package plus `testify` assertions. DB-heavy tests use `testcontainers-go`, so ensure Docker is running. Add regression tests with every behavior fix (handlers, CLI parsing/help text, health checks). Naming conventions: Go `*_test.go` with `TestXxx`; frontend `*.test.ts(x)` under `web/__tests__/`.
+## Git Workflow (Mandatory)
+- Never commit or push unless explicitly asked by the user in the current conversation state.
+- Before any commit, always run `go test ./...` and verify all tests pass.
+- If Docker is required for tests, ensure Docker is running first; skipped tests are not equivalent to passing.
+- Do not commit with failing tests.
+- Verify changes locally before requesting/performing commit.
+- For frontend changes, validate behavior locally with `cd web && bun run dev`.
+- Do not push speculative commits.
 
-## Commit & Pull Request Guidelines
-Follow concise, imperative commit subjects, e.g. `Add automated wallet and health regression tests`, `Fix x402 facilitator request format`. Keep one logical change per commit. PRs should include: summary, risk/migration notes (especially DB/config/API contract changes), and exact test commands run. If CLI behavior/help changes, also update `README.md`, `web/public/llms.txt`, and `web/public/llms-full.txt`.
+## Testing Guidelines (Mandatory)
+- Do not use `-short`; run full suites.
+- Be explicit when tests use mocks versus real external services.
+- Never claim end-to-end correctness from mocked tests alone.
+- x402 payment validity must be verified with real facilitator/e2e flows when payment protocol behavior is changed.
+- If infrastructure is missing and tests are skipped, stop and resolve environment first.
+
+## CLI UX and Documentation Sync
+When changing any CLI user-facing behavior (commands, args, flags, output, wallet/account flows), update all of:
+1. `cmd/cli/main.go` help text/examples.
+2. `web/public/llms.txt`.
+3. `web/public/llms-full.txt`.
+
+## Implementation Discipline
+- Fix root causes; do not add environment hacks/symlink workarounds for CLI issues.
+- Confirm file and binary paths exist instead of assuming from directory layout.
+- Do not guess implementations. Read docs/specs, inspect reference implementations and library source, then verify with real tests.
+- Before planning, check current repository state (`git log` and relevant source files). Do not plan from stale assumptions.
+
+## Temporary Files
+- Do not create scratch/working files in the repository.
+- Put temporary analysis and intermediate artifacts in `/tmp/` (or dedicated scratch locations), not project directories.
+
+## Architecture and Runtime Notes
+- API endpoints include `/health`, `/health/live`, `/health/ready`, `/v1/pricing`, `/v1/scan/content`, `/v1/scan/output`.
+- Payment flow is x402-first; wallet signing is the payment mechanism.
+- Stripe is only for wallet top-up (on-ramp), not an alternate request payment protocol.
+- Keep wallet and test-wallet signing behavior aligned for x402/EIP-3009 changes.
+
+## Database and Migrations
+- Migrations are auto-run on API startup from `internal/db/migrations/`.
+- Add migrations as `NNN_snake_case_description.sql`, forward-only.
+- Each new migration must be validated with:
+  - `go test ./internal/db/... -v`
+  - `go test ./...`
+
+## Deployment Guidelines
+- API deploy: `fly deploy` from repo root.
+- Facilitator deploy: `fly deploy` from `facilitator/`.
+- Frontend deploys via Cloudflare Pages on push.
+- Do not run local frontend production builds unless debugging a remote build failure.
 
 # Agent Commit Policy
 
