@@ -18,10 +18,6 @@ const faqs = [
     answer: 'x402 is an open protocol designed for pay-per-use APIs—and it\'s ideal for AI agents. Traditional payment methods require a human to enter credit card details and manage subscriptions. With x402, your agent\'s wallet pays automatically for each scan, enabling fully autonomous operation. No human in the loop for billing. Top up via the dashboard (Stripe, Coinbase Pay) or direct deposit. The crypto layer is completely abstracted: no seed phrases, no gas fees, no complexity.',
   },
   {
-    question: 'Can I self-host Stronghold?',
-    answer: 'Yes! Stronghold is fully open source under the MIT license. You can run your own instance on your infrastructure, use your own API keys, and have complete control over your data. The self-hosted version supports manual x402 payments.',
-  },
-  {
     question: 'What threats does Stronghold detect?',
     answer: 'Stronghold uses a 4-layer scanning architecture: (1) Heuristic pattern matching for known attack signatures, (2) ML classification for prompt injection detection, (3) Semantic similarity analysis for context-aware threats, and (4) LLM classification for sophisticated attacks.',
   },

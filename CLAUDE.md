@@ -30,6 +30,18 @@ The platform provides 4-layer security scanning: heuristics, ML classification (
 - Only production code, tests, and essential documentation belong in the repo
 - If you need to write intermediate results, use `/tmp/` not the project root
 
+## Package Manager — ALWAYS BUN, NEVER ANYTHING ELSE
+
+**CRITICAL: The ONLY package manager for this project is `bun`. No exceptions.**
+
+- **NEVER** use `npm`, `npx`, `yarn`, or `pnpm` — not even once, not even for a quick command
+- Use `bun run <script>` to run scripts (NOT `npm run`)
+- Use `bun install` to install packages (NOT `npm install`)
+- Use `bunx` to run package binaries (NOT `npx`)
+- Use `bun add <pkg>` to add dependencies (NOT `npm install <pkg>`)
+
+If you catch yourself about to type `npm`, `npx`, `yarn`, or `pnpm` — STOP and use `bun` instead.
+
 ## Build Commands
 
 ```bash
@@ -44,7 +56,7 @@ go test ./...
 # Run a specific test
 go test ./internal/handlers -run TestScanContent
 
-# Frontend (in web/ directory) - USE BUN, NOT NPM
+# Frontend (in web/ directory) - ALWAYS USE BUN
 cd web && bun run dev     # Development server
 cd web && bun run build   # Build for production
 cd web && bun run lint    # Lint TypeScript/React

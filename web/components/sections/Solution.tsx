@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { Download, Power, Scan, ArrowRight } from 'lucide-react'
+import { Download, Power, CheckCircle, ArrowRight } from 'lucide-react'
 
 const steps = [
   {
@@ -20,9 +20,9 @@ const steps = [
   },
   {
     number: '03',
-    icon: Scan,
-    title: 'Scan',
-    description: 'Every request is analyzed for prompt injection, credential leaks, and jailbreak attempts. Threats blocked in under 50ms.',
+    icon: CheckCircle,
+    title: 'Verify',
+    description: 'Confirm your setup is running properly. Once enabled, Stronghold automatically scans every request and response\u2014you\u2019re protected.',
     command: 'stronghold status',
   },
 ]
