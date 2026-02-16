@@ -1,0 +1,46 @@
+name: CLI E2E Tests
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'cmd/cli/**'
+      - 'internal/cli/**'
+      - 'internal/wallet/**'
+      - 'Dockerfile.cli-test'
+      - 'docker-compose.cli-e2e.yml'
+      - 'scripts/cli-e2e/**'
+      - '.github/workflows/cli-e2e.yml'
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'cmd/cli/**'
+      - 'internal/cli/**'
+      - 'internal/wallet/**'
+
+jobs:
+  cli-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and run E2E tests
+        run: |
+          docker compose -f docker-compose.cli-e2e.yml build
+          docker compose -f docker-compose.cli-e2e.yml run --rm cli bash /app/scripts/cli-e2e/run.sh
+
+      - name: Collect logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.cli-e2e.yml logs > /tmp/e2e-logs.txt 2>&1
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-e2e-logs
+          path: /tmp/e2e-logs.txt
+
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker-compose.cli-e2e.yml down -v --remove-orphans

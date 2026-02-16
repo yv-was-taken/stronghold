@@ -1,0 +1,60 @@
+# Docker Compose for CLI End-to-End Testing
+#
+# Simplified dev-mode setup: no facilitator, no payment requirements.
+# Empty X402_EVM_WALLET_ADDRESS = dev mode (no payment middleware).
+#
+# Usage:
+#   docker compose -f docker-compose.cli-e2e.yml build
+#   docker compose -f docker-compose.cli-e2e.yml run --rm cli bash /app/scripts/cli-e2e/run.sh
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: stronghold
+      POSTGRES_PASSWORD: cli_e2e_test_pw
+      POSTGRES_DB: stronghold
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stronghold"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    environment:
+      ENV: development
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: stronghold
+      DB_PASSWORD: cli_e2e_test_pw
+      DB_NAME: stronghold
+      DB_SSLMODE: disable
+      JWT_SECRET: cli-e2e-test-jwt-secret-32chars-min
+      # DEV MODE: empty wallet = no payment required, no facilitator needed
+      X402_EVM_WALLET_ADDRESS: ""
+      X402_SOLANA_WALLET_ADDRESS: ""
+      X402_NETWORKS: ""
+      STRONGHOLD_ENABLE_HUGOT: "false"
+      STRONGHOLD_ENABLE_SEMANTICS: "false"
+      STRONGHOLD_ENABLE_LLM: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  cli:
+    build:
+      context: .
+      dockerfile: Dockerfile.cli-test
+    environment:
+      STRONGHOLD_API_URL: http://api:8080
+    volumes:
+      - ./scripts/cli-e2e:/app/scripts/cli-e2e:ro
+    depends_on:
+      api:
+        condition: service_healthy
