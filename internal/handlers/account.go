@@ -499,6 +499,8 @@ func (h *AccountHandler) GetDeposits(c fiber.Ctx) error {
 var (
 	evmAddressRegex    = regexp.MustCompile(`^0x[a-fA-F0-9]{40}$`)
 	solanaAddressRegex = regexp.MustCompile(`^[1-9A-HJ-NP-Za-km-z]{32,44}$`)
+	queryEVMBalance    = wallet.QueryEVMBalance
+	querySolanaBalance = wallet.QuerySolanaBalance
 )
 
 // UpdateWalletsRequest represents a request to update wallet addresses
@@ -702,7 +704,7 @@ func (h *AccountHandler) GetBalances(c fiber.Ctx) error {
 				Network: "base",
 			}
 
-			balance, err := wallet.QueryEVMBalance(ctx, address, "base")
+			balance, err := queryEVMBalance(ctx, address, "base")
 			if err != nil {
 				slog.Error("failed to query EVM balance",
 					"account_id", accountID,
@@ -735,7 +737,7 @@ func (h *AccountHandler) GetBalances(c fiber.Ctx) error {
 				Network: "solana",
 			}
 
-			balance, err := wallet.QuerySolanaBalance(ctx, address, "solana")
+			balance, err := querySolanaBalance(ctx, address, "solana")
 			if err != nil {
 				slog.Error("failed to query Solana balance",
 					"account_id", accountID,

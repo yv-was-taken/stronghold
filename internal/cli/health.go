@@ -31,6 +31,13 @@ type apiHealthResponse struct {
 	Status string `json:"status"`
 }
 
+var (
+	checkAPIHealthFunc       = checkAPIHealth
+	checkBaseRPCFunc         = checkBaseRPC
+	checkSolanaRPCFunc       = checkSolanaRPC
+	rpcStatusFromLatencyFunc = rpcStatusFromLatency
+)
+
 // Health checks API and network RPC health.
 func Health() error {
 	config, err := LoadConfig()
@@ -47,15 +54,15 @@ func Health() error {
 	wg.Add(3)
 	go func() {
 		defer wg.Done()
-		apiStatus = checkAPIHealth(config.API.Endpoint)
+		apiStatus = checkAPIHealthFunc(config.API.Endpoint)
 	}()
 	go func() {
 		defer wg.Done()
-		baseStatus = checkBaseRPC()
+		baseStatus = checkBaseRPCFunc()
 	}()
 	go func() {
 		defer wg.Done()
-		solanaStatus = checkSolanaRPC()
+		solanaStatus = checkSolanaRPCFunc()
 	}()
 	wg.Wait()
 
@@ -170,7 +177,7 @@ func checkBaseRPC() endpointHealth {
 
 	latency := time.Since(start)
 	return endpointHealth{
-		Status:  rpcStatusFromLatency(latency),
+		Status:  rpcStatusFromLatencyFunc(latency),
 		Latency: latency,
 	}
 }
@@ -191,7 +198,7 @@ func checkSolanaRPC() endpointHealth {
 
 	latency := time.Since(start)
 	return endpointHealth{
-		Status:  rpcStatusFromLatency(latency),
+		Status:  rpcStatusFromLatencyFunc(latency),
 		Latency: latency,
 	}
 }

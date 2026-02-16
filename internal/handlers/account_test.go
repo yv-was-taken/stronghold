@@ -2,9 +2,12 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -206,6 +209,86 @@ func TestUpdateWallets_ReturnsBadRequestForEmptyAddress(t *testing.T) {
 	err = json.NewDecoder(resp.Body).Decode(&body)
 	require.NoError(t, err)
 	assert.Contains(t, body["error"], "cannot be empty")
+}
+
+func TestGetBalances_QueriesWalletsInParallel(t *testing.T) {
+	app, _, _, testDB, database := setupAccountTest(t)
+	defer testDB.Close(t)
+	defer database.Close()
+
+	accountNumber, accessToken := createAuthenticatedAccount(t, app)
+
+	account, err := database.GetAccountByNumber(t.Context(), accountNumber)
+	require.NoError(t, err)
+
+	evmAddr := "0x1234567890abcdef1234567890abcdef12345678"
+	solAddr := "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"
+	err = database.UpdateWalletAddresses(t.Context(), account.ID, &evmAddr, &solAddr)
+	require.NoError(t, err)
+
+	origQueryEVM := queryEVMBalance
+	origQuerySolana := querySolanaBalance
+	defer func() {
+		queryEVMBalance = origQueryEVM
+		querySolanaBalance = origQuerySolana
+	}()
+
+	var active int32
+	var maxActive int32
+
+	markActive := func() func() {
+		current := atomic.AddInt32(&active, 1)
+		for {
+			recorded := atomic.LoadInt32(&maxActive)
+			if current <= recorded || atomic.CompareAndSwapInt32(&maxActive, recorded, current) {
+				break
+			}
+		}
+		return func() {
+			atomic.AddInt32(&active, -1)
+		}
+	}
+
+	queryEVMBalance = func(ctx context.Context, address, network string) (float64, error) {
+		defer markActive()()
+		if address != evmAddr || network != "base" {
+			return 0, fmt.Errorf("unexpected evm query args: address=%s network=%s", address, network)
+		}
+		time.Sleep(150 * time.Millisecond)
+		return 1.25, nil
+	}
+	querySolanaBalance = func(ctx context.Context, address, network string) (float64, error) {
+		defer markActive()()
+		if address != solAddr || network != "solana" {
+			return 0, fmt.Errorf("unexpected solana query args: address=%s network=%s", address, network)
+		}
+		time.Sleep(150 * time.Millisecond)
+		return 2.50, nil
+	}
+
+	req := httptest.NewRequest("GET", "/v1/account/balances", nil)
+	req.Header.Set("Cookie", AccessTokenCookie+"="+accessToken)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, 200, resp.StatusCode)
+
+	var body GetBalancesResponse
+	err = json.NewDecoder(resp.Body).Decode(&body)
+	require.NoError(t, err)
+
+	require.NotNil(t, body.EVM)
+	require.NotNil(t, body.Solana)
+	assert.Equal(t, evmAddr, body.EVM.Address)
+	assert.Equal(t, "base", body.EVM.Network)
+	assert.Equal(t, solAddr, body.Solana.Address)
+	assert.Equal(t, "solana", body.Solana.Network)
+	assert.InDelta(t, 1.25, body.EVM.BalanceUSDC, 0.0001)
+	assert.InDelta(t, 2.50, body.Solana.BalanceUSDC, 0.0001)
+	assert.InDelta(t, 3.75, body.TotalUSDC, 0.0001)
+	assert.GreaterOrEqual(t, atomic.LoadInt32(&maxActive), int32(2), "wallet balance lookups should overlap")
 }
 
 func TestGetUsageStats_DateRange(t *testing.T) {

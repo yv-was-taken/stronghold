@@ -14,7 +14,7 @@ var (
 	date    = "unknown"
 )
 
-func main() {
+func newRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "stronghold",
 		Short: "Stronghold - AI security proxy for LLM agents",
@@ -408,6 +408,11 @@ Run this before 'stronghold init' to catch issues early.`,
 		doctorCmd,
 	)
 
+	return rootCmd
+}
+
+func main() {
+	rootCmd := newRootCmd()
 	// Execute
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
