@@ -99,9 +99,9 @@ func TestStripeFeeCalculation(t *testing.T) {
 		expectedFee usdc.MicroUSDC
 		expectedNet usdc.MicroUSDC
 	}{
-		{"$10 deposit", usdc.FromFloat(10.00), usdc.MicroUSDC(int64(usdc.FromFloat(10.00))*29/1000 + 300_000), usdc.FromFloat(10.00) - usdc.MicroUSDC(int64(usdc.FromFloat(10.00))*29/1000+300_000)},
-		{"$100 deposit", usdc.FromFloat(100.00), usdc.MicroUSDC(int64(usdc.FromFloat(100.00))*29/1000 + 300_000), usdc.FromFloat(100.00) - usdc.MicroUSDC(int64(usdc.FromFloat(100.00))*29/1000+300_000)},
-		{"$1000 deposit", usdc.FromFloat(1000.00), usdc.MicroUSDC(int64(usdc.FromFloat(1000.00))*29/1000 + 300_000), usdc.FromFloat(1000.00) - usdc.MicroUSDC(int64(usdc.FromFloat(1000.00))*29/1000+300_000)},
+		{"$10 deposit", usdc.FromFloat(10.00), usdc.MicroUSDC(590_000), usdc.MicroUSDC(9_410_000)},
+		{"$100 deposit", usdc.FromFloat(100.00), usdc.MicroUSDC(3_200_000), usdc.MicroUSDC(96_800_000)},
+		{"$1000 deposit", usdc.FromFloat(1000.00), usdc.MicroUSDC(29_300_000), usdc.MicroUSDC(970_700_000)},
 	}
 
 	for _, tc := range testCases {

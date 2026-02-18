@@ -251,6 +251,11 @@ Migration files live in `internal/db/migrations/` and are embedded into the bina
 - Bootstraps existing databases (detects pre-migration-infrastructure DBs and records them)
 - Applies un-applied `.sql` files in lexicographic order, each in its own transaction
 
+**Operational note (migration `003_usdc_microusdc`):**
+- Not safe for mixed old/new application binaries during rolling deploys (columns are dropped/renamed).
+- Use a coordinated deployment (migration + new API) or a brief maintenance window.
+- On large datasets, transaction-scoped table locks can extend migration time.
+
 **Adding a new migration:**
 1. Create a new file: `internal/db/migrations/NNN_description.sql` (e.g., `002_add_api_keys.sql`)
 2. Write forward-only SQL (no down migrations). Use `IF NOT EXISTS` / `IF EXISTS` guards where appropriate.

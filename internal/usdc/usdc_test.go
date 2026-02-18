@@ -2,6 +2,7 @@ package usdc
 
 import (
 	"encoding/json"
+	"math"
 	"math/big"
 	"testing"
 
@@ -71,6 +72,8 @@ func TestString(t *testing.T) {
 		{1_250_001, "1.250001"},
 		{10_000_000, "10.00"},
 		{99_999_999_999, "99999.999999"},
+		{-1_250_000, "-1.25"},
+		{MicroUSDC(math.MinInt64), "-9223372036854.775808"},
 	}
 
 	for _, tc := range tests {
@@ -167,7 +170,7 @@ func TestToBigInt_Base(t *testing.T) {
 
 func TestToBigInt_FromBigInt_RoundTrip(t *testing.T) {
 	chains := []string{"base", "base-sepolia", "solana", "solana-devnet"}
-	values := []MicroUSDC{0, 1, 1_000, 1_000_000, 99_999_999_999}
+	values := []MicroUSDC{0, 1, 1_000, 1_000_000, 99_999_999_999, -1_250_000, MicroUSDC(math.MaxInt64)}
 
 	for _, chain := range chains {
 		for _, v := range values {
@@ -187,6 +190,14 @@ func TestFromBigInt(t *testing.T) {
 	assert.Equal(t, MicroUSDC(1_250_000), result)
 }
 
+func TestFromBigInt_ClampOnOverflow(t *testing.T) {
+	tooBig := new(big.Int).Add(big.NewInt(math.MaxInt64), big.NewInt(1))
+	tooSmall := new(big.Int).Sub(big.NewInt(math.MinInt64), big.NewInt(1))
+
+	assert.Equal(t, MicroUSDC(math.MaxInt64), FromBigInt(tooBig, "base"))
+	assert.Equal(t, MicroUSDC(math.MinInt64), FromBigInt(tooSmall, "base"))
+}
+
 func TestScaleForChain(t *testing.T) {
 	assert.Equal(t, int64(1_000_000), ScaleForChain("base"))
 	assert.Equal(t, int64(1_000_000), ScaleForChain("solana"))
@@ -200,4 +211,48 @@ func TestFromFloat_RoundTrip(t *testing.T) {
 		m := FromFloat(v)
 		assert.InDelta(t, v, m.Float(), 1e-7, "round-trip for %v", v)
 	}
+}
+
+func TestMicroUSDCValue(t *testing.T) {
+	value, err := MicroUSDC(1_250_000).Value()
+	require.NoError(t, err)
+	assert.Equal(t, int64(1_250_000), value)
+}
+
+func TestMicroUSDCScan(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     any
+		expected  MicroUSDC
+		shouldErr bool
+	}{
+		{name: "int64", input: int64(1250000), expected: 1_250_000},
+		{name: "int32", input: int32(1250000), expected: 1_250_000},
+		{name: "int", input: int(1250000), expected: 1_250_000},
+		{name: "string", input: "1250000", expected: 1_250_000},
+		{name: "bytes", input: []byte("1250000"), expected: 1_250_000},
+		{name: "float64 integer", input: float64(1250000), expected: 1_250_000},
+		{name: "nil", input: nil, expected: 0},
+		{name: "float64 fractional", input: 1.25, shouldErr: true},
+		{name: "bad string", input: "not-a-number", shouldErr: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var m MicroUSDC
+			err := m.Scan(tc.input)
+			if tc.shouldErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.expected, m)
+		})
+	}
+}
+
+func TestMicroUSDCScan_NilReceiver(t *testing.T) {
+	var m *MicroUSDC
+	err := m.Scan(int64(1))
+	assert.Error(t, err)
 }

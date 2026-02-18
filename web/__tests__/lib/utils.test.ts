@@ -55,6 +55,7 @@ describe('formatUSDC', () => {
   it('formats whole USDC amounts with minimum 2 decimal places', () => {
     expect(formatUSDC("1000000")).toBe('$1.00')      // 1 USDC
     expect(formatUSDC("100000000")).toBe('$100.00')   // 100 USDC
+    expect(formatUSDC("1000000000000")).toBe('$1,000,000.00') // 1M USDC
     expect(formatUSDC("0")).toBe('$0.00')
   })
 
@@ -73,11 +74,21 @@ describe('formatUSDC', () => {
   it('handles edge cases', () => {
     expect(formatUSDC("")).toBe('$0.00')
     expect(formatUSDC(undefined as unknown as string)).toBe('$0.00')
+    expect(formatUSDC("not-a-number")).toBe('$0.00')
   })
 
   it('trims trailing zeros but keeps at least 2 decimal places', () => {
     expect(formatUSDC("3500000")).toBe('$3.50')       // keeps the trailing 0 for 2 places
     expect(formatUSDC("10000000")).toBe('$10.00')     // 10 USDC
+  })
+
+  it('formats negative amounts correctly', () => {
+    expect(formatUSDC("-1250000")).toBe('-$1.25')
+    expect(formatUSDC("-1")).toBe('-$0.000001')
+  })
+
+  it('preserves precision for values beyond Number.MAX_SAFE_INTEGER', () => {
+    expect(formatUSDC("9007199254740993")).toBe('$9,007,199,254.740993')
   })
 })
 

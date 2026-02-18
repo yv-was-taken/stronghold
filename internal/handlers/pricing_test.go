@@ -16,9 +16,9 @@ import (
 
 func TestGetPricing_ReturnsAllRoutes(t *testing.T) {
 	x402cfg := &config.X402Config{
-		EVMWalletAddress:  "0x1234567890123456789012345678901234567890",
-		FacilitatorURL: "https://x402.org/facilitator",
-		Networks:       []string{"base-sepolia"},
+		EVMWalletAddress: "0x1234567890123456789012345678901234567890",
+		FacilitatorURL:   "https://x402.org/facilitator",
+		Networks:         []string{"base-sepolia"},
 	}
 	pricingCfg := &config.PricingConfig{
 		ScanContent: usdc.MicroUSDC(1000),
@@ -52,7 +52,8 @@ func TestGetPricing_ReturnsAllRoutes(t *testing.T) {
 	for _, route := range body.Routes {
 		routePaths[route.Path] = true
 		assert.NotEmpty(t, route.Method)
-		assert.GreaterOrEqual(t, route.Price, usdc.MicroUSDC(0))
+		assert.GreaterOrEqual(t, route.PriceMicroUSDC, usdc.MicroUSDC(0))
+		assert.GreaterOrEqual(t, route.PriceUSD, 0.0)
 	}
 
 	// These endpoints should be in the pricing
@@ -68,9 +69,9 @@ func TestGetPricing_ReturnsAllRoutes(t *testing.T) {
 
 func TestGetPricing_HasDescriptions(t *testing.T) {
 	x402cfg := &config.X402Config{
-		EVMWalletAddress:  "0x1234567890123456789012345678901234567890",
-		FacilitatorURL: "https://x402.org/facilitator",
-		Networks:       []string{"base-sepolia"},
+		EVMWalletAddress: "0x1234567890123456789012345678901234567890",
+		FacilitatorURL:   "https://x402.org/facilitator",
+		Networks:         []string{"base-sepolia"},
 	}
 	pricingCfg := &config.PricingConfig{
 		ScanContent: usdc.MicroUSDC(1000),
@@ -104,9 +105,9 @@ func TestGetPricing_HasDescriptions(t *testing.T) {
 
 func TestGetPricing_CorrectPrices(t *testing.T) {
 	x402cfg := &config.X402Config{
-		EVMWalletAddress:  "0x1234567890123456789012345678901234567890",
-		FacilitatorURL: "https://x402.org/facilitator",
-		Networks:       []string{"base-sepolia"},
+		EVMWalletAddress: "0x1234567890123456789012345678901234567890",
+		FacilitatorURL:   "https://x402.org/facilitator",
+		Networks:         []string{"base-sepolia"},
 	}
 	pricingCfg := &config.PricingConfig{
 		ScanContent: usdc.MicroUSDC(1000),
@@ -130,20 +131,24 @@ func TestGetPricing_CorrectPrices(t *testing.T) {
 
 	// Map prices by path
 	pricesByPath := make(map[string]usdc.MicroUSDC)
+	pricesUSDByPath := make(map[string]float64)
 	for _, route := range body.Routes {
-		pricesByPath[route.Path] = route.Price
+		pricesByPath[route.Path] = route.PriceMicroUSDC
+		pricesUSDByPath[route.Path] = route.PriceUSD
 	}
 
 	// Verify expected prices - all endpoints are $0.001 = 1000 microUSDC
 	assert.Equal(t, usdc.MicroUSDC(1000), pricesByPath["/v1/scan/content"])
 	assert.Equal(t, usdc.MicroUSDC(1000), pricesByPath["/v1/scan/output"])
+	assert.InDelta(t, 0.001, pricesUSDByPath["/v1/scan/content"], 0.000000001)
+	assert.InDelta(t, 0.001, pricesUSDByPath["/v1/scan/output"], 0.000000001)
 }
 
 func TestGetPricing_JSONContentType(t *testing.T) {
 	x402cfg := &config.X402Config{
-		EVMWalletAddress:  "0x1234567890123456789012345678901234567890",
-		FacilitatorURL: "https://x402.org/facilitator",
-		Networks:       []string{"base-sepolia"},
+		EVMWalletAddress: "0x1234567890123456789012345678901234567890",
+		FacilitatorURL:   "https://x402.org/facilitator",
+		Networks:         []string{"base-sepolia"},
 	}
 	pricingCfg := &config.PricingConfig{
 		ScanContent: usdc.MicroUSDC(1000),
@@ -166,9 +171,9 @@ func TestGetPricing_JSONContentType(t *testing.T) {
 
 func TestGetPricing_AllRoutesHaveMethod(t *testing.T) {
 	x402cfg := &config.X402Config{
-		EVMWalletAddress:  "0x1234567890123456789012345678901234567890",
-		FacilitatorURL: "https://x402.org/facilitator",
-		Networks:       []string{"base-sepolia"},
+		EVMWalletAddress: "0x1234567890123456789012345678901234567890",
+		FacilitatorURL:   "https://x402.org/facilitator",
+		Networks:         []string{"base-sepolia"},
 	}
 	pricingCfg := &config.PricingConfig{
 		ScanContent: usdc.MicroUSDC(1000),

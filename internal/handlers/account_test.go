@@ -652,9 +652,9 @@ func TestCalculateFee(t *testing.T) {
 		provider    db.DepositProvider
 		expectedFee usdc.MicroUSDC
 	}{
-		{usdc.FromFloat(10.00), db.DepositProviderStripe, usdc.MicroUSDC(int64(usdc.FromFloat(10.00))*29/1000 + 300_000)},
-		{usdc.FromFloat(100.00), db.DepositProviderStripe, usdc.MicroUSDC(int64(usdc.FromFloat(100.00))*29/1000 + 300_000)},
-		{usdc.FromFloat(1000.00), db.DepositProviderStripe, usdc.MicroUSDC(int64(usdc.FromFloat(1000.00))*29/1000 + 300_000)},
+		{usdc.FromFloat(10.00), db.DepositProviderStripe, usdc.MicroUSDC(590_000)},
+		{usdc.FromFloat(100.00), db.DepositProviderStripe, usdc.MicroUSDC(3_200_000)},
+		{usdc.FromFloat(1000.00), db.DepositProviderStripe, usdc.MicroUSDC(29_300_000)},
 		{usdc.FromFloat(100.00), db.DepositProviderDirect, 0},
 		{usdc.FromFloat(0.01), db.DepositProviderDirect, 0},
 	}

@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -117,13 +118,13 @@ type StripeConfig struct {
 
 // StrongholdConfig holds Stronghold scanner configuration
 type StrongholdConfig struct {
-	BlockThreshold   float64
-	WarnThreshold    float64
-	EnableHugot      bool
-	EnableSemantics  bool
-	HugotModelPath   string
-	LLMProvider      string
-	LLMAPIKey        string
+	BlockThreshold  float64
+	WarnThreshold   float64
+	EnableHugot     bool
+	EnableSemantics bool
+	HugotModelPath  string
+	LLMProvider     string
+	LLMAPIKey       string
 }
 
 // PricingConfig holds endpoint pricing in microUSDC
@@ -270,6 +271,7 @@ func getMicroUSDC(key string, defaultFloat float64) usdc.MicroUSDC {
 		if f, err := strconv.ParseFloat(value, 64); err == nil {
 			return usdc.FromFloat(f)
 		}
+		slog.Warn("invalid microUSDC env value, using default", "key", key, "value", value, "default_usdc", defaultFloat)
 	}
 	return usdc.FromFloat(defaultFloat)
 }

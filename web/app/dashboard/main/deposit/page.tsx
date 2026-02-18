@@ -81,6 +81,7 @@ export default function DepositPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          // Input remains human-readable USDC float; API responses use microUSDC strings.
           amount_usdc: amountNum,
           provider: provider,
           network: effectiveNetwork,

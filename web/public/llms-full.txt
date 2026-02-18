@@ -428,23 +428,29 @@ Response:
     {
       "path": "/v1/scan/content",
       "method": "POST",
-      "price_usd": "1000",
+      "price_micro_usdc": "1000",
+      "price_usd": 0.001,
       "description": "Content scanning for prompt injection detection"
     },
     {
       "path": "/v1/scan/output",
       "method": "POST",
-      "price_usd": "1000",
+      "price_micro_usdc": "1000",
+      "price_usd": 0.001,
       "description": "Output scanning for credential leak detection"
     }
   ]
 }
 ```
 
-**Note on USDC amounts**: All USDC amounts in API responses are string-encoded
-integers representing microUSDC (1 microUSDC = 0.000001 USDC). For example,
-`"1000"` = $0.001, `"1000000"` = $1.00. This applies to pricing, balances,
-deposits, and usage data.
+**Note on USDC amounts**: Canonical money fields are string-encoded integers
+representing microUSDC (1 microUSDC = 0.000001 USDC). For example, `"1000"` = $0.001,
+`"1000000"` = $1.00. In `/v1/pricing`, `price_micro_usdc` is canonical and
+`price_usd` is a human-readable convenience value.
+
+**Breaking change (February 18, 2026)**: account, balance, deposit, usage, and
+pricing money fields were migrated from JSON numbers to string-encoded microUSDC
+integers. Clients that parse money as JSON numbers must be updated.
 
 ### Protected Endpoints (Payment Required)
 

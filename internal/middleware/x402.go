@@ -98,20 +98,17 @@ func (m *X402Middleware) RequirePayment(price usdc.MicroUSDC) fiber.Handler {
 			return c.Next()
 		}
 
-		// Convert MicroUSDC to on-chain atomic units (all supported chains use 6 decimals)
-		priceWei := price.ToBigInt("base")
-
 		// Check for payment header
 		paymentHeader := c.Get("X-Payment")
 		if paymentHeader == "" {
 			// Return 402 with payment requirements
-			return m.requirePaymentResponse(c, priceWei)
+			return m.requirePaymentResponse(c, price)
 		}
 
 		// Verify payment
-		valid, err := m.verifyPayment(paymentHeader, priceWei)
+		valid, err := m.verifyPayment(paymentHeader, price)
 		if err != nil || !valid {
-			return m.requirePaymentResponse(c, priceWei)
+			return m.requirePaymentResponse(c, price)
 		}
 
 		// Payment valid, continue
@@ -129,25 +126,22 @@ func (m *X402Middleware) AtomicPayment(price usdc.MicroUSDC) fiber.Handler {
 			return c.Next()
 		}
 
-		// Convert MicroUSDC to on-chain atomic units (all supported chains use 6 decimals)
-		priceWei := price.ToBigInt("base")
-
 		// Check for payment header
 		paymentHeader := c.Get("X-Payment")
 		if paymentHeader == "" {
-			return m.requirePaymentResponse(c, priceWei)
+			return m.requirePaymentResponse(c, price)
 		}
 
 		// Parse payment header to get nonce
 		payload, err := wallet.ParseX402Payment(paymentHeader)
 		if err != nil {
-			return m.requirePaymentResponse(c, priceWei)
+			return m.requirePaymentResponse(c, price)
 		}
 
 		// Verify payment with facilitator first (before database operations)
-		valid, err := m.verifyPayment(paymentHeader, priceWei)
+		valid, err := m.verifyPayment(paymentHeader, price)
 		if err != nil || !valid {
-			return m.requirePaymentResponse(c, priceWei)
+			return m.requirePaymentResponse(c, price)
 		}
 
 		// Reserve payment in database using atomic upsert to prevent TOCTOU race conditions
@@ -274,19 +268,16 @@ func (m *X402Middleware) RequirePaymentAndSettle(price usdc.MicroUSDC) fiber.Han
 			return c.Next()
 		}
 
-		// Convert MicroUSDC to on-chain atomic units (all supported chains use 6 decimals)
-		priceWei := price.ToBigInt("base")
-
 		// Check for payment header
 		paymentHeader := c.Get("X-Payment")
 		if paymentHeader == "" {
-			return m.requirePaymentResponse(c, priceWei)
+			return m.requirePaymentResponse(c, price)
 		}
 
 		// Verify payment
-		valid, err := m.verifyPayment(paymentHeader, priceWei)
+		valid, err := m.verifyPayment(paymentHeader, price)
 		if err != nil || !valid {
-			return m.requirePaymentResponse(c, priceWei)
+			return m.requirePaymentResponse(c, price)
 		}
 
 		// Execute the handler
@@ -325,8 +316,18 @@ func GetPaymentTransaction(c fiber.Ctx) *db.PaymentTransaction {
 	return nil
 }
 
+func (m *X402Middleware) priceToAtomicUnits(price usdc.MicroUSDC, network string) *big.Int {
+	if network == "" {
+		network = m.GetNetwork()
+	}
+	if network == "" {
+		network = "base"
+	}
+	return price.ToBigInt(network)
+}
+
 // requirePaymentResponse returns a 402 Payment Required response
-func (m *X402Middleware) requirePaymentResponse(c fiber.Ctx, amount *big.Int) error {
+func (m *X402Middleware) requirePaymentResponse(c fiber.Ctx, price usdc.MicroUSDC) error {
 	c.Status(fiber.StatusPaymentRequired)
 
 	accepts := []map[string]interface{}{}
@@ -337,6 +338,7 @@ func (m *X402Middleware) requirePaymentResponse(c fiber.Ctx, amount *big.Int) er
 		if recipient == "" {
 			continue // skip networks without a configured wallet
 		}
+		amount := m.priceToAtomicUnits(price, network)
 		option := map[string]interface{}{
 			"scheme":          "x402",
 			"network":         network,
@@ -361,14 +363,14 @@ func (m *X402Middleware) requirePaymentResponse(c fiber.Ctx, amount *big.Int) er
 	response := map[string]interface{}{
 		"error":                "Payment required",
 		"payment_requirements": accepts[0], // backward compat: primary option
-		"accepts":              accepts,     // multi-chain: all options
+		"accepts":              accepts,    // multi-chain: all options
 	}
 
 	return c.JSON(response)
 }
 
-// verifyPayment verifies the x402 payment header via the facilitator
-func (m *X402Middleware) verifyPayment(paymentHeader string, expectedAmount *big.Int) (bool, error) {
+// verifyPayment verifies the x402 payment header via the facilitator.
+func (m *X402Middleware) verifyPayment(paymentHeader string, price usdc.MicroUSDC) (bool, error) {
 	// Parse payment header
 	payload, err := wallet.ParseX402Payment(paymentHeader)
 	if err != nil {
@@ -380,6 +382,7 @@ func (m *X402Middleware) verifyPayment(paymentHeader string, expectedAmount *big
 	if _, ok := amount.SetString(payload.Amount, 10); !ok {
 		return false, fmt.Errorf("invalid amount format: %s", payload.Amount)
 	}
+	expectedAmount := m.priceToAtomicUnits(price, payload.Network)
 	if amount.Cmp(expectedAmount) != 0 {
 		return false, fmt.Errorf("amount mismatch: expected %s, got %s", expectedAmount.String(), payload.Amount)
 	}
@@ -640,12 +643,12 @@ func (m *X402Middleware) Middleware() fiber.Handler {
 		// Check payment
 		paymentHeader := c.Get("X-Payment")
 		if paymentHeader == "" {
-			return m.requirePaymentResponse(c, price.ToBigInt("base"))
+			return m.requirePaymentResponse(c, price)
 		}
 
-		valid, err := m.verifyPayment(paymentHeader, price.ToBigInt("base"))
+		valid, err := m.verifyPayment(paymentHeader, price)
 		if err != nil || !valid {
-			return m.requirePaymentResponse(c, price.ToBigInt("base"))
+			return m.requirePaymentResponse(c, price)
 		}
 
 		// Store payment header for settlement after successful handler
