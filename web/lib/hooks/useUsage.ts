@@ -55,7 +55,7 @@ export function useUsageLogs() {
       }
 
       const result = await response.json();
-      const logs: UsageLog[] = result.usage || [];
+      const logs: UsageLog[] = result.logs || result.usage || [];
 
       setState(prev => ({
         data: append ? [...prev.data, ...logs] : logs,

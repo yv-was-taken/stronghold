@@ -69,6 +69,21 @@ describe('useUsageLogs', () => {
     expect(result.current.error).toBeNull()
   })
 
+  it('reads logs key returned by backend', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ logs: mockUsageLogs }),
+    })
+
+    const { result } = renderHook(() => useUsageLogs())
+
+    await act(async () => {
+      await result.current.fetchLogs(20, 0)
+    })
+
+    expect(result.current.data).toEqual(mockUsageLogs)
+  })
+
   it('handles fetch error', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,

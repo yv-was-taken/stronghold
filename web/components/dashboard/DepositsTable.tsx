@@ -98,7 +98,7 @@ export function DepositsTable({ deposits, loading, hasMore, onLoadMore }: Deposi
                     {Number(deposit.fee_usdc) > 0 ? `-${formatUSDC(deposit.fee_usdc)}` : '—'}
                   </td>
                   <td className="py-3 px-4 text-green-400 text-sm font-mono">
-                    +{formatUSDC(deposit.net_usdc)}
+                    +{formatUSDC(deposit.net_amount_usdc)}
                   </td>
                   <td className="py-3 px-4">
                     <span className="inline-flex items-center gap-1.5 text-gray-300 text-sm">
