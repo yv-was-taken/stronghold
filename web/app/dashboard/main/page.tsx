@@ -18,7 +18,7 @@ import { CopyButton } from '@/components/ui/CopyButton';
 import { formatUSDC, truncateAddress } from '@/lib/utils';
 import { API_URL } from '@/lib/api';
 
-const LOW_BALANCE_THRESHOLD_MICRO_USDC = 1_000_000n;
+const LOW_BALANCE_THRESHOLD_MICRO_USDC = BigInt('1000000');
 
 export default function DashboardPage() {
   const { account, isAuthenticated, isLoading, logout } = useAuth();
@@ -130,11 +130,11 @@ export default function DashboardPage() {
     );
   }
 
-  let balanceMicroUSDC = 0n;
+  let balanceMicroUSDC = BigInt(0);
   try {
     balanceMicroUSDC = BigInt(account.balance_usdc || '0');
   } catch {
-    balanceMicroUSDC = 0n;
+    balanceMicroUSDC = BigInt(0);
   }
   const isLowBalance = balanceMicroUSDC < LOW_BALANCE_THRESHOLD_MICRO_USDC;
 

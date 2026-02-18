@@ -40,6 +40,8 @@ export function isValidAccountNumber(input: string): boolean {
  *   "0"       -> "$0.00"
  */
 export function formatUSDC(microStr: string): string {
+  const zero = BigInt(0);
+  const scale = BigInt('1000000');
   const normalized = String(microStr ?? '').trim();
   const input = normalized === '' ? '0' : normalized;
 
@@ -50,10 +52,10 @@ export function formatUSDC(microStr: string): string {
     return '$0.00';
   }
 
-  const negative = micro < 0n;
+  const negative = micro < zero;
   const absMicro = negative ? -micro : micro;
-  const whole = absMicro / 1_000_000n;
-  const frac = absMicro % 1_000_000n;
+  const whole = absMicro / scale;
+  const frac = absMicro % scale;
   const wholeStr = whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   const raw = `${wholeStr}.${frac.toString().padStart(6, '0')}`;
   // Trim trailing zeros but keep at least 2 decimal places
