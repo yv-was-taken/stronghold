@@ -6,7 +6,7 @@ import { API_URL, fetchWithAuth } from '@/lib/api';
 export interface UsageLog {
   id: string;
   endpoint: string;
-  cost_usdc: number;
+  cost_usdc: string;
   status: 'success' | 'error';
   threat_detected: boolean;
   latency_ms: number;
@@ -15,7 +15,7 @@ export interface UsageLog {
 
 export interface UsageStats {
   total_requests: number;
-  total_cost_usdc: number;
+  total_cost_usdc: string;
   threats_detected: number;
   avg_latency_ms: number;
   period_days: number;
@@ -55,7 +55,7 @@ export function useUsageLogs() {
       }
 
       const result = await response.json();
-      const logs: UsageLog[] = result.usage || [];
+      const logs: UsageLog[] = result.logs || result.usage || [];
 
       setState(prev => ({
         data: append ? [...prev.data, ...logs] : logs,

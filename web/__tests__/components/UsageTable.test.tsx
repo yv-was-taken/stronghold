@@ -7,7 +7,7 @@ const mockLogs: UsageLog[] = [
   {
     id: '1',
     endpoint: '/v1/scan/content',
-    cost_usdc: 0.001,
+    cost_usdc: '1000',
     status: 'success',
     threat_detected: false,
     latency_ms: 45,
@@ -16,7 +16,7 @@ const mockLogs: UsageLog[] = [
   {
     id: '2',
     endpoint: '/v1/scan/output',
-    cost_usdc: 0.001,
+    cost_usdc: '1000',
     status: 'error',
     threat_detected: true,
     latency_ms: 52,

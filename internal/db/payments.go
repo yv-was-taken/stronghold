@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"time"
 
+	"stronghold/internal/usdc"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -32,7 +34,7 @@ type PaymentTransaction struct {
 	PayerAddress           string                 `json:"payer_address"`
 	ReceiverAddress        string                 `json:"receiver_address"`
 	Endpoint               string                 `json:"endpoint"`
-	AmountUSDC             float64                `json:"amount_usdc"`
+	AmountUSDC             usdc.MicroUSDC         `json:"amount_usdc"`
 	Network                string                 `json:"network"`
 	Status                 PaymentStatus          `json:"status"`
 	FacilitatorPaymentID   *string                `json:"facilitator_payment_id,omitempty"`

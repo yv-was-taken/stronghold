@@ -14,6 +14,7 @@ import (
 	"stronghold/internal/config"
 	"stronghold/internal/db"
 	"stronghold/internal/db/testutil"
+	"stronghold/internal/usdc"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/assert"
@@ -142,9 +143,9 @@ func TestStripeWebhook_FulfillmentComplete(t *testing.T) {
 	deposit := &db.Deposit{
 		AccountID:     account.ID,
 		Provider:      db.DepositProviderStripe,
-		AmountUSDC:    50.00,
-		FeeUSDC:       1.75,
-		NetAmountUSDC: 48.25,
+		AmountUSDC:    usdc.FromFloat(50.00),
+		FeeUSDC:       usdc.FromFloat(1.75),
+		NetAmountUSDC: usdc.FromFloat(48.25),
 	}
 	err = database.CreateDeposit(t.Context(), deposit)
 	require.NoError(t, err)
@@ -191,7 +192,7 @@ func TestStripeWebhook_FulfillmentComplete(t *testing.T) {
 	// Verify account balance was credited
 	updatedAccount, err := database.GetAccountByID(t.Context(), account.ID)
 	require.NoError(t, err)
-	assert.InDelta(t, 48.25, updatedAccount.BalanceUSDC, 0.01)
+	assert.Equal(t, usdc.FromFloat(48.25), updatedAccount.BalanceUSDC)
 }
 
 func TestStripeWebhook_Idempotency(t *testing.T) {
@@ -207,9 +208,9 @@ func TestStripeWebhook_Idempotency(t *testing.T) {
 	deposit := &db.Deposit{
 		AccountID:     account.ID,
 		Provider:      db.DepositProviderStripe,
-		AmountUSDC:    100.00,
-		FeeUSDC:       3.20,
-		NetAmountUSDC: 96.80,
+		AmountUSDC:    usdc.FromFloat(100.00),
+		FeeUSDC:       usdc.FromFloat(3.20),
+		NetAmountUSDC: usdc.FromFloat(96.80),
 	}
 	err = database.CreateDeposit(t.Context(), deposit)
 	require.NoError(t, err)
@@ -260,7 +261,7 @@ func TestStripeWebhook_Idempotency(t *testing.T) {
 	// Balance should not have changed (no double-credit)
 	account2, err := database.GetAccountByID(t.Context(), account.ID)
 	require.NoError(t, err)
-	assert.InDelta(t, initialBalance, account2.BalanceUSDC, 0.01)
+	assert.Equal(t, initialBalance, account2.BalanceUSDC)
 }
 
 func TestStripeWebhook_Rejected(t *testing.T) {
@@ -276,9 +277,9 @@ func TestStripeWebhook_Rejected(t *testing.T) {
 	deposit := &db.Deposit{
 		AccountID:     account.ID,
 		Provider:      db.DepositProviderStripe,
-		AmountUSDC:    25.00,
-		FeeUSDC:       1.03,
-		NetAmountUSDC: 23.97,
+		AmountUSDC:    usdc.FromFloat(25.00),
+		FeeUSDC:       usdc.FromFloat(1.03),
+		NetAmountUSDC: usdc.FromFloat(23.97),
 	}
 	err = database.CreateDeposit(t.Context(), deposit)
 	require.NoError(t, err)
@@ -335,9 +336,9 @@ func TestStripeWebhook_IntermediateStatus(t *testing.T) {
 	deposit := &db.Deposit{
 		AccountID:     account.ID,
 		Provider:      db.DepositProviderStripe,
-		AmountUSDC:    75.00,
-		FeeUSDC:       2.48,
-		NetAmountUSDC: 72.52,
+		AmountUSDC:    usdc.FromFloat(75.00),
+		FeeUSDC:       usdc.FromFloat(2.48),
+		NetAmountUSDC: usdc.FromFloat(72.52),
 	}
 	err = database.CreateDeposit(t.Context(), deposit)
 	require.NoError(t, err)

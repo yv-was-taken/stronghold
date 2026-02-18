@@ -84,7 +84,7 @@ export async function fetchWithAuth(
 /** Balance information for a single wallet chain */
 export interface WalletBalanceInfo {
   address: string;
-  balance_usdc: number;
+  balance_usdc: string;
   network: string;
   error?: string;
 }
@@ -93,7 +93,7 @@ export interface WalletBalanceInfo {
 export interface BalancesResponse {
   evm?: WalletBalanceInfo;
   solana?: WalletBalanceInfo;
-  total_usdc: number;
+  total_usdc: string;
 }
 
 /**

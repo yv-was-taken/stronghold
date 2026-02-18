@@ -16,6 +16,7 @@ import (
 
 	"stronghold/internal/config"
 	"stronghold/internal/db"
+	"stronghold/internal/usdc"
 	"stronghold/internal/wallet"
 
 	"github.com/gofiber/fiber/v3"
@@ -259,9 +260,9 @@ type InitiateDepositRequest struct {
 
 // InitiateDepositResponse represents the response after initiating a deposit
 type InitiateDepositResponse struct {
-	DepositID      string  `json:"deposit_id"`
-	AmountUSDC     float64 `json:"amount_usdc"`
-	Provider       string  `json:"provider"`
+	DepositID      string         `json:"deposit_id"`
+	AmountUSDC     usdc.MicroUSDC `json:"amount_usdc"`
+	Provider       string         `json:"provider"`
 	Network        string  `json:"network"`
 	Status         string  `json:"status"`
 	CheckoutURL    *string `json:"checkout_url,omitempty"`
@@ -312,6 +313,9 @@ func (h *AccountHandler) InitiateDeposit(c fiber.Ctx) error {
 		})
 	}
 
+	// Convert float64 request amount to MicroUSDC immediately
+	amountMicro := usdc.FromFloat(req.AmountUSDC)
+
 	// Validate provider
 	var provider db.DepositProvider
 	switch req.Provider {
@@ -359,8 +363,8 @@ func (h *AccountHandler) InitiateDeposit(c fiber.Ctx) error {
 	deposit := &db.Deposit{
 		AccountID:  accountID,
 		Provider:   provider,
-		AmountUSDC: req.AmountUSDC,
-		FeeUSDC:    calculateFee(req.AmountUSDC, provider),
+		AmountUSDC: amountMicro,
+		FeeUSDC:    calculateFee(amountMicro, provider),
 		Status:     db.DepositStatusPending,
 		Metadata:   map[string]any{"network": network},
 	}
@@ -378,7 +382,7 @@ func (h *AccountHandler) InitiateDeposit(c fiber.Ctx) error {
 	// Build response based on provider
 	resp := InitiateDepositResponse{
 		DepositID:  deposit.ID.String(),
-		AmountUSDC: req.AmountUSDC,
+		AmountUSDC: amountMicro,
 		Provider:   string(provider),
 		Network:    network,
 		Status:     string(db.DepositStatusPending),
@@ -637,17 +641,17 @@ func (h *AccountHandler) UpdateWallets(c fiber.Ctx) error {
 
 // WalletBalanceInfo represents balance information for a single wallet
 type WalletBalanceInfo struct {
-	Address     string  `json:"address"`
-	BalanceUSDC float64 `json:"balance_usdc"`
-	Network     string  `json:"network"`
-	Error       string  `json:"error,omitempty"`
+	Address     string         `json:"address"`
+	BalanceUSDC usdc.MicroUSDC `json:"balance_usdc"`
+	Network     string         `json:"network"`
+	Error       string         `json:"error,omitempty"`
 }
 
 // GetBalancesResponse represents the response from GetBalances
 type GetBalancesResponse struct {
 	EVM       *WalletBalanceInfo `json:"evm,omitempty"`
 	Solana    *WalletBalanceInfo `json:"solana,omitempty"`
-	TotalUSDC float64            `json:"total_usdc"`
+	TotalUSDC usdc.MicroUSDC     `json:"total_usdc"`
 }
 
 // GetBalances returns on-chain USDC balances for the account's wallets
@@ -683,7 +687,7 @@ func (h *AccountHandler) GetBalances(c fiber.Ctx) error {
 	}
 
 	resp := GetBalancesResponse{}
-	var totalUSDC float64
+	var totalUSDC usdc.MicroUSDC
 
 	// Use a single request-level timeout budget and query both chains in parallel.
 	ctx, cancel := context.WithTimeout(c.Context(), 28*time.Second)
@@ -713,13 +717,13 @@ func (h *AccountHandler) GetBalances(c fiber.Ctx) error {
 				)
 				info.Error = "Failed to query balance"
 			} else {
-				info.BalanceUSDC = balance
+				info.BalanceUSDC = usdc.FromFloat(balance)
 			}
 
 			mu.Lock()
 			resp.EVM = info
 			if err == nil {
-				totalUSDC += balance
+				totalUSDC += info.BalanceUSDC
 			}
 			mu.Unlock()
 		}()
@@ -746,13 +750,13 @@ func (h *AccountHandler) GetBalances(c fiber.Ctx) error {
 				)
 				info.Error = "Failed to query balance"
 			} else {
-				info.BalanceUSDC = balance
+				info.BalanceUSDC = usdc.FromFloat(balance)
 			}
 
 			mu.Lock()
 			resp.Solana = info
 			if err == nil {
-				totalUSDC += balance
+				totalUSDC += info.BalanceUSDC
 			}
 			mu.Unlock()
 		}()
@@ -765,12 +769,13 @@ func (h *AccountHandler) GetBalances(c fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
-// calculateFee calculates the fee for a deposit based on provider
-func calculateFee(amount float64, provider db.DepositProvider) float64 {
+// calculateFee calculates the fee for a deposit based on provider using integer arithmetic.
+func calculateFee(amount usdc.MicroUSDC, provider db.DepositProvider) usdc.MicroUSDC {
 	switch provider {
 	case db.DepositProviderStripe:
-		// Stripe typically charges 2.9% + $0.30
-		return amount*0.029 + 0.30
+		// Stripe typically charges 2.9% + $0.30, computed in microUSDC
+		// amount * 29 / 1000 + 300_000 (where 300_000 = $0.30)
+		return usdc.MicroUSDC(int64(amount)*29/1000 + 300_000)
 	case db.DepositProviderDirect:
 		// No fee for direct deposits
 		return 0

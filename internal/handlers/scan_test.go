@@ -8,6 +8,7 @@ import (
 
 	"stronghold/internal/config"
 	"stronghold/internal/middleware"
+	"stronghold/internal/usdc"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/assert"
@@ -35,7 +36,7 @@ func TestScanContent_EmptyText(t *testing.T) {
 		Networks:       []string{"base-sepolia"},
 	}
 	pricing := &config.PricingConfig{
-		ScanContent: 0.001,
+		ScanContent: usdc.MicroUSDC(1000),
 	}
 	x402 := middleware.NewX402Middleware(x402cfg, pricing)
 
@@ -43,7 +44,7 @@ func TestScanContent_EmptyText(t *testing.T) {
 	app.Use(middleware.RequestID())
 
 	// Simple mock handler
-	app.Post("/v1/scan/content", x402.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/content", x402.AtomicPayment(usdc.MicroUSDC(1000)), func(c fiber.Ctx) error {
 		requestID := middleware.GetRequestID(c)
 
 		type ScanRequest struct {
@@ -99,7 +100,7 @@ func TestScanContent_Success(t *testing.T) {
 	app := fiber.New()
 	app.Use(middleware.RequestID())
 
-	app.Post("/v1/scan/content", x402.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/content", x402.AtomicPayment(usdc.MicroUSDC(1000)), func(c fiber.Ctx) error {
 		requestID := middleware.GetRequestID(c)
 
 		type ScanRequest struct {
@@ -162,7 +163,7 @@ func TestScanOutput_EmptyText(t *testing.T) {
 	app := fiber.New()
 	app.Use(middleware.RequestID())
 
-	app.Post("/v1/scan/output", x402.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/output", x402.AtomicPayment(usdc.MicroUSDC(1000)), func(c fiber.Ctx) error {
 		requestID := middleware.GetRequestID(c)
 
 		type ScanRequest struct {
@@ -210,7 +211,7 @@ func TestScan_InvalidJSON(t *testing.T) {
 	app := fiber.New()
 	app.Use(middleware.RequestID())
 
-	app.Post("/v1/scan/content", x402.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/content", x402.AtomicPayment(usdc.MicroUSDC(1000)), func(c fiber.Ctx) error {
 		requestID := middleware.GetRequestID(c)
 
 		type ScanRequest struct {
@@ -248,7 +249,7 @@ func TestScanContent_WithMetadata(t *testing.T) {
 	app := fiber.New()
 	app.Use(middleware.RequestID())
 
-	app.Post("/v1/scan/content", x402.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/content", x402.AtomicPayment(usdc.MicroUSDC(1000)), func(c fiber.Ctx) error {
 		requestID := middleware.GetRequestID(c)
 
 		type ScanRequest struct {
@@ -314,7 +315,7 @@ func TestScan_RequestIDInErrorResponse(t *testing.T) {
 	app := fiber.New()
 	app.Use(middleware.RequestID())
 
-	app.Post("/v1/scan/content", x402.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/content", x402.AtomicPayment(usdc.MicroUSDC(1000)), func(c fiber.Ctx) error {
 		requestID := middleware.GetRequestID(c)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":      "Scan failed: internal error",

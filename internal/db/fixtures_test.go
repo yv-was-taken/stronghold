@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"stronghold/internal/usdc"
+
 	"github.com/google/uuid"
 )
 
@@ -141,7 +143,7 @@ func (f *Fixtures) CreateExpiredSession(accountID uuid.UUID) *TestSession {
 }
 
 // CreateTestDeposit creates a test deposit for an account
-func (f *Fixtures) CreateTestDeposit(accountID uuid.UUID, amount float64, provider DepositProvider) *Deposit {
+func (f *Fixtures) CreateTestDeposit(accountID uuid.UUID, amount usdc.MicroUSDC, provider DepositProvider) *Deposit {
 	f.t.Helper()
 
 	ctx := context.Background()
@@ -162,7 +164,7 @@ func (f *Fixtures) CreateTestDeposit(accountID uuid.UUID, amount float64, provid
 }
 
 // CreateCompletedDeposit creates a deposit and completes it
-func (f *Fixtures) CreateCompletedDeposit(accountID uuid.UUID, amount float64) *Deposit {
+func (f *Fixtures) CreateCompletedDeposit(accountID uuid.UUID, amount usdc.MicroUSDC) *Deposit {
 	f.t.Helper()
 
 	deposit := f.CreateTestDeposit(accountID, amount, DepositProviderDirect)
@@ -182,11 +184,12 @@ func (f *Fixtures) CreateCompletedDeposit(accountID uuid.UUID, amount float64) *
 }
 
 // CreateStripeDeposit creates a Stripe deposit with proper fee calculation
-func (f *Fixtures) CreateStripeDeposit(accountID uuid.UUID, amount float64) *Deposit {
+func (f *Fixtures) CreateStripeDeposit(accountID uuid.UUID, amount usdc.MicroUSDC) *Deposit {
 	f.t.Helper()
 
 	ctx := context.Background()
-	fee := amount*0.029 + 0.30
+	// Stripe fee: 2.9% + $0.30 in microUSDC
+	fee := usdc.MicroUSDC(int64(amount)*29/1000 + 300_000)
 	deposit := &Deposit{
 		AccountID:     accountID,
 		Provider:      DepositProviderStripe,
@@ -204,7 +207,7 @@ func (f *Fixtures) CreateStripeDeposit(accountID uuid.UUID, amount float64) *Dep
 }
 
 // CreateTestUsageLog creates a test usage log entry
-func (f *Fixtures) CreateTestUsageLog(accountID uuid.UUID, endpoint string, cost float64, threatDetected bool) *UsageLog {
+func (f *Fixtures) CreateTestUsageLog(accountID uuid.UUID, endpoint string, cost usdc.MicroUSDC, threatDetected bool) *UsageLog {
 	f.t.Helper()
 
 	ctx := context.Background()
@@ -226,7 +229,7 @@ func (f *Fixtures) CreateTestUsageLog(accountID uuid.UUID, endpoint string, cost
 }
 
 // CreateTestPaymentTransaction creates a test payment transaction
-func (f *Fixtures) CreateTestPaymentTransaction(endpoint string, amount float64) *PaymentTransaction {
+func (f *Fixtures) CreateTestPaymentTransaction(endpoint string, amount usdc.MicroUSDC) *PaymentTransaction {
 	f.t.Helper()
 
 	ctx := context.Background()
@@ -249,7 +252,7 @@ func (f *Fixtures) CreateTestPaymentTransaction(endpoint string, amount float64)
 }
 
 // CreateExpiredPaymentTransaction creates an already-expired payment transaction
-func (f *Fixtures) CreateExpiredPaymentTransaction(endpoint string, amount float64) *PaymentTransaction {
+func (f *Fixtures) CreateExpiredPaymentTransaction(endpoint string, amount usdc.MicroUSDC) *PaymentTransaction {
 	f.t.Helper()
 
 	ctx := context.Background()

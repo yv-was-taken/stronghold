@@ -14,6 +14,7 @@ import (
 	"stronghold/internal/config"
 	"stronghold/internal/db"
 	"stronghold/internal/db/testutil"
+	"stronghold/internal/usdc"
 	"stronghold/internal/wallet"
 
 	"github.com/gofiber/fiber/v3"
@@ -49,14 +50,14 @@ func TestAtomicPayment_DevModeBypass(t *testing.T) {
 		Networks:       []string{"base-sepolia"},
 	}
 	pricing := &config.PricingConfig{
-		ScanContent:  0.001,
-		ScanOutput: 0.001,
+		ScanContent:  usdc.MicroUSDC(1000),
+		ScanOutput: usdc.MicroUSDC(1000),
 	}
 
 	m := NewX402Middleware(cfg, pricing)
 
 	app := fiber.New()
-	app.Post("/v1/scan/content", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/content", m.AtomicPayment(usdc.MicroUSDC(1000)), func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
 
@@ -78,13 +79,13 @@ func TestAtomicPayment_MissingHeader(t *testing.T) {
 		Networks:       []string{"base-sepolia"},
 	}
 	pricing := &config.PricingConfig{
-		ScanContent: 0.001,
+		ScanContent: usdc.MicroUSDC(1000),
 	}
 
 	m := NewX402Middleware(cfg, pricing)
 
 	app := fiber.New()
-	app.Post("/v1/scan/content", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/content", m.AtomicPayment(usdc.MicroUSDC(1000)), func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
 
@@ -119,13 +120,13 @@ func TestRequirePayment_DevModeBypass(t *testing.T) {
 		Networks:       []string{"base-sepolia"},
 	}
 	pricing := &config.PricingConfig{
-		ScanContent: 0.001,
+		ScanContent: usdc.MicroUSDC(1000),
 	}
 
 	m := NewX402Middleware(cfg, pricing)
 
 	app := fiber.New()
-	app.Post("/v1/scan", m.RequirePayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan", m.RequirePayment(usdc.MicroUSDC(1000)), func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
 
@@ -175,8 +176,8 @@ func TestGetRoutes(t *testing.T) {
 		Networks:       []string{"base-sepolia"},
 	}
 	pricing := &config.PricingConfig{
-		ScanContent: 0.001,
-		ScanOutput:  0.001,
+		ScanContent: usdc.MicroUSDC(1000),
+		ScanOutput:  usdc.MicroUSDC(1000),
 	}
 
 	m := NewX402Middleware(cfg, pricing)
@@ -185,53 +186,53 @@ func TestGetRoutes(t *testing.T) {
 	assert.Len(t, routes, 2)
 
 	// Verify route pricing
-	routeMap := make(map[string]float64)
+	routeMap := make(map[string]usdc.MicroUSDC)
 	for _, r := range routes {
 		routeMap[r.Path] = r.Price
 	}
 
-	assert.Equal(t, 0.001, routeMap["/v1/scan/content"])
-	assert.Equal(t, 0.001, routeMap["/v1/scan/output"])
+	assert.Equal(t, usdc.MicroUSDC(1000), routeMap["/v1/scan/content"])
+	assert.Equal(t, usdc.MicroUSDC(1000), routeMap["/v1/scan/output"])
 }
 
-func TestDecimalToWei(t *testing.T) {
+func TestMicroUSDCToBigInt(t *testing.T) {
 	testCases := []struct {
-		amount   float64
+		amount   usdc.MicroUSDC
 		expected string
 	}{
-		{0.001, "1000"},    // $0.001 = 1000 USDC atomic units (6 decimals)
-		{0.01, "10000"},    // $0.01 = 10000 units
-		{1.0, "1000000"},   // $1.00 = 1000000 units
-		{0.000001, "1"},    // Smallest unit = $0.000001
+		{usdc.MicroUSDC(1000), "1000"},       // $0.001 = 1000 USDC atomic units (6 decimals)
+		{usdc.MicroUSDC(10000), "10000"},     // $0.01 = 10000 units
+		{usdc.MicroUSDC(1000000), "1000000"}, // $1.00 = 1000000 units
+		{usdc.MicroUSDC(1), "1"},             // Smallest unit = $0.000001
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.expected, func(t *testing.T) {
-			result := decimalToWei(tc.amount)
+			result := tc.amount.ToBigInt("base")
 			assert.Equal(t, tc.expected, result.String())
 		})
 	}
 }
 
-func TestDecimalToWei_Precision(t *testing.T) {
-	// Test edge cases that could cause precision loss with int64 conversion
+func TestMicroUSDCToBigInt_Precision(t *testing.T) {
+	// Test edge cases using MicroUSDC integer arithmetic
 	testCases := []struct {
 		name     string
-		amount   float64
+		amount   usdc.MicroUSDC
 		expected string
 	}{
-		{"very small amount", 0.0000001, "0"},  // Below USDC precision
-		{"one cent", 0.01, "10000"},
-		{"one dollar", 1.0, "1000000"},
-		{"large amount", 1000000.0, "1000000000000"},
-		{"fractional precision", 0.123456, "123456"},
-		{"nine cents", 0.09, "90000"},          // Potential float representation issue
-		{"nineteen cents", 0.19, "190000"},     // Another common float issue
+		{"zero", usdc.MicroUSDC(0), "0"},
+		{"one cent", usdc.FromFloat(0.01), "10000"},
+		{"one dollar", usdc.FromFloat(1.0), "1000000"},
+		{"large amount", usdc.FromFloat(1000000.0), "1000000000000"},
+		{"fractional precision", usdc.FromFloat(0.123456), "123456"},
+		{"nine cents", usdc.FromFloat(0.09), "90000"},
+		{"nineteen cents", usdc.FromFloat(0.19), "190000"},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := decimalToWei(tc.amount)
+			result := tc.amount.ToBigInt("base")
 			assert.Equal(t, tc.expected, result.String())
 		})
 	}
@@ -253,7 +254,7 @@ func TestAtomicPayment_WithDB_IdempotencyCache(t *testing.T) {
 		Networks:       []string{"base-sepolia"},
 	}
 	pricing := &config.PricingConfig{
-		ScanContent: 0.001,
+		ScanContent: usdc.MicroUSDC(1000),
 	}
 
 	// Create middleware with database
@@ -281,7 +282,7 @@ func TestAtomicPayment_WithDB_IdempotencyCache(t *testing.T) {
 
 	app := fiber.New()
 	callCount := 0
-	app.Post("/v1/scan/content", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/content", m.AtomicPayment(usdc.MicroUSDC(1000)), func(c fiber.Ctx) error {
 		callCount++
 		return c.JSON(fiber.Map{"status": "ok", "call": callCount})
 	})
@@ -329,7 +330,7 @@ func TestAtomicPayment_DuplicateInProgress(t *testing.T) {
 		Networks:       []string{"base-sepolia"},
 	}
 	pricing := &config.PricingConfig{
-		ScanContent: 0.001,
+		ScanContent: usdc.MicroUSDC(1000),
 	}
 
 	m := NewX402MiddlewareWithDB(cfg, pricing, db.NewFromPool(testDB.Pool))
@@ -355,7 +356,7 @@ func TestAtomicPayment_DuplicateInProgress(t *testing.T) {
 	require.NoError(t, err)
 
 	app := fiber.New()
-	app.Post("/v1/scan/content", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/content", m.AtomicPayment(usdc.MicroUSDC(1000)), func(c fiber.Ctx) error {
 		time.Sleep(50 * time.Millisecond) // Simulate some work
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
@@ -414,7 +415,7 @@ func TestAtomicPayment_SettlementFailure(t *testing.T) {
 		Networks:       []string{"base-sepolia"},
 	}
 	pricing := &config.PricingConfig{
-		ScanContent: 0.001,
+		ScanContent: usdc.MicroUSDC(1000),
 	}
 
 	m := NewX402MiddlewareWithDB(cfg, pricing, db.NewFromPool(testDB.Pool))
@@ -439,7 +440,7 @@ func TestAtomicPayment_SettlementFailure(t *testing.T) {
 
 	handlerCalled := false
 	app := fiber.New()
-	app.Post("/v1/scan/content", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/content", m.AtomicPayment(usdc.MicroUSDC(1000)), func(c fiber.Ctx) error {
 		handlerCalled = true
 		return c.JSON(fiber.Map{"status": "ok", "result": "should not be returned"})
 	})
@@ -481,7 +482,7 @@ func TestAtomicPayment_HandlerError(t *testing.T) {
 		Networks:       []string{"base-sepolia"},
 	}
 	pricing := &config.PricingConfig{
-		ScanContent: 0.001,
+		ScanContent: usdc.MicroUSDC(1000),
 	}
 
 	m := NewX402MiddlewareWithDB(cfg, pricing, db.NewFromPool(testDB.Pool))
@@ -508,7 +509,7 @@ func TestAtomicPayment_HandlerError(t *testing.T) {
 	require.NoError(t, err)
 
 	app := fiber.New()
-	app.Post("/v1/scan/content", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/content", m.AtomicPayment(usdc.MicroUSDC(1000)), func(c fiber.Ctx) error {
 		// Handler returns an error status
 		return c.Status(500).JSON(fiber.Map{"error": "internal error"})
 	})
@@ -535,7 +536,7 @@ func TestMiddleware_SkipsFreeRoutes(t *testing.T) {
 		Networks:       []string{"base-sepolia"},
 	}
 	pricing := &config.PricingConfig{
-		ScanContent: 0.001,
+		ScanContent: usdc.MicroUSDC(1000),
 	}
 
 	m := NewX402Middleware(cfg, pricing)
@@ -653,7 +654,7 @@ func TestNewX402MiddlewareWithDB(t *testing.T) {
 		Networks:       []string{"base-sepolia"},
 	}
 	pricing := &config.PricingConfig{
-		ScanContent: 0.001,
+		ScanContent: usdc.MicroUSDC(1000),
 	}
 
 	// This test just verifies the constructor works
@@ -679,7 +680,7 @@ func TestAtomicPayment_FullFlow_Integration(t *testing.T) {
 		Networks:       []string{"base-sepolia"},
 	}
 	pricing := &config.PricingConfig{
-		ScanContent: 0.001,
+		ScanContent: usdc.MicroUSDC(1000),
 	}
 
 	database := db.NewFromPool(testDB.Pool)
@@ -702,7 +703,7 @@ func TestAtomicPayment_FullFlow_Integration(t *testing.T) {
 	require.NoError(t, err)
 
 	app := fiber.New()
-	app.Post("/v1/scan/content", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/content", m.AtomicPayment(usdc.MicroUSDC(1000)), func(c fiber.Ctx) error {
 		// Verify we have access to the payment transaction
 		tx := GetPaymentTransaction(c)
 		if tx == nil {
@@ -764,7 +765,7 @@ func TestAtomicPayment_InvalidAmountFormat(t *testing.T) {
 		Networks:       []string{"base-sepolia"},
 	}
 	pricing := &config.PricingConfig{
-		ScanContent: 0.001,
+		ScanContent: usdc.MicroUSDC(1000),
 	}
 
 	m := NewX402MiddlewareWithDB(cfg, pricing, db.NewFromPool(testDB.Pool))
@@ -789,7 +790,7 @@ func TestAtomicPayment_InvalidAmountFormat(t *testing.T) {
 	)
 
 	app := fiber.New()
-	app.Post("/v1/scan/content", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/content", m.AtomicPayment(usdc.MicroUSDC(1000)), func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
 
@@ -820,7 +821,7 @@ func TestVerifyPayment_AddressNormalization(t *testing.T) {
 		Networks:       []string{"base-sepolia"},
 	}
 	pricing := &config.PricingConfig{
-		ScanContent: 0.001,
+		ScanContent: usdc.MicroUSDC(1000),
 	}
 
 	m := NewX402Middleware(cfg, pricing)
@@ -847,7 +848,7 @@ func TestVerifyPayment_AddressNormalization(t *testing.T) {
 	require.NoError(t, err)
 
 	app := fiber.New()
-	app.Post("/v1/scan/content", m.AtomicPayment(0.001), func(c fiber.Ctx) error {
+	app.Post("/v1/scan/content", m.AtomicPayment(usdc.MicroUSDC(1000)), func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
 

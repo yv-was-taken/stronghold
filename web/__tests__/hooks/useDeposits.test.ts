@@ -5,9 +5,9 @@ import { useDeposits } from '@/lib/hooks/useDeposits'
 const mockDeposits = [
   {
     id: '1',
-    amount_usdc: 100,
-    fee_usdc: 3,
-    net_usdc: 97,
+    amount_usdc: '100000000',
+    fee_usdc: '3000000',
+    net_amount_usdc: '97000000',
     provider: 'stripe' as const,
     status: 'completed' as const,
     created_at: '2024-01-15T12:00:00Z',
@@ -15,9 +15,9 @@ const mockDeposits = [
   },
   {
     id: '2',
-    amount_usdc: 50,
-    fee_usdc: 0,
-    net_usdc: 50,
+    amount_usdc: '50000000',
+    fee_usdc: '0',
+    net_amount_usdc: '50000000',
     provider: 'direct' as const,
     status: 'pending' as const,
     created_at: '2024-01-14T10:00:00Z',
@@ -61,6 +61,31 @@ describe('useDeposits', () => {
     expect(result.current.data).toEqual(mockDeposits)
     expect(result.current.loading).toBe(false)
     expect(result.current.error).toBeNull()
+  })
+
+  it('maps legacy net_usdc to net_amount_usdc', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({
+        deposits: [{
+          id: 'legacy-1',
+          amount_usdc: '1000000',
+          fee_usdc: '0',
+          net_usdc: '1000000',
+          provider: 'direct',
+          status: 'completed',
+          created_at: '2024-01-15T12:00:00Z',
+        }],
+      }),
+    })
+
+    const { result } = renderHook(() => useDeposits())
+
+    await act(async () => {
+      await result.current.fetchDeposits(20, 0)
+    })
+
+    expect(result.current.data[0].net_amount_usdc).toBe('1000000')
   })
 
   it('handles fetch error', async () => {

@@ -52,23 +52,43 @@ describe('isValidAccountNumber', () => {
 })
 
 describe('formatUSDC', () => {
-  it('formats with minimum 2 decimal places', () => {
-    expect(formatUSDC(100)).toBe('100.00')
-    expect(formatUSDC(0)).toBe('0.00')
+  it('formats whole USDC amounts with minimum 2 decimal places', () => {
+    expect(formatUSDC("1000000")).toBe('$1.00')      // 1 USDC
+    expect(formatUSDC("100000000")).toBe('$100.00')   // 100 USDC
+    expect(formatUSDC("1000000000000")).toBe('$1,000,000.00') // 1M USDC
+    expect(formatUSDC("0")).toBe('$0.00')
   })
 
-  it('handles decimal values', () => {
-    expect(formatUSDC(100.5)).toBe('100.50')
-    expect(formatUSDC(100.123456)).toBe('100.123456')
+  it('formats fractional USDC amounts', () => {
+    expect(formatUSDC("1250000")).toBe('$1.25')       // 1.25 USDC
+    expect(formatUSDC("1500000")).toBe('$1.50')       // 1.50 USDC
+    expect(formatUSDC("123456789")).toBe('$123.456789') // preserves all significant digits
   })
 
-  it('adds thousand separators', () => {
-    expect(formatUSDC(1000)).toBe('1,000.00')
-    expect(formatUSDC(1000000)).toBe('1,000,000.00')
+  it('formats sub-cent amounts correctly', () => {
+    expect(formatUSDC("1000")).toBe('$0.001')         // 0.001 USDC
+    expect(formatUSDC("100")).toBe('$0.0001')         // 0.0001 USDC
+    expect(formatUSDC("1")).toBe('$0.000001')         // smallest unit
   })
 
-  it('limits to 6 decimal places', () => {
-    expect(formatUSDC(0.12345678)).toBe('0.123457')
+  it('handles edge cases', () => {
+    expect(formatUSDC("")).toBe('$0.00')
+    expect(formatUSDC(undefined as unknown as string)).toBe('$0.00')
+    expect(formatUSDC("not-a-number")).toBe('$0.00')
+  })
+
+  it('trims trailing zeros but keeps at least 2 decimal places', () => {
+    expect(formatUSDC("3500000")).toBe('$3.50')       // keeps the trailing 0 for 2 places
+    expect(formatUSDC("10000000")).toBe('$10.00')     // 10 USDC
+  })
+
+  it('formats negative amounts correctly', () => {
+    expect(formatUSDC("-1250000")).toBe('-$1.25')
+    expect(formatUSDC("-1")).toBe('-$0.000001')
+  })
+
+  it('preserves precision for values beyond Number.MAX_SAFE_INTEGER', () => {
+    expect(formatUSDC("9007199254740993")).toBe('$9,007,199,254.740993')
   })
 })
 

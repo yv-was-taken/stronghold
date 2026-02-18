@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"stronghold/internal/usdc"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -42,7 +44,7 @@ type Account struct {
 	AccountNumber       string         `json:"account_number"`
 	EVMWalletAddress    *string        `json:"evm_wallet_address,omitempty"`
 	SolanaWalletAddress *string        `json:"solana_wallet_address,omitempty"`
-	BalanceUSDC         float64        `json:"balance_usdc"`
+	BalanceUSDC         usdc.MicroUSDC `json:"balance_usdc"`
 	Status              AccountStatus  `json:"status"`
 	WalletEscrow        bool           `json:"wallet_escrow_enabled"`
 	TOTPEnabled         bool           `json:"totp_enabled"`
@@ -344,7 +346,7 @@ func (db *DB) LinkSolanaWallet(ctx context.Context, accountID uuid.UUID, solanaA
 }
 
 // UpdateBalance updates an account's balance directly (for admin operations)
-func (db *DB) UpdateBalance(ctx context.Context, accountID uuid.UUID, newBalance float64) error {
+func (db *DB) UpdateBalance(ctx context.Context, accountID uuid.UUID, newBalance usdc.MicroUSDC) error {
 	_, err := db.pool.Exec(ctx, `
 		UPDATE accounts
 		SET balance_usdc = $1, updated_at = $2

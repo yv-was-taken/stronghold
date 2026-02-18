@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"stronghold/internal/db/testutil"
+	"stronghold/internal/usdc"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -454,15 +455,15 @@ func TestUpdateBalance(t *testing.T) {
 
 	account, err := db.CreateAccount(ctx, nil, nil)
 	require.NoError(t, err)
-	assert.Equal(t, 0.0, account.BalanceUSDC)
+	assert.Equal(t, usdc.MicroUSDC(0), account.BalanceUSDC)
 
 	// Update balance
-	err = db.UpdateBalance(ctx, account.ID, 100.50)
+	err = db.UpdateBalance(ctx, account.ID, usdc.FromFloat(100.50))
 	require.NoError(t, err)
 
 	found, err := db.GetAccountByID(ctx, account.ID)
 	require.NoError(t, err)
-	assert.Equal(t, 100.50, found.BalanceUSDC)
+	assert.Equal(t, usdc.FromFloat(100.50), found.BalanceUSDC)
 }
 
 func TestAccountExists(t *testing.T) {

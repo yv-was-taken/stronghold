@@ -6,6 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **CRITICAL: Do NOT commit or push unless explicitly told to do so.**
 
+- **NEVER commit directly to master.** Always create a feature branch and open a PR targeting master. Only commit to master if the user explicitly says to do so.
 - **ALWAYS run `go test ./...` and verify ALL tests pass before committing.** No exceptions. If Docker is not running, start it first. If tests fail, fix them before committing. Never commit with failing tests.
 - Make changes and verify they work locally first
 - Wait for explicit user approval before committing
@@ -249,6 +250,11 @@ Migration files live in `internal/db/migrations/` and are embedded into the bina
 - Creates `schema_migrations` tracking table if it doesn't exist
 - Bootstraps existing databases (detects pre-migration-infrastructure DBs and records them)
 - Applies un-applied `.sql` files in lexicographic order, each in its own transaction
+
+**Operational note (migration `003_usdc_microusdc`):**
+- Not safe for mixed old/new application binaries during rolling deploys (columns are dropped/renamed).
+- Use a coordinated deployment (migration + new API) or a brief maintenance window.
+- On large datasets, transaction-scoped table locks can extend migration time.
 
 **Adding a new migration:**
 1. Create a new file: `internal/db/migrations/NNN_description.sql` (e.g., `002_add_api_keys.sql`)

@@ -18,6 +18,15 @@ External content -> [PROXY scans] -> Agent -> [API scans] -> Output
 
 Both require an account with USDC balance. $0.001 per scan.
 
+**Note on USDC amounts**: Canonical money fields are string-encoded microUSDC
+integers (1 microUSDC = 0.000001 USDC). For example, `"1000"` = $0.001,
+`"1000000"` = $1.00. `/v1/pricing` exposes both `price_micro_usdc` (canonical)
+and `price_usd` (human-readable convenience).
+
+**Breaking change (February 18, 2026)**: money fields in API responses moved
+from JSON numbers to string-encoded microUSDC values. Clients parsing numbers
+must migrate.
+
 ---
 
 ## 1. Transparent Proxy (Recommended for Incoming Content)

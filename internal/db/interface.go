@@ -5,6 +5,8 @@ import (
 	"net"
 	"time"
 
+	"stronghold/internal/usdc"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -28,7 +30,7 @@ type Database interface {
 	LinkWallet(ctx context.Context, accountID uuid.UUID, walletAddress string) error
 	LinkEVMWallet(ctx context.Context, accountID uuid.UUID, evmAddress string) error
 	LinkSolanaWallet(ctx context.Context, accountID uuid.UUID, solanaAddress string) error
-	UpdateBalance(ctx context.Context, accountID uuid.UUID, newBalance float64) error
+	UpdateBalance(ctx context.Context, accountID uuid.UUID, newBalance usdc.MicroUSDC) error
 	SuspendAccount(ctx context.Context, accountID uuid.UUID) error
 	CloseAccount(ctx context.Context, accountID uuid.UUID) error
 	AccountExists(ctx context.Context, accountNumber string) (bool, error)

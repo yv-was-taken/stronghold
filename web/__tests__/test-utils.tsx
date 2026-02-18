@@ -42,7 +42,7 @@ export const mockAccount = {
   id: 'test-uuid-1234',
   account_number: '1234-5678-9012-3456',
   wallet_address: '0x1234567890123456789012345678901234567890',
-  balance_usdc: 100.50,
+  balance_usdc: '100500000',
   status: 'active',
   created_at: '2024-01-01T00:00:00Z',
   last_login_at: '2024-01-15T12:00:00Z',

@@ -8,7 +8,7 @@ interface Account {
   account_number: string;
   evm_wallet_address?: string;   // EVM (Base) wallet
   solana_wallet_address?: string; // Solana wallet
-  balance_usdc: number;
+  balance_usdc: string;
   status: string;
   created_at: string;
   last_login_at?: string;

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
+
+	"stronghold/internal/usdc"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -489,18 +491,13 @@ func GetTokenDecimals(tokenAddress string) int {
 	return 18 // Default for ERC20
 }
 
-// AmountToWei converts a human-readable amount to wei-like units (based on token decimals)
-func AmountToWei(amount float64, decimals int) *big.Int {
-	multiplier := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
-	amountInt := big.NewInt(int64(amount * float64(multiplier.Int64())))
-	return amountInt
+// AmountToWei converts a MicroUSDC amount to on-chain atomic units (*big.Int) for the given chain.
+// Since MicroUSDC is already in integer domain, this is an exact conversion with no precision loss.
+func AmountToWei(amount usdc.MicroUSDC, chain string) *big.Int {
+	return amount.ToBigInt(chain)
 }
 
-// WeiToAmount converts wei-like units to human-readable amount
-func WeiToAmount(amount *big.Int, decimals int) float64 {
-	divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
-	amountFloat := new(big.Float).SetInt(amount)
-	divisorFloat := new(big.Float).SetInt(divisor)
-	result, _ := new(big.Float).Quo(amountFloat, divisorFloat).Float64()
-	return result
+// WeiToAmount converts on-chain atomic units to MicroUSDC.
+func WeiToAmount(amount *big.Int, chain string) usdc.MicroUSDC {
+	return usdc.FromBigInt(amount, chain)
 }

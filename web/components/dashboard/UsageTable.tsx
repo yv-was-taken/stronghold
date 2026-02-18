@@ -74,7 +74,7 @@ export function UsageTable({ logs, loading, hasMore, onLoadMore }: UsageTablePro
                   </span>
                 </td>
                 <td className="py-3 px-4 text-gray-300 text-sm font-mono">
-                  ${formatUSDC(log.cost_usdc)}
+                  {formatUSDC(log.cost_usdc)}
                 </td>
                 <td className="py-3 px-4">
                   {log.status === 'success' ? (

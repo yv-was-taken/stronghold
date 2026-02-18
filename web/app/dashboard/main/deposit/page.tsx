@@ -81,6 +81,7 @@ export default function DepositPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          // Input remains human-readable USDC float; API responses use microUSDC strings.
           amount_usdc: amountNum,
           provider: provider,
           network: effectiveNetwork,
@@ -129,7 +130,7 @@ export default function DepositPage() {
         >
           <div className="text-gray-400 text-sm mb-1">Current Balance</div>
           <div className="text-3xl font-bold text-white">
-            {account ? formatUSDC(account.balance_usdc) : '0.00'}{' '}
+            {account ? formatUSDC(account.balance_usdc) : '$0.00'}{' '}
             <span className="text-lg text-gray-500">USDC</span>
           </div>
         </motion.div>

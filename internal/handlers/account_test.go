@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -13,6 +14,7 @@ import (
 
 	"stronghold/internal/db"
 	"stronghold/internal/db/testutil"
+	"stronghold/internal/usdc"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/assert"
@@ -285,9 +287,9 @@ func TestGetBalances_QueriesWalletsInParallel(t *testing.T) {
 	assert.Equal(t, "base", body.EVM.Network)
 	assert.Equal(t, solAddr, body.Solana.Address)
 	assert.Equal(t, "solana", body.Solana.Network)
-	assert.InDelta(t, 1.25, body.EVM.BalanceUSDC, 0.0001)
-	assert.InDelta(t, 2.50, body.Solana.BalanceUSDC, 0.0001)
-	assert.InDelta(t, 3.75, body.TotalUSDC, 0.0001)
+	assert.Equal(t, usdc.FromFloat(1.25), body.EVM.BalanceUSDC)
+	assert.Equal(t, usdc.FromFloat(2.50), body.Solana.BalanceUSDC)
+	assert.Equal(t, usdc.FromFloat(3.75), body.TotalUSDC)
 	assert.GreaterOrEqual(t, atomic.LoadInt32(&maxActive), int32(2), "wallet balance lookups should overlap")
 }
 
@@ -426,7 +428,7 @@ func TestInitiateDeposit_Direct(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&body)
 
 	assert.NotEmpty(t, body.DepositID)
-	assert.Equal(t, 100.00, body.AmountUSDC)
+	assert.Equal(t, usdc.FromFloat(100.00), body.AmountUSDC)
 	assert.Equal(t, "direct", body.Provider)
 	assert.Equal(t, "base", body.Network, "should default to base when network is omitted")
 	assert.Contains(t, body.Instructions, "USDC")
@@ -468,7 +470,7 @@ func TestInitiateDeposit_Direct_Solana(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&body)
 
 	assert.NotEmpty(t, body.DepositID)
-	assert.Equal(t, 50.00, body.AmountUSDC)
+	assert.Equal(t, usdc.FromFloat(50.00), body.AmountUSDC)
 	assert.Equal(t, "direct", body.Provider)
 	assert.Equal(t, "solana", body.Network)
 	assert.Contains(t, body.Instructions, "Solana")
@@ -646,21 +648,21 @@ func TestAccount_NotAuthenticated(t *testing.T) {
 
 func TestCalculateFee(t *testing.T) {
 	testCases := []struct {
-		amount      float64
+		amount      usdc.MicroUSDC
 		provider    db.DepositProvider
-		expectedFee float64
+		expectedFee usdc.MicroUSDC
 	}{
-		{10.00, db.DepositProviderStripe, 10.00*0.029 + 0.30},
-		{100.00, db.DepositProviderStripe, 100.00*0.029 + 0.30},
-		{1000.00, db.DepositProviderStripe, 1000.00*0.029 + 0.30},
-		{100.00, db.DepositProviderDirect, 0},
-		{0.01, db.DepositProviderDirect, 0},
+		{usdc.FromFloat(10.00), db.DepositProviderStripe, usdc.MicroUSDC(590_000)},
+		{usdc.FromFloat(100.00), db.DepositProviderStripe, usdc.MicroUSDC(3_200_000)},
+		{usdc.FromFloat(1000.00), db.DepositProviderStripe, usdc.MicroUSDC(29_300_000)},
+		{usdc.FromFloat(100.00), db.DepositProviderDirect, 0},
+		{usdc.FromFloat(0.01), db.DepositProviderDirect, 0},
 	}
 
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			fee := calculateFee(tc.amount, tc.provider)
-			assert.InDelta(t, tc.expectedFee, fee, 0.001, "expected %f, got %f", tc.expectedFee, fee)
+			assert.Equal(t, tc.expectedFee, fee, "expected %v, got %v", tc.expectedFee, fee)
 		})
 	}
 }
@@ -679,9 +681,9 @@ func TestGetAccount_WithDeposits(t *testing.T) {
 	deposit := &db.Deposit{
 		AccountID:     account.ID,
 		Provider:      db.DepositProviderDirect,
-		AmountUSDC:    100.00,
+		AmountUSDC:    usdc.FromFloat(100.00),
 		FeeUSDC:       0,
-		NetAmountUSDC: 100.00,
+		NetAmountUSDC: usdc.FromFloat(100.00),
 	}
 	err = database.CreateDeposit(t.Context(), deposit)
 	require.NoError(t, err)
@@ -703,5 +705,10 @@ func TestGetAccount_WithDeposits(t *testing.T) {
 
 	stats := body["deposit_stats"].(map[string]interface{})
 	assert.GreaterOrEqual(t, stats["total_deposits"].(float64), float64(1))
-	assert.GreaterOrEqual(t, stats["total_deposited_usdc"].(float64), float64(100))
+	// total_deposited_usdc is now a JSON string (MicroUSDC marshals as string-encoded integer)
+	totalDepositedStr, ok := stats["total_deposited_usdc"].(string)
+	require.True(t, ok, "total_deposited_usdc should be a string")
+	totalDeposited, err := strconv.ParseInt(totalDepositedStr, 10, 64)
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, totalDeposited, int64(100_000_000)) // 100 USDC in microUSDC
 }

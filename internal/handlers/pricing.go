@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"stronghold/internal/middleware"
+	"stronghold/internal/usdc"
 
 	"github.com/gofiber/fiber/v3"
 )
@@ -21,10 +22,11 @@ type PricingResponse struct {
 
 // RoutePrice represents a single route's pricing
 type RoutePrice struct {
-	Path        string  `json:"path"`
-	Method      string  `json:"method"`
-	Price       float64 `json:"price_usd"`
-	Description string  `json:"description"`
+	Path           string         `json:"path"`
+	Method         string         `json:"method"`
+	PriceMicroUSDC usdc.MicroUSDC `json:"price_micro_usdc"`
+	PriceUSD       float64        `json:"price_usd"`
+	Description    string         `json:"description"`
 }
 
 // NewPricingHandler creates a new pricing handler
@@ -60,10 +62,11 @@ func (h *PricingHandler) GetPricing(c fiber.Ctx) error {
 		}
 
 		routePrices = append(routePrices, RoutePrice{
-			Path:        route.Path,
-			Method:      route.Method,
-			Price:       route.Price,
-			Description: description,
+			Path:           route.Path,
+			Method:         route.Method,
+			PriceMicroUSDC: route.Price,
+			PriceUSD:       route.Price.Float(),
+			Description:    description,
 		})
 	}
 

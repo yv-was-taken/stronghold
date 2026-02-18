@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"stronghold/internal/usdc"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -33,9 +35,9 @@ type Deposit struct {
 	ID                  uuid.UUID        `json:"id"`
 	AccountID           uuid.UUID        `json:"account_id"`
 	Provider            DepositProvider  `json:"provider"`
-	AmountUSDC          float64          `json:"amount_usdc"`
-	FeeUSDC             float64          `json:"fee_usdc"`
-	NetAmountUSDC       float64          `json:"net_amount_usdc"`
+	AmountUSDC          usdc.MicroUSDC   `json:"amount_usdc"`
+	FeeUSDC             usdc.MicroUSDC   `json:"fee_usdc"`
+	NetAmountUSDC       usdc.MicroUSDC   `json:"net_amount_usdc"`
 	Status              DepositStatus    `json:"status"`
 	ProviderTransactionID *string        `json:"provider_transaction_id,omitempty"`
 	WalletAddress       *string          `json:"wallet_address,omitempty"`
@@ -331,7 +333,7 @@ func (db *DB) GetDepositStats(ctx context.Context, accountID uuid.UUID) (*Deposi
 
 // DepositStats represents deposit statistics
 type DepositStats struct {
-	TotalDeposits      int64   `json:"total_deposits"`
-	TotalDepositedUSDC float64 `json:"total_deposited_usdc"`
-	PendingAmountUSDC  float64 `json:"pending_amount_usdc"`
+	TotalDeposits      int64          `json:"total_deposits"`
+	TotalDepositedUSDC usdc.MicroUSDC `json:"total_deposited_usdc"`
+	PendingAmountUSDC  usdc.MicroUSDC `json:"pending_amount_usdc"`
 }

@@ -5,7 +5,7 @@ import type { UsageStats } from '@/lib/hooks/useUsage'
 
 const mockStats: UsageStats = {
   total_requests: 1500,
-  total_cost_usdc: 3.5,
+  total_cost_usdc: '3500000',
   threats_detected: 42,
   avg_latency_ms: 48.5,
   period_days: 30,
@@ -79,7 +79,7 @@ describe('StatsCards', () => {
   it('formats cost with proper decimals', () => {
     const preciseStats: UsageStats = {
       ...mockStats,
-      total_cost_usdc: 123.456789,
+      total_cost_usdc: '123456789',
     }
     render(<StatsCards stats={preciseStats} loading={false} />)
     expect(screen.getByText('$123.456789')).toBeInTheDocument()

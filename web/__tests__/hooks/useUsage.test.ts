@@ -6,7 +6,7 @@ const mockUsageLogs = [
   {
     id: '1',
     endpoint: '/v1/scan/content',
-    cost_usdc: 0.001,
+    cost_usdc: '1000',
     status: 'success' as const,
     threat_detected: false,
     latency_ms: 45,
@@ -15,7 +15,7 @@ const mockUsageLogs = [
   {
     id: '2',
     endpoint: '/v1/scan/output',
-    cost_usdc: 0.001,
+    cost_usdc: '1000',
     status: 'success' as const,
     threat_detected: true,
     latency_ms: 52,
@@ -25,7 +25,7 @@ const mockUsageLogs = [
 
 const mockUsageStats = {
   total_requests: 1500,
-  total_cost_usdc: 3.5,
+  total_cost_usdc: '3500000',
   threats_detected: 42,
   avg_latency_ms: 48.5,
   period_days: 30,
@@ -67,6 +67,21 @@ describe('useUsageLogs', () => {
     expect(result.current.data).toEqual(mockUsageLogs)
     expect(result.current.loading).toBe(false)
     expect(result.current.error).toBeNull()
+  })
+
+  it('reads logs key returned by backend', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ logs: mockUsageLogs }),
+    })
+
+    const { result } = renderHook(() => useUsageLogs())
+
+    await act(async () => {
+      await result.current.fetchLogs(20, 0)
+    })
+
+    expect(result.current.data).toEqual(mockUsageLogs)
   })
 
   it('handles fetch error', async () => {

@@ -5,9 +5,21 @@ import { API_URL, fetchWithAuth } from '@/lib/api';
 
 export interface Deposit {
   id: string;
-  amount_usdc: number;
-  fee_usdc: number;
-  net_usdc: number;
+  amount_usdc: string;
+  fee_usdc: string;
+  net_amount_usdc: string;
+  provider: 'stripe' | 'direct';
+  status: 'pending' | 'completed' | 'failed';
+  created_at: string;
+  completed_at?: string;
+}
+
+interface DepositWire {
+  id: string;
+  amount_usdc: string;
+  fee_usdc: string;
+  net_amount_usdc?: string;
+  net_usdc?: string; // legacy fallback
   provider: 'stripe' | 'direct';
   status: 'pending' | 'completed' | 'failed';
   created_at: string;
@@ -42,7 +54,17 @@ export function useDeposits() {
       }
 
       const result = await response.json();
-      const deposits: Deposit[] = result.deposits || [];
+      const wireDeposits: DepositWire[] = result.deposits || [];
+      const deposits: Deposit[] = wireDeposits.map((deposit) => ({
+        id: deposit.id,
+        amount_usdc: deposit.amount_usdc,
+        fee_usdc: deposit.fee_usdc,
+        net_amount_usdc: deposit.net_amount_usdc ?? deposit.net_usdc ?? '0',
+        provider: deposit.provider,
+        status: deposit.status,
+        created_at: deposit.created_at,
+        completed_at: deposit.completed_at,
+      }));
 
       setState(prev => ({
         data: append ? [...prev.data, ...deposits] : deposits,

@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"stronghold/internal/usdc"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -26,7 +28,7 @@ func TestPaymentTransactionStatusFlow(t *testing.T) {
 		PayerAddress:    "0x1234567890123456789012345678901234567890",
 		ReceiverAddress: "0x0987654321098765432109876543210987654321",
 		Endpoint:        "/v1/scan/content",
-		AmountUSDC:      0.001,
+		AmountUSDC:      usdc.MicroUSDC(1000),
 		Network:         "base-sepolia",
 		ExpiresAt:       time.Now().Add(5 * time.Minute),
 	}
@@ -131,7 +133,7 @@ func TestPaymentTransactionFailedSettlement(t *testing.T) {
 		PayerAddress:    "0x1234567890123456789012345678901234567890",
 		ReceiverAddress: "0x0987654321098765432109876543210987654321",
 		Endpoint:        "/v1/scan/content",
-		AmountUSDC:      0.001,
+		AmountUSDC:      usdc.MicroUSDC(1000),
 		Network:         "base-sepolia",
 		ExpiresAt:       time.Now().Add(5 * time.Minute),
 	}
@@ -204,7 +206,7 @@ func TestPaymentIdempotency(t *testing.T) {
 		PayerAddress:    "0x1234567890123456789012345678901234567890",
 		ReceiverAddress: "0x0987654321098765432109876543210987654321",
 		Endpoint:        "/v1/scan/content",
-		AmountUSDC:      0.001,
+		AmountUSDC:      usdc.MicroUSDC(1000),
 		Network:         "base-sepolia",
 		ExpiresAt:       time.Now().Add(5 * time.Minute),
 	}
@@ -221,7 +223,7 @@ func TestPaymentIdempotency(t *testing.T) {
 		PayerAddress:    "0x1234567890123456789012345678901234567890",
 		ReceiverAddress: "0x0987654321098765432109876543210987654321",
 		Endpoint:        "/v1/scan/content",
-		AmountUSDC:      0.001,
+		AmountUSDC:      usdc.MicroUSDC(1000),
 		Network:         "base-sepolia",
 		ExpiresAt:       time.Now().Add(5 * time.Minute),
 	}
@@ -251,7 +253,7 @@ func TestExpireStaleReservations(t *testing.T) {
 		PayerAddress:    "0x1234567890123456789012345678901234567890",
 		ReceiverAddress: "0x0987654321098765432109876543210987654321",
 		Endpoint:        "/v1/scan/content",
-		AmountUSDC:      0.001,
+		AmountUSDC:      usdc.MicroUSDC(1000),
 		Network:         "base-sepolia",
 		ExpiresAt:       time.Now().Add(-1 * time.Minute), // Already expired
 	}
@@ -295,7 +297,7 @@ func TestInvalidStatusTransition(t *testing.T) {
 		PayerAddress:    "0x1234567890123456789012345678901234567890",
 		ReceiverAddress: "0x0987654321098765432109876543210987654321",
 		Endpoint:        "/v1/scan/content",
-		AmountUSDC:      0.001,
+		AmountUSDC:      usdc.MicroUSDC(1000),
 		Network:         "base-sepolia",
 		ExpiresAt:       time.Now().Add(5 * time.Minute),
 	}

@@ -92,13 +92,13 @@ export function DepositsTable({ deposits, loading, hasMore, onLoadMore }: Deposi
                     {formatDate(deposit.created_at)}
                   </td>
                   <td className="py-3 px-4 text-white text-sm font-mono">
-                    ${formatUSDC(deposit.amount_usdc)}
+                    {formatUSDC(deposit.amount_usdc)}
                   </td>
                   <td className="py-3 px-4 text-gray-500 text-sm font-mono">
-                    {deposit.fee_usdc > 0 ? `-$${formatUSDC(deposit.fee_usdc)}` : '—'}
+                    {Number(deposit.fee_usdc) > 0 ? `-${formatUSDC(deposit.fee_usdc)}` : '—'}
                   </td>
                   <td className="py-3 px-4 text-green-400 text-sm font-mono">
-                    +${formatUSDC(deposit.net_usdc)}
+                    +{formatUSDC(deposit.net_amount_usdc)}
                   </td>
                   <td className="py-3 px-4">
                     <span className="inline-flex items-center gap-1.5 text-gray-300 text-sm">

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"stronghold/internal/usdc"
+
 	"github.com/google/uuid"
 )
 
@@ -15,7 +17,7 @@ type UsageLog struct {
 	RequestID         string         `json:"request_id"`
 	Endpoint          string         `json:"endpoint"`
 	Method            string         `json:"method"`
-	CostUSDC          float64        `json:"cost_usdc"`
+	CostUSDC          usdc.MicroUSDC `json:"cost_usdc"`
 	Status            string         `json:"status"`
 	ThreatDetected    bool           `json:"threat_detected"`
 	ThreatType        *string        `json:"threat_type,omitempty"`
@@ -28,10 +30,10 @@ type UsageLog struct {
 
 // UsageStats represents aggregated usage statistics
 type UsageStats struct {
-	TotalRequests   int64   `json:"total_requests"`
-	TotalCostUSDC   float64 `json:"total_cost_usdc"`
-	ThreatsDetected int64   `json:"threats_detected"`
-	AvgLatencyMs    float64 `json:"avg_latency_ms"`
+	TotalRequests   int64          `json:"total_requests"`
+	TotalCostUSDC   usdc.MicroUSDC `json:"total_cost_usdc"`
+	ThreatsDetected int64          `json:"threats_detected"`
+	AvgLatencyMs    float64        `json:"avg_latency_ms"`
 }
 
 // CreateUsageLog creates a new usage log entry
@@ -225,10 +227,10 @@ func (db *DB) GetDailyUsageStats(ctx context.Context, accountID uuid.UUID, days 
 
 // DailyUsageStats represents usage statistics for a single day
 type DailyUsageStats struct {
-	Date            string  `json:"date"`
-	RequestCount    int64   `json:"request_count"`
-	TotalCostUSDC   float64 `json:"total_cost_usdc"`
-	ThreatsDetected int64   `json:"threats_detected"`
+	Date            string         `json:"date"`
+	RequestCount    int64          `json:"request_count"`
+	TotalCostUSDC   usdc.MicroUSDC `json:"total_cost_usdc"`
+	ThreatsDetected int64          `json:"threats_detected"`
 }
 
 // GetEndpointUsageStats retrieves usage statistics grouped by endpoint
@@ -273,9 +275,9 @@ func (db *DB) GetEndpointUsageStats(ctx context.Context, accountID uuid.UUID, st
 
 // EndpointUsageStats represents usage statistics for a single endpoint
 type EndpointUsageStats struct {
-	Endpoint      string  `json:"endpoint"`
-	Method        string  `json:"method"`
-	RequestCount  int64   `json:"request_count"`
-	TotalCostUSDC float64 `json:"total_cost_usdc"`
-	AvgLatencyMs  float64 `json:"avg_latency_ms"`
+	Endpoint      string         `json:"endpoint"`
+	Method        string         `json:"method"`
+	RequestCount  int64          `json:"request_count"`
+	TotalCostUSDC usdc.MicroUSDC `json:"total_cost_usdc"`
+	AvgLatencyMs  float64        `json:"avg_latency_ms"`
 }

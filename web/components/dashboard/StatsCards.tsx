@@ -113,7 +113,7 @@ export function StatsCards({ stats, loading }: StatsCardsProps) {
         icon={<DollarSign className="w-5 h-5 text-blue-400" />}
         iconBg="bg-blue-500/10"
         label="Total Cost"
-        value={`$${formatUSDC(stats.total_cost_usdc ?? 0)}`}
+        value={formatUSDC(stats.total_cost_usdc ?? "0")}
         subLabel="USDC"
         delay={0.05}
       />

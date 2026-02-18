@@ -260,6 +260,14 @@ Payment via x402 protocol is required for the following endpoints.
 | `/v1/scan/content` | POST | $0.001 | Prompt injection detection |
 | `/v1/scan/output` | POST | $0.001 | Credential leak detection |
 
+**Money field format**:
+- Canonical amount fields are string-encoded microUSDC (1 microUSDC = 0.000001 USDC)
+- `/v1/pricing` includes both `price_micro_usdc` (canonical) and `price_usd` (human-readable)
+
+**Breaking change (February 18, 2026)**:
+- Money fields in API responses moved from JSON numbers to string-encoded microUSDC values
+- Clients parsing response money fields as JSON numbers must migrate
+
 ### POST /v1/scan/content
 
 Scans external content for prompt injection attacks. The transparent proxy invokes this endpoint automatically.
@@ -417,6 +425,12 @@ Copy `.env.example` to `.env` and configure the required values. See `.env.examp
 | `STRONGHOLD_WARN_THRESHOLD` | No | `0.35` | Score threshold for WARN decisions |
 
 *When no wallet addresses are configured, the server runs in development mode without payment verification.
+
+### Migration rollout note (003_usdc_microusdc)
+
+- This migration drops and renames columns in one transaction; it is not safe for zero-downtime rolling deploys with mixed old/new app versions.
+- Apply migration and deploy updated API together (or accept a brief maintenance window).
+- The transaction can hold table locks for the duration of migration on large datasets; schedule accordingly.
 
 **x402 Facilitator** (settles payments on-chain):
 
