@@ -10,7 +10,7 @@
 #   - USDC token contracts valid on-chain
 #
 # Required:
-#   - fly CLI installed and authenticated
+#   - flyctl CLI installed and authenticated
 #   - curl and jq installed
 #   - FACILITATOR_EVM_ADDRESS and FACILITATOR_SOLANA_ADDRESS env vars
 #     (public addresses of the facilitator settlement wallets)
@@ -102,7 +102,7 @@ echo -e "${DIM}$(date -u '+%Y-%m-%d %H:%M:%S UTC')${NC}"
 
 section "Prerequisites"
 
-for tool in curl jq fly; do
+for tool in curl jq flyctl; do
     if ! command -v "$tool" &>/dev/null; then
         fail "$tool not installed" "Install $tool"
         echo -e "${RED}Cannot continue without $tool. Aborting.${NC}"
@@ -111,12 +111,12 @@ for tool in curl jq fly; do
     pass "$tool installed"
 done
 
-if ! fly auth whoami &>/dev/null 2>&1; then
-    fail "fly CLI not authenticated" "Run: fly auth login"
-    echo -e "${RED}Cannot continue without fly auth. Aborting.${NC}"
+if ! flyctl auth whoami &>/dev/null 2>&1; then
+    fail "flyctl not authenticated" "Run: flyctl auth login"
+    echo -e "${RED}Cannot continue without flyctl auth. Aborting.${NC}"
     exit 1
 fi
-pass "fly CLI authenticated"
+pass "flyctl authenticated"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 2. Fly.io Deployment Status
@@ -126,16 +126,16 @@ section "Fly.io Deployment Status"
 
 check_fly_app() {
     local app="$1"
-    if fly status -a "$app" &>/dev/null 2>&1; then
+    if flyctl status -a "$app" &>/dev/null 2>&1; then
         local state
-        state=$(fly status -a "$app" --json 2>/dev/null | jq -r '.Machines[0].state // "unknown"' 2>/dev/null || echo "unknown")
+        state=$(flyctl status -a "$app" --json 2>/dev/null | jq -r '.Machines[0].state // "unknown"' 2>/dev/null || echo "unknown")
         if [ "$state" = "started" ] || [ "$state" = "running" ]; then
             pass "$app is running (state: $state)"
         else
-            fail "$app machine state: $state" "Check app: fly status -a $app"
+            fail "$app machine state: $state" "Check app: flyctl status -a $app"
         fi
     else
-        fail "$app not found on Fly.io" "Deploy: fly deploy -a $app"
+        fail "$app not found on Fly.io" "Deploy: flyctl deploy -a $app"
     fi
 }
 
@@ -148,11 +148,11 @@ check_fly_app "$API_APP"
 
 section "Fly.io Secrets — $FACILITATOR_APP"
 
-FACILITATOR_SECRETS=$(fly secrets list -a "$FACILITATOR_APP" --json 2>/dev/null || echo "[]")
+FACILITATOR_SECRETS=$(flyctl secrets list -a "$FACILITATOR_APP" --json 2>/dev/null || echo "[]")
 
 check_secret() {
     local app="$1" name="$2" desc="$3" fix="$4" json="$5"
-    # fly secrets list --json uses lowercase "name" field
+    # flyctl secrets list --json uses lowercase "name" field
     if echo "$json" | jq -e ".[] | select(.name == \"$name\")" &>/dev/null; then
         pass "$desc"
     else
@@ -161,40 +161,40 @@ check_secret() {
 }
 
 check_secret "$FACILITATOR_APP" "FACILITATOR_EVM_PRIVATE_KEY" "FACILITATOR_EVM_PRIVATE_KEY" \
-    "fly secrets set FACILITATOR_EVM_PRIVATE_KEY=0x... -a $FACILITATOR_APP" "$FACILITATOR_SECRETS"
+    "flyctl secrets set FACILITATOR_EVM_PRIVATE_KEY=0x... -a $FACILITATOR_APP" "$FACILITATOR_SECRETS"
 
 check_secret "$FACILITATOR_APP" "FACILITATOR_SOLANA_PRIVATE_KEY" "FACILITATOR_SOLANA_PRIVATE_KEY" \
-    "fly secrets set FACILITATOR_SOLANA_PRIVATE_KEY=... -a $FACILITATOR_APP" "$FACILITATOR_SECRETS"
+    "flyctl secrets set FACILITATOR_SOLANA_PRIVATE_KEY=... -a $FACILITATOR_APP" "$FACILITATOR_SECRETS"
 
 check_secret "$FACILITATOR_APP" "RPC_URL_BASE" "RPC_URL_BASE" \
-    "fly secrets set RPC_URL_BASE=https://base-mainnet.g.alchemy.com/v2/KEY -a $FACILITATOR_APP" "$FACILITATOR_SECRETS"
+    "flyctl secrets set RPC_URL_BASE=https://base-mainnet.g.alchemy.com/v2/KEY -a $FACILITATOR_APP" "$FACILITATOR_SECRETS"
 
 check_secret "$FACILITATOR_APP" "RPC_URL_SOLANA" "RPC_URL_SOLANA" \
-    "fly secrets set RPC_URL_SOLANA=https://mainnet.helius-rpc.com/?api-key=KEY -a $FACILITATOR_APP" "$FACILITATOR_SECRETS"
+    "flyctl secrets set RPC_URL_SOLANA=https://mainnet.helius-rpc.com/?api-key=KEY -a $FACILITATOR_APP" "$FACILITATOR_SECRETS"
 
 section "Fly.io Secrets — $API_APP"
 
-API_SECRETS=$(fly secrets list -a "$API_APP" --json 2>/dev/null || echo "[]")
+API_SECRETS=$(flyctl secrets list -a "$API_APP" --json 2>/dev/null || echo "[]")
 
 check_secret "$API_APP" "X402_FACILITATOR_URL" "X402_FACILITATOR_URL" \
-    "fly secrets set X402_FACILITATOR_URL=http://$FACILITATOR_APP.internal:8402 -a $API_APP" "$API_SECRETS"
+    "flyctl secrets set X402_FACILITATOR_URL=http://$FACILITATOR_APP.internal:8402 -a $API_APP" "$API_SECRETS"
 
 # Accept either X402_EVM_WALLET_ADDRESS (new) or X402_WALLET_ADDRESS (legacy)
 if echo "$API_SECRETS" | jq -e '.[] | select(.name == "X402_EVM_WALLET_ADDRESS" or .name == "X402_WALLET_ADDRESS")' &>/dev/null; then
     pass "X402 EVM wallet address"
 else
     fail "X402 EVM wallet address — NOT SET" \
-        "fly secrets set X402_EVM_WALLET_ADDRESS=0x... -a $API_APP"
+        "flyctl secrets set X402_EVM_WALLET_ADDRESS=0x... -a $API_APP"
 fi
 
 check_secret "$API_APP" "X402_SOLANA_WALLET_ADDRESS" "X402_SOLANA_WALLET_ADDRESS" \
-    "fly secrets set X402_SOLANA_WALLET_ADDRESS=... -a $API_APP" "$API_SECRETS"
+    "flyctl secrets set X402_SOLANA_WALLET_ADDRESS=... -a $API_APP" "$API_SECRETS"
 
 check_secret "$API_APP" "X402_NETWORKS" "X402_NETWORKS" \
-    "fly secrets set X402_NETWORKS=base,solana -a $API_APP" "$API_SECRETS"
+    "flyctl secrets set X402_NETWORKS=base,solana -a $API_APP" "$API_SECRETS"
 
 check_secret "$API_APP" "X402_SOLANA_FEE_PAYER" "X402_SOLANA_FEE_PAYER" \
-    "fly secrets set X402_SOLANA_FEE_PAYER=<facilitator-solana-pubkey> -a $API_APP" "$API_SECRETS"
+    "flyctl secrets set X402_SOLANA_FEE_PAYER=<facilitator-solana-pubkey> -a $API_APP" "$API_SECRETS"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 4. Remote Health Checks
@@ -231,7 +231,7 @@ if [ -n "$HEALTH_RESPONSE" ]; then
     info "Supported payment schemes: $NETWORK_COUNT"
 else
     fail "Facilitator /health not reachable" \
-        "Check: fly logs -a $FACILITATOR_APP — or redeploy: cd facilitator && fly deploy -a $FACILITATOR_APP"
+        "Check: flyctl logs -a $FACILITATOR_APP — or redeploy: cd facilitator && flyctl deploy -a $FACILITATOR_APP"
 fi
 
 section "API Health ($API_URL)"
@@ -246,20 +246,20 @@ if [ -n "$API_HEALTH" ]; then
         pass "API reports x402 facilitator: up"
     elif [ "$X402_STATUS" = "not_configured" ]; then
         fail "API reports x402: not_configured" \
-            "fly secrets set X402_FACILITATOR_URL=http://$FACILITATOR_APP.internal:8402 -a $API_APP"
+            "flyctl secrets set X402_FACILITATOR_URL=http://$FACILITATOR_APP.internal:8402 -a $API_APP"
     else
         fail "API reports x402 status: $X402_STATUS" \
-            "Facilitator not reachable from API internal network. Check both apps are in the same Fly org."
+            "Facilitator not reachable from API internal network. Check both apps are in the same Fly org"
     fi
 
     OVERALL=$(echo "$API_HEALTH" | jq -r '.status // "unknown"' 2>/dev/null)
     if [ "$OVERALL" = "healthy" ]; then
         pass "API overall: healthy"
     else
-        warn "API overall: $OVERALL" "Check: fly logs -a $API_APP"
+        warn "API overall: $OVERALL" "Check: flyctl logs -a $API_APP"
     fi
 else
-    fail "API /health not reachable at $API_URL" "Check: fly logs -a $API_APP"
+    fail "API /health not reachable at $API_URL" "Check: flyctl logs -a $API_APP"
 fi
 
 # API readiness (only if health worked)
@@ -272,7 +272,7 @@ if [ -n "$API_HEALTH" ]; then
         READY_BODY=$(curl -s --max-time 10 "$API_URL/health/ready" 2>/dev/null || echo "")
         REASON=$(echo "$READY_BODY" | jq -r '.reason // "unknown"' 2>/dev/null)
         fail "API /health/ready: 503 — $REASON" \
-            "Fix $REASON then restart: fly machines restart -a $API_APP"
+            "Fix $REASON then restart: flyctl machines restart -a $API_APP"
     else
         warn "API /health/ready: HTTP $API_READY" "Unexpected status code"
     fi
