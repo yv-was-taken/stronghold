@@ -36,12 +36,15 @@ This file is the contributor guide for repository workflows. It is synchronized 
 
 ## Git Workflow (Mandatory)
 - Never commit or push unless explicitly asked by the user in the current conversation state.
-- Before any commit, always run `go test ./...` and verify all tests pass.
+- Before committing changes that modify Go code (`*.go`, `go.mod`, `go.sum`), run `go test ./...` and verify all tests pass.
+- Before committing changes that modify frontend TypeScript (`web/**/*.ts`, `web/**/*.tsx`), run `cd web && bun run test` and verify tests pass.
+- Docs-only changes (for example `*.md`) do not require running Go or frontend tests.
 - If Docker is required for tests, ensure Docker is running first; skipped tests are not equivalent to passing.
 - Do not commit with failing tests.
 - Verify changes locally before requesting/performing commit.
 - For frontend changes, validate behavior locally with `cd web && bun run dev`.
 - Do not push speculative commits.
+- NEVER remove an active worktree directory. `git worktree prune` must only remove stale metadata. Before deleting any worktree directory, first verify it is not listed by `git worktree list` (or is confirmed orphaned/stale).
 
 ## Testing Guidelines (Mandatory)
 - Do not use `-short`; run full suites.
