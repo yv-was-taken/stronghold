@@ -173,6 +173,10 @@ func (s *Server) setupMiddleware() {
 
 // setupRoutes configures all routes
 func (s *Server) setupRoutes() {
+	if s.database == nil {
+		panic("server database is required for atomic payment routes")
+	}
+
 	// Initialize x402 middleware with database for atomic payments
 	x402 := middleware.NewX402MiddlewareWithDB(&s.config.X402, &s.config.Pricing, s.database)
 

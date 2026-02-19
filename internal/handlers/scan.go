@@ -19,15 +19,6 @@ type ScanHandler struct {
 	pricing *config.PricingConfig
 }
 
-// NewScanHandler creates a new scan handler
-func NewScanHandler(scanner *stronghold.Scanner, x402 *middleware.X402Middleware, pricing *config.PricingConfig) *ScanHandler {
-	return &ScanHandler{
-		scanner: scanner,
-		x402:    x402,
-		pricing: pricing,
-	}
-}
-
 // NewScanHandlerWithDB creates a new scan handler with database support
 func NewScanHandlerWithDB(scanner *stronghold.Scanner, x402 *middleware.X402Middleware, database *db.DB, pricing *config.PricingConfig) *ScanHandler {
 	return &ScanHandler{
@@ -54,21 +45,20 @@ type ScanOutputRequest struct {
 
 // RegisterRoutes registers all scan routes
 func (h *ScanHandler) RegisterRoutes(app *fiber.App) {
+	if h.db == nil {
+		panic("scan handler requires database for atomic payment")
+	}
+	if h.x402 == nil {
+		panic("scan handler requires x402 middleware")
+	}
+
 	group := app.Group("/v1/scan")
 
-	// Use AtomicPayment for atomic settlement when database is available
-	// This ensures service is only delivered when payment is confirmed
-	if h.db != nil {
-		// Content scanning - detect prompt injection in external content
-		group.Post("/content", h.x402.AtomicPayment(h.pricing.ScanContent), h.ScanContent)
+	// Content scanning - detect prompt injection in external content
+	group.Post("/content", h.x402.AtomicPayment(h.pricing.ScanContent), h.ScanContent)
 
-		// Output scanning - detect credential leaks in LLM responses
-		group.Post("/output", h.x402.AtomicPayment(h.pricing.ScanOutput), h.ScanOutput)
-	} else {
-		// Fallback to non-atomic payment with settlement
-		group.Post("/content", h.x402.RequirePaymentAndSettle(h.pricing.ScanContent), h.ScanContent)
-		group.Post("/output", h.x402.RequirePaymentAndSettle(h.pricing.ScanOutput), h.ScanOutput)
-	}
+	// Output scanning - detect credential leaks in LLM responses
+	group.Post("/output", h.x402.AtomicPayment(h.pricing.ScanOutput), h.ScanOutput)
 }
 
 // ScanContent handles content scanning for prompt injection
