@@ -13,6 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Never assume a change is ready to commit just because you made it
 - Always test frontend changes locally with `bun run dev` before considering them complete
 - Do not push multiple speculative commits hoping one works
+- **When writing PR/issue comments**, never redundantly reference the PR or issue the comment is posted on. The reader already knows where they are. Write for the context the comment appears in.
 
 ## Project Overview
 
