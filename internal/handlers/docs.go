@@ -14,50 +14,30 @@ func NewDocsHandler() *DocsHandler {
 
 // RegisterRoutes registers documentation routes
 func (h *DocsHandler) RegisterRoutes(app *fiber.App) {
-	app.Get("/docs", h.SwaggerUI)
+	app.Get("/docs", h.ScalarDocs)
 	app.Get("/docs/swagger.json", h.SwaggerJSON)
 }
 
-// SwaggerUI serves the Swagger UI page
+// ScalarDocs serves the API documentation page using Scalar
 // @Summary API Documentation
-// @Description Interactive API documentation using Swagger UI
+// @Description Interactive API documentation
 // @Tags docs
 // @Produce html
 // @Router /docs [get]
-func (h *DocsHandler) SwaggerUI(c fiber.Ctx) error {
+func (h *DocsHandler) ScalarDocs(c fiber.Ctx) error {
 	html := `<!DOCTYPE html>
 <html>
 <head>
     <title>Stronghold API Documentation</title>
-    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
-    <style>
-        html { box-sizing: border-box; overflow-y: scroll; }
-        *, *:before, *:after { box-sizing: inherit; }
-        body { margin: 0; background: #fafafa; }
-        .swagger-ui .topbar { display: none; }
-    </style>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 <body>
-    <div id="swagger-ui"></div>
-    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-    <script>
-        window.onload = function() {
-            SwaggerUIBundle({
-                url: "/docs/swagger.json",
-                dom_id: '#swagger-ui',
-                presets: [
-                    SwaggerUIBundle.presets.apis,
-                    SwaggerUIBundle.SwaggerUIStandalonePreset
-                ],
-                layout: "BaseLayout",
-                deepLinking: true,
-                showExtensions: true,
-                showCommonExtensions: true
-            });
-        };
-    </script>
+    <script id="api-reference" data-url="/docs/swagger.json"
+        src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
 </body>
 </html>`
+
 	c.Set("Content-Type", "text/html")
 	return c.SendString(html)
 }
