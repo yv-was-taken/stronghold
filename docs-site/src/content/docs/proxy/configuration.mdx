@@ -48,9 +48,9 @@ scanning:
 | `scanning.content.enabled` | bool | `true` | Enable content scanning (prompt injection detection) |
 | `scanning.content.action_on_warn` | string | `warn` | Action when scanner returns WARN |
 | `scanning.content.action_on_block` | string | `block` | Action when scanner returns BLOCK |
-| `scanning.output.enabled` | bool | `true` | Enable output scanning (credential leak detection) |
-| `scanning.output.action_on_warn` | string | `warn` | Action when scanner returns WARN |
-| `scanning.output.action_on_block` | string | `block` | Action when scanner returns BLOCK |
+| `scanning.output.enabled` | bool | `true` | Reserved for future output policy; currently not enforced by proxy runtime |
+| `scanning.output.action_on_warn` | string | `warn` | Reserved for future output policy; currently not enforced by proxy runtime |
+| `scanning.output.action_on_block` | string | `block` | Reserved for future output policy; currently not enforced by proxy runtime |
 
 ### Action Options
 
@@ -76,15 +76,11 @@ scanning:
     enabled: true
     action_on_warn: "block"
     action_on_block: "block"
-  output:
-    enabled: true
-    action_on_warn: "block"
-    action_on_block: "block"
 ```
 
-### Permissive Content, Strict Output
+### Permissive Content
 
-Allow prompt injection attempts through (for logging/research) but block any credential leaks.
+Allow prompt injection attempts through for logging and research.
 
 ```yaml
 scanning:
@@ -92,10 +88,6 @@ scanning:
     enabled: true
     action_on_warn: "allow"
     action_on_block: "allow"
-  output:
-    enabled: true
-    action_on_warn: "warn"
-    action_on_block: "block"
 ```
 
 ### Audit Mode
@@ -108,13 +100,11 @@ scanning:
     enabled: true
     action_on_warn: "allow"
     action_on_block: "allow"
-  output:
-    enabled: true
-    action_on_warn: "allow"
-    action_on_block: "allow"
 ```
 
 In audit mode, all scan results are still available in the [response headers](/proxy/response-headers). You get full visibility into what the scanner would flag without affecting traffic.
+
+`scanning.output.*` keys are retained in config for forward compatibility but are not currently enforced by proxy runtime policy.
 
 ## Security Note
 

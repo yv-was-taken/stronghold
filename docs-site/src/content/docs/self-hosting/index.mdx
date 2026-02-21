@@ -140,4 +140,4 @@ Before exposing a self-hosted Stronghold instance to the internet:
 - Provide all three Stripe keys (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PUBLISHABLE_KEY`).
 - Provision an AWS KMS key and set `KMS_REGION` and `KMS_KEY_ID` for wallet key encryption.
 - Fund the facilitator wallets: ~0.01 ETH on Base for EVM settlements, SOL on Solana if enabling Solana payments.
-- Use the Caddy profile (`--profile with-proxy`) or your own reverse proxy for TLS termination. The included Caddyfile is configured for `api.stronghold.security`. Self-hosters must update the domain in `Caddyfile` to match their own domain, along with the CORS origins on lines 10-13.
+- Use the Caddy profile (`--profile with-proxy`) or your own reverse proxy for TLS termination. The included Caddyfile is configured for `api.getstronghold.xyz`. Self-hosters must update the domain in `Caddyfile` to match their own domain, along with the CORS origins on lines 10-13.

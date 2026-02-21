@@ -13,7 +13,7 @@ The Stronghold proxy adds headers to **every** proxied HTTP response, regardless
 | `X-Stronghold-Action` | What the proxy did | `allow`, `warn`, `block` |
 | `X-Stronghold-Reason` | Why content was flagged | Human-readable string |
 | `X-Stronghold-Score` | Combined threat score. Present when a scan produced a `combined` or `heuristic` score. Omitted when no score was computed. | `0.00` - `1.00` |
-| `X-Stronghold-Scan-Type` | Type of scan performed | `content`, `output`, `disabled`, `skipped-unscannable`, `skipped-oversized` |
+| `X-Stronghold-Scan-Type` | Type of scan performed | `content`, `disabled`, `skipped-unscannable`, `skipped-not-scannable`, `skipped-oversized` |
 | `X-Stronghold-Warning` | Warning message | Only present if action is `warn` |
 | `X-Stronghold-Request-ID` | UUID for tracing | `req-<hex>` |
 | `X-Stronghold-Scan-Latency` | Time spent scanning | e.g. `12ms` |
@@ -84,7 +84,6 @@ The `X-Stronghold-Scan-Type` header indicates what kind of scan was performed:
 | Value | Meaning |
 |-------|---------|
 | `content` | Full content scan was performed (prompt injection detection) |
-| `output` | Output scan was performed (credential leak detection) |
 | `disabled` | Scanning is disabled in configuration |
 | `skipped-unscannable` | Content type is not text-based (binary data) |
 | `skipped-not-scannable` | Content was fetched but determined to be unscannable after inspection |

@@ -139,7 +139,7 @@ When Stronghold proxy scans content, it adds headers to every response:
 | X-Stronghold-Action | What proxy did | allow, warn, block |
 | X-Stronghold-Reason | Why (if flagged) | Human-readable reason |
 | X-Stronghold-Score | Threat score | 0.00 - 1.00 |
-| X-Stronghold-Scan-Type | What was scanned | content, output, disabled |
+| X-Stronghold-Scan-Type | What was scanned | content, disabled, skipped-* |
 | X-Stronghold-Warning | Warning message | (only if action=warn) |
 
 These headers are always present, even when content is not blocked.
@@ -226,7 +226,7 @@ Decisions: ALLOW (safe), WARN (review), BLOCK (reject)
 
 Both proxy and API require a funded account:
 
-1. **Create account**: https://stronghold.security/dashboard or `stronghold init`
+1. **Create account**: https://getstronghold.xyz/dashboard or `stronghold init`
 2. **Deposit USDC**: Via dashboard (Stripe) or direct transfer on Base or Solana
 3. **Pay-per-request**: $0.001 per scan
 
@@ -265,6 +265,7 @@ If you choose to upload your wallet to the server, **TOTP is required**.
 ## Links
 
 - Documentation: https://github.com/yv-was-taken/stronghold
-- API Docs: https://docs.getstronghold.xyz
-- Dashboard: https://stronghold.security/dashboard
-- Full Reference: https://stronghold.security/llms-full.txt
+- Human Docs: https://docs.stronghold.xyz
+- API Spec: https://api.getstronghold.xyz/docs
+- Dashboard: https://getstronghold.xyz/dashboard
+- Full Reference: https://getstronghold.xyz/llms-full.txt

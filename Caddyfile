@@ -1,7 +1,7 @@
 # Stronghold API - Caddy Reverse Proxy Configuration
-# Replace api.stronghold.security with your actual domain
+# Replace api.getstronghold.xyz with your actual domain
 
-api.stronghold.security {
+api.getstronghold.xyz {
     # Enable compression
     encode gzip zstd
 

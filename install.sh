@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Stronghold CLI Installer
-# Usage: curl -fsSL https://install.stronghold.security | sh
+# Usage: curl -fsSL https://getstronghold.xyz/install.sh | sh
 #
 
 set -e

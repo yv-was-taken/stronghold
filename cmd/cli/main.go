@@ -31,7 +31,7 @@ Quick Start:
   stronghold enable     # Enable protection
   stronghold disable    # Disable protection
 
-For more information, visit https://stronghold.security`,
+For more information, visit https://getstronghold.xyz`,
 		Version: fmt.Sprintf("%s (commit: %s, built: %s)", version, commit, date),
 	}
 
@@ -180,15 +180,15 @@ Examples:
   stronghold config get scanning                  Show scanning config
   stronghold config get scanning.content.enabled  Get specific value
   stronghold config set scanning.content.action_on_block allow
-  stronghold config set scanning.output.enabled false
+  stronghold config set scanning.content.enabled false
 
 Available scanning keys:
   scanning.content.enabled          - Enable content scanning (true/false)
   scanning.content.action_on_warn   - Action on WARN (allow/warn/block)
   scanning.content.action_on_block  - Action on BLOCK (allow/warn/block)
-  scanning.output.enabled           - Enable output scanning (true/false)
-  scanning.output.action_on_warn    - Action on WARN (allow/warn/block)
-  scanning.output.action_on_block   - Action on BLOCK (allow/warn/block)
+  scanning.output.enabled           - Reserved for future output policy (not currently enforced)
+  scanning.output.action_on_warn    - Reserved output WARN action (not currently enforced)
+  scanning.output.action_on_block   - Reserved output BLOCK action (not currently enforced)
   scanning.mode                     - Scanning mode (smart/strict/permissive)
   scanning.block_threshold          - Score threshold for BLOCK (0.0-1.0)
   scanning.fail_open                - Pass traffic if scan fails (true/false)`,
@@ -222,7 +222,7 @@ Examples:
 
 Examples:
   stronghold config set scanning.content.action_on_block allow
-  stronghold config set scanning.output.enabled false
+  stronghold config set scanning.content.enabled false
   stronghold config set scanning.block_threshold 0.6
   stronghold config set proxy.port 8403
 
@@ -230,9 +230,9 @@ Available scanning keys:
   scanning.content.enabled          - Enable content scanning (true/false)
   scanning.content.action_on_warn   - Action on WARN (allow/warn/block)
   scanning.content.action_on_block  - Action on BLOCK (allow/warn/block)
-  scanning.output.enabled           - Enable output scanning (true/false)
-  scanning.output.action_on_warn    - Action on WARN (allow/warn/block)
-  scanning.output.action_on_block   - Action on BLOCK (allow/warn/block)`,
+  scanning.output.enabled           - Reserved for future output policy (not currently enforced)
+  scanning.output.action_on_warn    - Reserved output WARN action (not currently enforced)
+  scanning.output.action_on_block   - Reserved output BLOCK action (not currently enforced)`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cli.ConfigSet(args[0], args[1])

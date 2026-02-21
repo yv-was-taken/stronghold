@@ -220,9 +220,9 @@ scanning:
     action_on_warn: warn    # allow | warn | block
     action_on_block: block  # allow | warn | block
   output:
-    enabled: true
-    action_on_warn: warn
-    action_on_block: block
+    enabled: true           # reserved for future output policy
+    action_on_warn: warn    # currently not enforced by proxy runtime
+    action_on_block: block  # currently not enforced by proxy runtime
 ```
 
 ### Response Headers for Agentic Integration
@@ -275,7 +275,7 @@ Scans external content for prompt injection attacks. The transparent proxy invok
 > **Note**: Direct API integration is recommended only when the proxy cannot be deployed (e.g., serverless environments, sandboxed containers). The proxy provides stronger protection by scanning content before it enters the agent's context.
 
 ```bash
-curl -X POST https://api.stronghold.security/v1/scan/content \
+curl -X POST https://api.getstronghold.xyz/v1/scan/content \
   -H "Content-Type: application/json" \
   -H "X-PAYMENT: x402;..." \
   -d '{
@@ -290,7 +290,7 @@ curl -X POST https://api.stronghold.security/v1/scan/content \
 Scans agent responses for credential leaks before delivery to end users. Detects API keys, passwords, database connection strings, cloud provider credentials, and private keys.
 
 ```bash
-curl -X POST https://api.stronghold.security/v1/scan/output \
+curl -X POST https://api.getstronghold.xyz/v1/scan/output \
   -H "Content-Type: application/json" \
   -H "X-PAYMENT: x402;..." \
   -d '{
@@ -327,7 +327,7 @@ Both the proxy and API require an account with a USDC balance.
 
 ### Account Creation
 
-**Via Dashboard**: Visit https://stronghold.security/dashboard
+**Via Dashboard**: Visit https://getstronghold.xyz/dashboard
 
 **Via CLI**: Run `sudo stronghold init` to create a local wallet and register it with the service.
 
@@ -379,7 +379,7 @@ const fetchWithPayment = x402Client({
 
 // Scan agent output before delivery to the end user
 const result = await fetchWithPayment(
-  "https://api.stronghold.security/v1/scan/output",
+  "https://api.getstronghold.xyz/v1/scan/output",
   {
     method: "POST",
     headers: { "Content-Type": "application/json" },

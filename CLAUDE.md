@@ -319,8 +319,8 @@ fly secrets set STRIPE_WEBHOOK_SECRET=whsec_... -a stronghold-api
 fly secrets set STRIPE_PUBLISHABLE_KEY=pk_live_... -a stronghold-api
 
 # Dashboard CORS
-fly secrets set DASHBOARD_URL=https://stronghold.security -a stronghold-api
-fly secrets set DASHBOARD_ALLOWED_ORIGINS=https://stronghold.security -a stronghold-api
+fly secrets set DASHBOARD_URL=https://getstronghold.xyz -a stronghold-api
+fly secrets set DASHBOARD_ALLOWED_ORIGINS=https://getstronghold.xyz -a stronghold-api
 
 # AWS KMS (wallet key encryption)
 fly secrets set KMS_REGION=us-east-1 -a stronghold-api

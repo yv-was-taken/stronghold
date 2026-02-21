@@ -2,7 +2,7 @@
 
 > Protect AI agents from prompt injection attacks and credential leaks
 
-For a concise overview, see: https://stronghold.security/llms.txt
+For a concise overview, see: https://getstronghold.xyz/llms.txt
 
 ---
 
@@ -232,12 +232,12 @@ stronghold config get scanning.content.action_on_block
 
 # Set a value
 stronghold config set scanning.content.action_on_block allow
-stronghold config set scanning.output.enabled false
+stronghold config set scanning.content.enabled false
 ```
 
 ### Configurable Scanning Behavior
 
-Control how the proxy handles scan results for content (incoming) and output (outgoing):
+Control how the proxy handles scan results for content (incoming):
 
 ```yaml
 # ~/.stronghold/config.yaml
@@ -252,7 +252,8 @@ scanning:
     action_on_warn: "warn"  # "allow" | "warn" | "block" (default: warn)
     action_on_block: "block" # "allow" | "warn" | "block" (default: block)
 
-  # Output scanning - outgoing requests for credential leaks
+  # Output fields are reserved for future policy controls.
+  # Current proxy runtime enforcement uses scanning.content.*.
   output:
     enabled: true           # default: true
     action_on_warn: "warn"  # "allow" | "warn" | "block" (default: warn)
@@ -333,7 +334,7 @@ When proxy is enabled, ALL responses include headers describing scan results:
 | X-Stronghold-Action | What the proxy did | allow, warn, block |
 | X-Stronghold-Reason | Why content was flagged | Human-readable string |
 | X-Stronghold-Score | Combined threat score | 0.00 - 1.00 |
-| X-Stronghold-Scan-Type | Type of scan performed | content, output, disabled |
+| X-Stronghold-Scan-Type | Type of scan performed | content, disabled, skipped-* |
 | X-Stronghold-Warning | Warning message | (present only if action=warn) |
 | X-Stronghold-Request-ID | UUID for tracing | req-timestamp |
 | X-Stronghold-Scan-Latency | Time to scan | NNms |
@@ -640,7 +641,7 @@ Clients can choose their preferred chain when making payments.
 
 **Option 1: Dashboard**
 
-Visit https://stronghold.security/dashboard and create an account.
+Visit https://getstronghold.xyz/dashboard and create an account.
 
 **Option 2: CLI**
 
@@ -789,6 +790,7 @@ See `.env.example` for full configuration documentation.
 ## Links
 
 - GitHub: https://github.com/yv-was-taken/stronghold
-- API Docs: https://docs.getstronghold.xyz
-- Dashboard: https://stronghold.security/dashboard
-- Quick Reference: https://stronghold.security/llms.txt
+- Human Docs: https://docs.stronghold.xyz
+- API Spec: https://api.getstronghold.xyz/docs
+- Dashboard: https://getstronghold.xyz/dashboard
+- Quick Reference: https://getstronghold.xyz/llms.txt

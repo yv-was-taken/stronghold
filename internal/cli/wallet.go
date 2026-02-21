@@ -196,7 +196,7 @@ func AccountDeposit() error {
 	}
 
 	fmt.Println(accountInfoStyle.Render("Or visit the dashboard:"))
-	fmt.Println(accountInfoStyle.Render("  https://dashboard.stronghold.security"))
+	fmt.Println(accountInfoStyle.Render("  https://getstronghold.xyz/dashboard"))
 	fmt.Println(accountInfoStyle.Render("  - Pay with card via Stripe"))
 	fmt.Println()
 

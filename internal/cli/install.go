@@ -699,7 +699,7 @@ func (m *InstallModel) viewPayment() string {
 		b.WriteString(selectedStyle.Render(fmt.Sprintf("  %s", m.config.Wallet.Address)))
 		b.WriteString("\n\n")
 		b.WriteString("Fund your wallet to start using Stronghold:\n\n")
-		b.WriteString(infoStyle.Render("  1. Visit https://dashboard.stronghold.security"))
+		b.WriteString(infoStyle.Render("  1. Visit https://getstronghold.xyz/dashboard"))
 		b.WriteString("\n")
 		b.WriteString(infoStyle.Render("  2. Login with your account number"))
 		b.WriteString("\n")
@@ -778,7 +778,7 @@ func (m *InstallModel) viewComplete() string {
 		b.WriteString("\n")
 		b.WriteString(infoStyle.Render("Fund with USDC on Base or Solana to start scanning.\n"))
 		b.WriteString(infoStyle.Render("Use: stronghold account deposit\n"))
-		b.WriteString(infoStyle.Render("Or visit: https://dashboard.stronghold.security\n\n"))
+		b.WriteString(infoStyle.Render("Or visit: https://getstronghold.xyz/dashboard\n\n"))
 	}
 
 	b.WriteString(headerStyle.Render("Quick Commands:"))
@@ -788,7 +788,7 @@ func (m *InstallModel) viewComplete() string {
 	b.WriteString(fmt.Sprintf("  Balance:   stronghold wallet balance\n"))
 	b.WriteString(fmt.Sprintf("  Upload:    stronghold wallet replace evm  (choose upload when prompted)\n"))
 	b.WriteString(fmt.Sprintf("  Disable:   stronghold disable\n"))
-	b.WriteString(fmt.Sprintf("  Dashboard: https://dashboard.stronghold.security\n"))
+	b.WriteString(fmt.Sprintf("  Dashboard: https://getstronghold.xyz/dashboard\n"))
 	b.WriteString(fmt.Sprintf("  Usage:     ~$0.001 per scanned request\n\n"))
 
 	b.WriteString(infoStyle.Render("Press Enter to exit"))

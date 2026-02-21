@@ -34,7 +34,7 @@ stronghold config set <key> <value>
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `api.endpoint` | string | `https://api.stronghold.security` | Stronghold API server URL |
+| `api.endpoint` | string | `https://api.getstronghold.xyz` | Stronghold API server URL |
 | `api.timeout` | int | `30` | API request timeout in seconds |
 
 ### Logging
@@ -51,9 +51,9 @@ stronghold config set <key> <value>
 | `scanning.content.enabled` | bool | `true` | Enable content scanning |
 | `scanning.content.action_on_warn` | string | `warn` | Action on WARN verdict: `allow`, `warn`, or `block` |
 | `scanning.content.action_on_block` | string | `block` | Action on BLOCK verdict: `allow`, `warn`, or `block` |
-| `scanning.output.enabled` | bool | `true` | Enable output scanning |
-| `scanning.output.action_on_warn` | string | `warn` | Action on WARN verdict: `allow`, `warn`, or `block` |
-| `scanning.output.action_on_block` | string | `block` | Action on BLOCK verdict: `allow`, `warn`, or `block` |
+| `scanning.output.enabled` | bool | `true` | Reserved for future output policy; currently not enforced by proxy runtime |
+| `scanning.output.action_on_warn` | string | `warn` | Reserved for future output policy; currently not enforced by proxy runtime |
+| `scanning.output.action_on_block` | string | `block` | Reserved for future output policy; currently not enforced by proxy runtime |
 | `scanning.mode` | string | `smart` | Scanning mode |
 | `scanning.block_threshold` | float | `0.55` | Score threshold for BLOCK verdict (0.0-1.0) |
 | `scanning.fail_open` | bool | `true` | Allow traffic to pass if scanning fails |
@@ -73,7 +73,7 @@ stronghold config get scanning.content.action_on_block
 # Downgrade content block action to allow (let everything through)
 stronghold config set scanning.content.action_on_block allow
 
-# Disable output scanning entirely
+# Reserved key (currently no runtime effect in the proxy)
 stronghold config set scanning.output.enabled false
 
 # Raise the block threshold to reduce false positives

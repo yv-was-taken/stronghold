@@ -1,0 +1,44 @@
+name: Deploy Docs to Cloudflare Pages
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'docs-site/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy Docs to Cloudflare Pages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: docs-site
+        run: bun install
+
+      - name: Build site
+        working-directory: docs-site
+        run: bun run build
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy docs-site/dist --project-name=stronghold-docs
+
+      - name: Output deployment URL
+        run: |
+          echo "Docs deployed to: https://docs.getstronghold.xyz"
