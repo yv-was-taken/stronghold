@@ -328,9 +328,7 @@ func loadX402Networks() []string {
 	if os.Getenv("X402_SOLANA_WALLET_ADDRESS") != "" {
 		networks = append(networks, "solana")
 	}
-	if len(networks) == 0 {
-		return []string{"base"} // backward compat default
-	}
+	// When no wallets are configured, return an empty list so config state is explicit.
 	return networks
 }
 
@@ -367,6 +365,11 @@ func (c *Config) Validate() error {
 		if c.Stripe.PublishableKey == "" {
 			errs = append(errs, "STRIPE_PUBLISHABLE_KEY is required in production")
 		}
+	}
+
+	// x402 wallet addresses are required in production so paid endpoints cannot silently bypass payment.
+	if c.Environment == EnvProduction && !c.X402.HasPayments() {
+		errs = append(errs, "at least one X402 wallet address (X402_EVM_WALLET_ADDRESS or X402_SOLANA_WALLET_ADDRESS) is required in production")
 	}
 
 	// CORS validation: wildcard origins are insecure when credentials are allowed

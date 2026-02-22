@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { ErrorBoundary, withErrorBoundary } from '@/components/ui/ErrorBoundary'
 
@@ -19,7 +19,7 @@ function ToggleableError({ error }: { error: boolean }) {
 }
 
 describe('ErrorBoundary', () => {
-  let consoleSpy: ReturnType<typeof vi.spyOn>
+  let consoleSpy: MockInstance
 
   beforeEach(() => {
     // Suppress console.error for cleaner test output
@@ -124,7 +124,7 @@ describe('ErrorBoundary', () => {
 })
 
 describe('withErrorBoundary HOC', () => {
-  let consoleSpy: ReturnType<typeof vi.spyOn>
+  let consoleSpy: MockInstance
 
   beforeEach(() => {
     consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})

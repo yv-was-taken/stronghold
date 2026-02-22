@@ -130,6 +130,14 @@ func (h *HealthHandler) Readiness(c fiber.Ctx) error {
 		})
 	}
 
+	// In production, readiness requires x402 payment wallets to be configured.
+	if h.config != nil && h.config.IsProduction() && !h.config.X402.HasPayments() {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"status": "not_ready",
+			"reason": "payment_not_configured",
+		})
+	}
+
 	// Check x402 facilitator reachability
 	if x402Status := h.checkX402Facilitator(); x402Status != "up" {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{

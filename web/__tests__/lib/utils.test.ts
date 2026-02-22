@@ -90,6 +90,7 @@ describe('formatUSDC', () => {
   it('preserves precision for values beyond Number.MAX_SAFE_INTEGER', () => {
     expect(formatUSDC("9007199254740993")).toBe('$9,007,199,254.740993')
   })
+
 })
 
 describe('truncateAddress', () => {

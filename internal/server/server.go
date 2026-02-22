@@ -176,6 +176,12 @@ func (s *Server) setupRoutes() {
 	// Initialize x402 middleware with database for atomic payments
 	x402 := middleware.NewX402MiddlewareWithDB(&s.config.X402, &s.config.Pricing, s.database)
 
+	if !s.config.X402.HasPayments() {
+		slog.Warn("x402 payments DISABLED - no wallet addresses configured",
+			"environment", s.config.Environment,
+		)
+	}
+
 	// Initialize rate limiter for auth routes
 	rateLimiter := middleware.NewRateLimitMiddleware(&s.config.RateLimit)
 

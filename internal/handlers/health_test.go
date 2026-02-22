@@ -211,6 +211,85 @@ func TestHealthReady_X402Down(t *testing.T) {
 	assert.Equal(t, "x402_unavailable", body["reason"])
 }
 
+func TestHealthReady_ProductionPaymentsNotConfigured(t *testing.T) {
+	testDB := testutil.NewTestDB(t)
+	defer testDB.Close(t)
+
+	database := createTestDBWrapper(testDB)
+
+	resetFacilitatorCache()
+	facilitatorServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer facilitatorServer.Close()
+
+	cfg := &config.Config{
+		Environment: config.EnvProduction,
+		X402: config.X402Config{
+			FacilitatorURL: facilitatorServer.URL,
+			Networks:       []string{"base"},
+		},
+	}
+
+	handler := NewHealthHandler(database, cfg)
+
+	app := fiber.New()
+	handler.RegisterRoutes(app)
+
+	req := httptest.NewRequest("GET", "/health/ready", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, 503, resp.StatusCode)
+
+	var body map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&body)
+	require.NoError(t, err)
+
+	assert.Equal(t, "not_ready", body["status"])
+	assert.Equal(t, "payment_not_configured", body["reason"])
+}
+
+func TestHealthReady_DevModeNoPayments(t *testing.T) {
+	testDB := testutil.NewTestDB(t)
+	defer testDB.Close(t)
+
+	database := createTestDBWrapper(testDB)
+
+	resetFacilitatorCache()
+	facilitatorServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer facilitatorServer.Close()
+
+	cfg := &config.Config{
+		Environment: config.EnvDevelopment,
+		X402: config.X402Config{
+			FacilitatorURL: facilitatorServer.URL,
+			// No wallet addresses configured
+		},
+	}
+
+	handler := NewHealthHandler(database, cfg)
+
+	app := fiber.New()
+	handler.RegisterRoutes(app)
+
+	req := httptest.NewRequest("GET", "/health/ready", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, 200, resp.StatusCode)
+
+	var body map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&body)
+	require.NoError(t, err)
+
+	assert.Equal(t, "ready", body["status"])
+}
+
 func TestHealth_Timeout(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping timeout test in short mode")
