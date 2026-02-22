@@ -855,3 +855,200 @@ func TestHttpClientTimeout(t *testing.T) {
 	assert.Equal(t, 10*time.Second, m.httpClient.Timeout)
 }
 
+func TestAtomicPayment_DBConnectionError(t *testing.T) {
+	testDB := testutil.NewTestDB(t)
+
+	testWallet, err := wallet.NewTestWallet()
+	require.NoError(t, err)
+
+	receiverAddress := "0x1234567890123456789012345678901234567890"
+
+	cfg := &config.X402Config{
+		EVMWalletAddress: receiverAddress,
+		FacilitatorURL:   "https://x402.org/facilitator",
+		Networks:         []string{"base-sepolia"},
+	}
+	pricing := &config.PricingConfig{
+		ScanContent: usdc.MicroUSDC(1000),
+	}
+
+	database := db.NewFromPool(testDB.Pool)
+	m := NewX402MiddlewareWithDB(cfg, pricing, database)
+
+	httpmock.Activate()
+	defer httpmock.DeactivateAndReset()
+
+	httpmock.RegisterResponder("POST", "https://x402.org/facilitator/verify",
+		httpmock.NewJsonResponderOrPanic(200, map[string]interface{}{
+			"isValid": true,
+		}))
+
+	paymentHeader, err := testWallet.CreateTestPaymentHeader(receiverAddress, "1000", "base-sepolia")
+	require.NoError(t, err)
+
+	// Close the pool to simulate a DB connection error
+	testDB.Pool.Close()
+
+	app := fiber.New()
+	app.Post("/v1/scan/content", m.AtomicPayment(usdc.MicroUSDC(1000)), func(c fiber.Ctx) error {
+		return c.JSON(fiber.Map{"status": "ok"})
+	})
+
+	req := httptest.NewRequest("POST", "/v1/scan/content", bytes.NewBufferString(`{"text":"test"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Payment", paymentHeader)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, 500, resp.StatusCode)
+
+	var body map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&body)
+	require.NoError(t, err)
+	assert.Equal(t, "Payment processing error", body["error"])
+}
+
+func TestAtomicPayment_SettlementFailure_RecordedInDB(t *testing.T) {
+	testDB := testutil.NewTestDB(t)
+	defer testDB.Close(t)
+
+	testWallet, err := wallet.NewTestWallet()
+	require.NoError(t, err)
+
+	receiverAddress := "0x1234567890123456789012345678901234567890"
+
+	cfg := &config.X402Config{
+		EVMWalletAddress: receiverAddress,
+		FacilitatorURL:   "https://x402.org/facilitator",
+		Networks:         []string{"base-sepolia"},
+	}
+	pricing := &config.PricingConfig{
+		ScanContent: usdc.MicroUSDC(1000),
+	}
+
+	database := db.NewFromPool(testDB.Pool)
+	m := NewX402MiddlewareWithDB(cfg, pricing, database)
+
+	httpmock.Activate()
+	defer httpmock.DeactivateAndReset()
+
+	httpmock.RegisterResponder("POST", "https://x402.org/facilitator/verify",
+		httpmock.NewJsonResponderOrPanic(200, map[string]interface{}{
+			"isValid": true,
+		}))
+
+	// Settlement fails
+	httpmock.RegisterResponder("POST", "https://x402.org/facilitator/settle",
+		httpmock.NewJsonResponderOrPanic(500, map[string]interface{}{
+			"error": "settlement failed",
+		}))
+
+	paymentHeader, err := testWallet.CreateTestPaymentHeader(receiverAddress, "1000", "base-sepolia")
+	require.NoError(t, err)
+
+	app := fiber.New()
+	app.Post("/v1/scan/content", m.AtomicPayment(usdc.MicroUSDC(1000)), func(c fiber.Ctx) error {
+		return c.JSON(fiber.Map{"status": "ok"})
+	})
+
+	req := httptest.NewRequest("POST", "/v1/scan/content", bytes.NewBufferString(`{"text":"test"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Payment", paymentHeader)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, 503, resp.StatusCode)
+
+	// Verify the payment is recorded as failed in the DB
+	payload, err := wallet.ParseX402Payment(paymentHeader)
+	require.NoError(t, err)
+
+	payment, err := database.GetPaymentByNonce(context.Background(), payload.Nonce)
+	require.NoError(t, err)
+	assert.Equal(t, db.PaymentStatusFailed, payment.Status)
+	assert.NotNil(t, payment.LastError)
+	assert.Equal(t, 1, payment.SettlementAttempts)
+}
+
+func TestAtomicPayment_ExpiredNonceRetry(t *testing.T) {
+	testDB := testutil.NewTestDB(t)
+	defer testDB.Close(t)
+
+	testWallet, err := wallet.NewTestWallet()
+	require.NoError(t, err)
+
+	receiverAddress := "0x1234567890123456789012345678901234567890"
+
+	cfg := &config.X402Config{
+		EVMWalletAddress: receiverAddress,
+		FacilitatorURL:   "https://x402.org/facilitator",
+		Networks:         []string{"base-sepolia"},
+	}
+	pricing := &config.PricingConfig{
+		ScanContent: usdc.MicroUSDC(1000),
+	}
+
+	database := db.NewFromPool(testDB.Pool)
+	m := NewX402MiddlewareWithDB(cfg, pricing, database)
+
+	httpmock.Activate()
+	defer httpmock.DeactivateAndReset()
+
+	httpmock.RegisterResponder("POST", "https://x402.org/facilitator/verify",
+		httpmock.NewJsonResponderOrPanic(200, map[string]interface{}{
+			"isValid": true,
+		}))
+
+	paymentHeader, err := testWallet.CreateTestPaymentHeader(receiverAddress, "1000", "base-sepolia")
+	require.NoError(t, err)
+
+	// Pre-insert an expired payment with the same nonce
+	payload, err := wallet.ParseX402Payment(paymentHeader)
+	require.NoError(t, err)
+
+	expiredTx := &db.PaymentTransaction{
+		PaymentNonce:    payload.Nonce,
+		PaymentHeader:   paymentHeader,
+		PayerAddress:    payload.Payer,
+		ReceiverAddress: receiverAddress,
+		Endpoint:        "/v1/scan/content",
+		AmountUSDC:      usdc.MicroUSDC(1000),
+		Network:         "base-sepolia",
+		ExpiresAt:       time.Now().Add(5 * time.Minute),
+	}
+	err = database.CreatePaymentTransaction(context.Background(), expiredTx)
+	require.NoError(t, err)
+
+	// Move to expired state: reserved -> executing -> expired
+	err = database.TransitionStatus(context.Background(), expiredTx.ID,
+		db.PaymentStatusReserved, db.PaymentStatusExecuting)
+	require.NoError(t, err)
+	err = database.TransitionStatus(context.Background(), expiredTx.ID,
+		db.PaymentStatusExecuting, db.PaymentStatusExpired)
+	require.NoError(t, err)
+
+	app := fiber.New()
+	app.Post("/v1/scan/content", m.AtomicPayment(usdc.MicroUSDC(1000)), func(c fiber.Ctx) error {
+		return c.JSON(fiber.Map{"status": "ok"})
+	})
+
+	req := httptest.NewRequest("POST", "/v1/scan/content", bytes.NewBufferString(`{"text":"test"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Payment", paymentHeader)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, 409, resp.StatusCode)
+
+	var body map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&body)
+	require.NoError(t, err)
+	assert.Contains(t, body["error"], "expired")
+}
+
