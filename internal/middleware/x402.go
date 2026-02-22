@@ -102,7 +102,7 @@ func (m *X402Middleware) AtomicPayment(price usdc.MicroUSDC) fiber.Handler {
 		}
 		// Atomic payments require a database-backed nonce reservation.
 		if m.db == nil {
-			slog.Error("atomic payment middleware misconfigured: missing database")
+			slog.Error("atomic payment middleware misconfigured: missing database", "path", c.Path())
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "Payment middleware misconfigured",
 			})
@@ -149,12 +149,17 @@ func (m *X402Middleware) AtomicPayment(price usdc.MicroUSDC) fiber.Handler {
 
 		if !wasCreated {
 			// Transaction already exists - handle based on status
-			if paymentTx.Status == db.PaymentStatusCompleted && paymentTx.ServiceResult != nil {
+			if paymentTx.Status == db.PaymentStatusCompleted {
 				// Return cached result (idempotent replay)
 				if paymentTx.FacilitatorPaymentID != nil {
 					m.PaymentResponse(c, *paymentTx.FacilitatorPaymentID)
 				}
-				return c.JSON(paymentTx.ServiceResult)
+				if paymentTx.ServiceResult != nil {
+					return c.JSON(paymentTx.ServiceResult)
+				}
+				// Settlement completed but service result was not stored;
+				// return a minimal success response so the caller is not charged twice.
+				return c.JSON(fiber.Map{"status": "already_settled"})
 			}
 			// If payment is in another state (reserved, executing, settling, failed),
 			// treat as conflict - another request is processing this payment
@@ -543,53 +548,3 @@ func (m *X402Middleware) IsFreeRoute(path string) bool {
 	return false
 }
 
-// Middleware returns the main x402 middleware that handles all routes
-func (m *X402Middleware) Middleware() fiber.Handler {
-	return func(c fiber.Ctx) error {
-		path := c.Path()
-
-		// Skip free routes
-		if m.IsFreeRoute(path) {
-			return c.Next()
-		}
-
-		// Skip if no payment networks configured
-		if !m.config.HasPayments() {
-			return c.Next()
-		}
-
-		// Get price for this route
-		price := m.getPriceForRoute(path, c.Method())
-		if price == 0 {
-			// No price set, allow through
-			return c.Next()
-		}
-
-		// Check payment
-		paymentHeader := c.Get("X-Payment")
-		if paymentHeader == "" {
-			return m.requirePaymentResponse(c, price)
-		}
-
-		valid, err := m.verifyPayment(paymentHeader, price)
-		if err != nil || !valid {
-			return m.requirePaymentResponse(c, price)
-		}
-
-		// Store payment header for settlement after successful handler
-		c.Locals("x402_payment", paymentHeader)
-
-		return c.Next()
-	}
-}
-
-// getPriceForRoute returns the price for a given route
-func (m *X402Middleware) getPriceForRoute(path, method string) usdc.MicroUSDC {
-	routes := m.GetRoutes()
-	for _, route := range routes {
-		if strings.HasPrefix(path, route.Path) && method == route.Method {
-			return route.Price
-		}
-	}
-	return 0
-}

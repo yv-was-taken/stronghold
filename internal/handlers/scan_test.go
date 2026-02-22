@@ -16,19 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockScanner implements a minimal scanner for testing
-type mockScanner struct{}
-
-func (m *mockScanner) ScanContent(text, sourceURL, sourceType, contentType string) (map[string]interface{}, error) {
-	return map[string]interface{}{
-		"decision": "allow",
-		"scores": map[string]float64{
-			"heuristic": 0.1,
-			"ml":        0.2,
-		},
-	}, nil
-}
-
 func TestScanContent_EmptyText(t *testing.T) {
 	// Set up middleware with dev mode (no wallet = no payment required)
 	x402cfg := &config.X402Config{

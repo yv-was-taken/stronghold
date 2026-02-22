@@ -141,6 +141,9 @@ func (db *DB) ExecResult(ctx context.Context, sql string, args ...interface{}) (
 // cancelRow wraps pgx.Row to cancel the timeout context when Scan is called.
 // This is necessary because pgx defers reading the response to Scan time;
 // cancelling the context before Scan (via defer) would cause spurious failures.
+//
+// IMPORTANT: Callers MUST call Scan on the returned Row. If the Row is
+// discarded without Scan, the timeout context will leak.
 type cancelRow struct {
 	row    pgx.Row
 	cancel context.CancelFunc

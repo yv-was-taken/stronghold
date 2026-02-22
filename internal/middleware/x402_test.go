@@ -320,9 +320,9 @@ func TestAtomicPayment_WithDB_IdempotencyCache(t *testing.T) {
 	require.NoError(t, err)
 	defer resp2.Body.Close()
 
-	// Should return cached result (200) or conflict (409) depending on timing
-	// Since first request completed, we should get the cached result
-	assert.Contains(t, []int{200, 409}, resp2.StatusCode)
+	// First request completed fully (including settlement), so the second
+	// request with the same nonce should return the cached completed result.
+	assert.Equal(t, 200, resp2.StatusCode)
 }
 
 func TestAtomicPayment_DuplicateInProgress(t *testing.T) {
@@ -537,42 +537,6 @@ func TestAtomicPayment_HandlerError(t *testing.T) {
 
 	// Settlement should NOT have been called since handler failed
 	assert.False(t, settleCalled, "Settlement should not be called when handler fails")
-}
-
-func TestMiddleware_SkipsFreeRoutes(t *testing.T) {
-	cfg := &config.X402Config{
-		EVMWalletAddress: "0x1234567890123456789012345678901234567890",
-		FacilitatorURL:   "https://x402.org/facilitator",
-		Networks:         []string{"base-sepolia"},
-	}
-	pricing := &config.PricingConfig{
-		ScanContent: usdc.MicroUSDC(1000),
-	}
-
-	m := NewX402Middleware(cfg, pricing)
-
-	app := fiber.New()
-	app.Use(m.Middleware())
-	app.Get("/health", func(c fiber.Ctx) error {
-		return c.JSON(fiber.Map{"status": "healthy"})
-	})
-	app.Get("/v1/pricing", func(c fiber.Ctx) error {
-		return c.JSON(fiber.Map{"prices": "..."})
-	})
-
-	// Health should work without payment
-	req := httptest.NewRequest("GET", "/health", nil)
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	resp.Body.Close()
-	assert.Equal(t, 200, resp.StatusCode)
-
-	// Pricing should work without payment
-	req = httptest.NewRequest("GET", "/v1/pricing", nil)
-	resp, err = app.Test(req)
-	require.NoError(t, err)
-	resp.Body.Close()
-	assert.Equal(t, 200, resp.StatusCode)
 }
 
 func TestPaymentResponse(t *testing.T) {
@@ -891,39 +855,3 @@ func TestHttpClientTimeout(t *testing.T) {
 	assert.Equal(t, 10*time.Second, m.httpClient.Timeout)
 }
 
-// Mock DB for testing middleware with database
-type mockDB struct {
-	db.Database
-	paymentByNonce *db.PaymentTransaction
-	paymentErr     error
-}
-
-func (m *mockDB) GetPaymentByNonce(ctx context.Context, nonce string) (*db.PaymentTransaction, error) {
-	if m.paymentErr != nil {
-		return nil, m.paymentErr
-	}
-	return m.paymentByNonce, nil
-}
-
-func (m *mockDB) CreatePaymentTransaction(ctx context.Context, tx *db.PaymentTransaction) error {
-	return nil
-}
-
-func (m *mockDB) TransitionStatus(ctx context.Context, id interface{}, from, to db.PaymentStatus) error {
-	return nil
-}
-
-func (m *mockDB) Ping(ctx context.Context) error {
-	return nil
-}
-
-func (m *mockDB) Close() {}
-
-// HTTP client mock for facilitator calls
-type mockTransport struct {
-	roundTripper func(*http.Request) (*http.Response, error)
-}
-
-func (m *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	return m.roundTripper(req)
-}

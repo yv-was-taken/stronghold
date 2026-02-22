@@ -290,9 +290,13 @@ func (db *DB) FailSettlement(ctx context.Context, id uuid.UUID, errorMsg string)
 		WHERE id = $1 AND status = $4
 	`
 
-	err := db.Exec(ctx, query, id, PaymentStatusFailed, errorMsg, PaymentStatusSettling)
+	result, err := db.ExecResult(ctx, query, id, PaymentStatusFailed, errorMsg, PaymentStatusSettling)
 	if err != nil {
 		return fmt.Errorf("failed to record settlement failure: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("fail settlement failed: payment not in settling state")
 	}
 
 	return nil
