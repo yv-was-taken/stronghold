@@ -391,6 +391,85 @@ func (db *DB) ExpireStaleReservations(ctx context.Context) (int64, error) {
 	return result.RowsAffected(), nil
 }
 
+// GetSettlementCandidates returns payments that are candidates for settlement retry.
+// Unlike GetPendingSettlements, this does NOT hold a transaction or row locks.
+// Callers must claim each payment individually via MarkSettling (optimistic lock).
+func (db *DB) GetSettlementCandidates(ctx context.Context, maxAttempts int, limit int) ([]*PaymentTransaction, error) {
+	query := `
+		SELECT id, payment_nonce, payment_header, payer_address, receiver_address,
+			   endpoint, amount_usdc, network, status, facilitator_payment_id,
+			   settlement_attempts, last_error, service_result,
+			   created_at, executed_at, settled_at, expires_at
+		FROM payment_transactions
+		WHERE (status = $1 AND settlement_attempts < $2)
+		   OR (status = $3 AND executed_at < NOW() - INTERVAL '5 minutes')
+		ORDER BY created_at ASC
+		LIMIT $4
+	`
+
+	rows, err := db.Query(ctx, query, PaymentStatusFailed, maxAttempts, PaymentStatusSettling, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query settlement candidates: %w", err)
+	}
+	defer rows.Close()
+
+	var transactions []*PaymentTransaction
+	for rows.Next() {
+		var ptx PaymentTransaction
+		var serviceResultJSON []byte
+		err := rows.Scan(
+			&ptx.ID,
+			&ptx.PaymentNonce,
+			&ptx.PaymentHeader,
+			&ptx.PayerAddress,
+			&ptx.ReceiverAddress,
+			&ptx.Endpoint,
+			&ptx.AmountUSDC,
+			&ptx.Network,
+			&ptx.Status,
+			&ptx.FacilitatorPaymentID,
+			&ptx.SettlementAttempts,
+			&ptx.LastError,
+			&serviceResultJSON,
+			&ptx.CreatedAt,
+			&ptx.ExecutedAt,
+			&ptx.SettledAt,
+			&ptx.ExpiresAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan payment transaction: %w", err)
+		}
+
+		if serviceResultJSON != nil {
+			if err := json.Unmarshal(serviceResultJSON, &ptx.ServiceResult); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal service result: %w", err)
+			}
+		}
+
+		transactions = append(transactions, &ptx)
+	}
+
+	return transactions, nil
+}
+
+// ClaimForSettlement atomically claims a stuck settling payment for retry by
+// incrementing its settlement_attempts counter. Returns true if the claim succeeded.
+// This provides optimistic locking for payments already in settling state.
+func (db *DB) ClaimForSettlement(ctx context.Context, id uuid.UUID) (bool, error) {
+	query := `
+		UPDATE payment_transactions
+		SET settlement_attempts = settlement_attempts + 1
+		WHERE id = $1 AND status = $2 AND executed_at < NOW() - INTERVAL '5 minutes'
+	`
+
+	result, err := db.ExecResult(ctx, query, id, PaymentStatusSettling)
+	if err != nil {
+		return false, fmt.Errorf("failed to claim payment for settlement: %w", err)
+	}
+
+	return result.RowsAffected() > 0, nil
+}
+
 // MarkSettling transitions a payment from failed to settling for retry
 func (db *DB) MarkSettling(ctx context.Context, id uuid.UUID) error {
 	return db.TransitionStatus(ctx, id, PaymentStatusFailed, PaymentStatusSettling)

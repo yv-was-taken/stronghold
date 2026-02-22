@@ -84,6 +84,8 @@ type Database interface {
 	CompleteSettlement(ctx context.Context, id uuid.UUID, facilitatorPaymentID string) error
 	FailSettlement(ctx context.Context, id uuid.UUID, errorMsg string) error
 	GetPendingSettlements(ctx context.Context, maxAttempts int, limit int) ([]*PaymentTransaction, pgx.Tx, error)
+	GetSettlementCandidates(ctx context.Context, maxAttempts int, limit int) ([]*PaymentTransaction, error)
+	ClaimForSettlement(ctx context.Context, id uuid.UUID) (bool, error)
 	ExpireStaleReservations(ctx context.Context) (int64, error)
 	MarkSettling(ctx context.Context, id uuid.UUID) error
 	LinkUsageLog(ctx context.Context, usageLogID, paymentTxID uuid.UUID) error

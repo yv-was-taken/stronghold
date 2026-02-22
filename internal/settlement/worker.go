@@ -160,28 +160,23 @@ func (w *Worker) runExpirationLoop(ctx context.Context) {
 	}
 }
 
-// retryFailedSettlements processes payments that failed settlement
+// retryFailedSettlements processes payments that failed settlement.
+// Uses optimistic per-row claiming instead of holding a long-lived transaction.
 func (w *Worker) retryFailedSettlements(ctx context.Context) {
-	// Get failed payments that haven't exceeded max retries (returns a transaction holding row locks)
-	payments, tx, err := w.db.GetPendingSettlements(ctx, w.config.MaxRetryAttempts, w.config.BatchSize)
+	// Query candidates without holding a transaction or row locks
+	candidates, err := w.db.GetSettlementCandidates(ctx, w.config.MaxRetryAttempts, w.config.BatchSize)
 	if err != nil {
-		slog.Error("failed to get pending settlements", "error", err)
-		return
-	}
-	// Commit the transaction after processing to release FOR UPDATE locks
-	defer func() {
-		if err := tx.Commit(ctx); err != nil {
-			slog.Error("failed to commit settlement transaction", "error", err)
-		}
-	}()
-
-	if len(payments) == 0 {
+		slog.Error("failed to get settlement candidates", "error", err)
 		return
 	}
 
-	slog.Info("retrying failed settlements", "count", len(payments))
+	if len(candidates) == 0 {
+		return
+	}
 
-	for _, payment := range payments {
+	slog.Info("found settlement candidates", "count", len(candidates))
+
+	for _, payment := range candidates {
 		select {
 		case <-ctx.Done():
 			return
@@ -200,22 +195,34 @@ func (w *Worker) retryFailedSettlements(ctx context.Context) {
 		backoff := w.calculateBackoff(payment.SettlementAttempts)
 		timeSinceExecution := time.Since(*payment.ExecutedAt)
 		if timeSinceExecution < backoff {
-			// Not yet time to retry this payment
 			continue
 		}
 
-		// Transition to settling
-		if err := w.db.MarkSettling(ctx, payment.ID); err != nil {
-			slog.Error("failed to mark payment as settling", "payment_id", payment.ID, "error", err)
-			continue
+		// Claim the payment atomically (optimistic lock — another worker may beat us)
+		if payment.Status == db.PaymentStatusFailed {
+			// Transition failed -> settling
+			if err := w.db.MarkSettling(ctx, payment.ID); err != nil {
+				// Another worker claimed it, or state changed — skip
+				continue
+			}
+		} else if payment.Status == db.PaymentStatusSettling {
+			// Stuck settling payment — claim by incrementing attempts
+			claimed, err := w.db.ClaimForSettlement(ctx, payment.ID)
+			if err != nil {
+				slog.Error("failed to claim settling payment", "payment_id", payment.ID, "error", err)
+				continue
+			}
+			if !claimed {
+				continue
+			}
 		}
 
-		// Attempt settlement
+		// Attempt settlement (HTTP call — no transaction held)
 		paymentID, err := w.settlePayment(payment.PaymentHeader)
 		if err != nil {
 			slog.Error("settlement retry failed", "payment_id", payment.ID, "attempt", payment.SettlementAttempts+1, "error", err)
 			if err := w.db.FailSettlement(ctx, payment.ID, err.Error()); err != nil {
-				slog.Error("failed to record settlement failure", "error", err)
+				slog.Error("failed to record settlement failure", "payment_id", payment.ID, "error", err)
 			}
 			continue
 		}
