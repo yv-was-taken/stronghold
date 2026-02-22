@@ -214,8 +214,9 @@ func (db *DB) GetPaymentByID(ctx context.Context, id uuid.UUID) (*PaymentTransac
 	return &tx, nil
 }
 
-// TransitionStatus atomically transitions a payment from one status to another
-// Uses FOR UPDATE to prevent concurrent modifications
+// TransitionStatus atomically transitions a payment from one status to another.
+// The WHERE clause on status acts as an optimistic lock — only one concurrent
+// caller can successfully transition from a given state.
 func (db *DB) TransitionStatus(ctx context.Context, id uuid.UUID, from, to PaymentStatus) error {
 	query := `
 		UPDATE payment_transactions
