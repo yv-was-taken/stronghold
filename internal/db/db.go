@@ -58,6 +58,9 @@ func LoadConfig() *Config {
 // NewFromPool creates a DB instance from an existing connection pool.
 // This is primarily useful for testing.
 func NewFromPool(pool *pgxpool.Pool) *DB {
+	if pool == nil {
+		panic("NewFromPool: pool must not be nil")
+	}
 	return &DB{pool: pool}
 }
 
