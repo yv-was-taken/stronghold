@@ -66,7 +66,8 @@ func (pr *PaymentRouter) Route(price usdc.MicroUSDC) fiber.Handler {
 	}
 }
 
-// handleAPIKeyPayment authenticates via API key and handles billing (credits or metered)
+// handleAPIKeyPayment authenticates via API key and handles billing (credits or metered).
+// Billing is deferred until after the handler succeeds to avoid charging for failed requests.
 func (pr *PaymentRouter) handleAPIKeyPayment(c fiber.Ctx, price usdc.MicroUSDC) error {
 	// Authenticate API key
 	account, _, err := pr.apiKey.Authenticate(c)
@@ -74,42 +75,55 @@ func (pr *PaymentRouter) handleAPIKeyPayment(c fiber.Ctx, price usdc.MicroUSDC) 
 		return err
 	}
 
-	// Try deducting from credit balance (atomic SQL)
-	deducted, err := pr.db.DeductBalance(c.Context(), account.ID, price)
-	if err != nil {
-		slog.Error("failed to deduct balance", "account_id", account.ID, "error", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Payment processing error",
-		})
-	}
+	// Pre-check: verify the account has a way to pay before running the handler
+	hasCredits := account.BalanceUSDC >= price
+	hasMetered := account.StripeCustomerID != nil && *account.StripeCustomerID != ""
 
-	if deducted {
-		// Credits used - log usage and proceed
-		pr.logUsage(c, account.ID, price, "credits")
-		return c.Next()
-	}
-
-	// Insufficient credits - fall back to metered billing
-	if account.StripeCustomerID == nil || *account.StripeCustomerID == "" {
+	if !hasCredits && !hasMetered {
 		return c.Status(fiber.StatusPaymentRequired).JSON(fiber.Map{
 			"error":   "Insufficient credits",
 			"message": "Your credit balance is insufficient. Purchase credits at /v1/billing/credits.",
 		})
 	}
 
-	// Report to Stripe Meter
-	if pr.meter != nil {
+	// Execute the handler BEFORE charging
+	if err := c.Next(); err != nil {
+		return err
+	}
+
+	// Only charge on successful responses (2xx)
+	status := c.Response().StatusCode()
+	if status < 200 || status >= 300 {
+		return nil
+	}
+
+	// Try deducting from credit balance (atomic SQL)
+	deducted, err := pr.db.DeductBalance(c.Context(), account.ID, price)
+	if err != nil {
+		slog.Error("failed to deduct balance", "account_id", account.ID, "error", err)
+		return nil // Response already sent
+	}
+
+	if deducted {
+		pr.logUsage(c, account.ID, price, "credits")
+		return nil
+	}
+
+	// Fall back to metered billing
+	if hasMetered && pr.meter != nil {
 		if err := pr.meter.ReportUsage(c.Context(), account.ID, *account.StripeCustomerID, c.Path(), price); err != nil {
 			slog.Error("failed to report metered usage", "account_id", account.ID, "error", err)
-			// Still allow the request - usage is logged locally, Stripe can be reconciled
 		}
 	}
 
 	pr.logUsage(c, account.ID, price, "metered")
-	return c.Next()
+	return nil
 }
 
-// logUsage creates a usage log entry for a B2B API request
+// logUsage creates a usage log entry for a B2B API request.
+// CostUSDC is set to 0 in the DB row to prevent the deduct_account_balance_on_usage
+// trigger from subtracting again — B2B balance changes are handled by DeductBalance
+// (credits) or Stripe (metered). The actual cost is recorded in metadata for auditing.
 func (pr *PaymentRouter) logUsage(c fiber.Ctx, accountID uuid.UUID, price usdc.MicroUSDC, paymentMethod string) {
 	requestID := GetRequestID(c)
 	usageLog := &db.UsageLog{
@@ -117,11 +131,12 @@ func (pr *PaymentRouter) logUsage(c fiber.Ctx, accountID uuid.UUID, price usdc.M
 		RequestID: requestID,
 		Endpoint:  c.Path(),
 		Method:    c.Method(),
-		CostUSDC:  price,
+		CostUSDC:  0, // trigger-safe: DeductBalance or Stripe already handled billing
 		Status:    "success",
 		Metadata: map[string]any{
 			"payment_method": paymentMethod,
 			"account_type":   "b2b",
+			"actual_cost":    price,
 		},
 	}
 

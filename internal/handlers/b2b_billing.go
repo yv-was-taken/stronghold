@@ -173,8 +173,8 @@ func (h *B2BBillingHandler) GetBillingInfo(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"balance_usdc":        account.BalanceUSDC,
-		"stripe_customer_id":  account.StripeCustomerID,
+		"credit_balance_usdc":  account.BalanceUSDC,
+		"stripe_customer_id":   account.StripeCustomerID,
 		"recent_metered_usage": usageRecords,
 	})
 }
