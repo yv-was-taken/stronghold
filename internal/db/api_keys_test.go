@@ -112,7 +112,7 @@ func TestGetAPIKeyByHash_RevokedKeyReturnsError(t *testing.T) {
 	keyHash := HashToken(rawKey)
 	_, err = db.GetAPIKeyByHash(ctx, keyHash)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not found or revoked")
+	assert.ErrorIs(t, err, ErrAPIKeyNotFound)
 }
 
 func TestGetAPIKeyByHash_NonExistentHash(t *testing.T) {
@@ -124,7 +124,7 @@ func TestGetAPIKeyByHash_NonExistentHash(t *testing.T) {
 
 	_, err := db.GetAPIKeyByHash(ctx, "nonexistenthash0000000000000000000000000000000000000000000000000000")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not found or revoked")
+	assert.ErrorIs(t, err, ErrAPIKeyNotFound)
 }
 
 func TestListAPIKeys_ReturnsAllIncludingRevoked(t *testing.T) {

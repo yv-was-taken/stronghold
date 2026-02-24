@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"stronghold/internal/db"
 
 	"github.com/gofiber/fiber/v3"
@@ -30,8 +31,13 @@ func (m *APIKeyMiddleware) Authenticate() fiber.Handler {
 		keyHash := db.HashToken(rawKey)
 		apiKey, err := m.db.GetAPIKeyByHash(c.Context(), keyHash)
 		if err != nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid or revoked API key",
+			if errors.Is(err, db.ErrAPIKeyNotFound) {
+				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+					"error": "Invalid or revoked API key",
+				})
+			}
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Authentication service unavailable",
 			})
 		}
 

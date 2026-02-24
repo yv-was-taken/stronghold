@@ -60,13 +60,18 @@ func (db *DB) CreateAPIKey(ctx context.Context, accountID uuid.UUID, label strin
 }
 
 // GetAPIKeyByHash looks up an active (non-revoked) API key by its hash and updates last_used_at.
+// Only returns keys whose owning account has status 'active'.
 func (db *DB) GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, error) {
 	apiKey := &APIKey{}
 	err := db.QueryRow(ctx, `
-		UPDATE api_keys
+		UPDATE api_keys ak
 		SET last_used_at = NOW()
-		WHERE key_hash = $1 AND revoked_at IS NULL
-		RETURNING id, account_id, key_prefix, label, created_at, last_used_at, revoked_at
+		FROM accounts a
+		WHERE ak.key_hash = $1
+		  AND ak.revoked_at IS NULL
+		  AND a.id = ak.account_id
+		  AND a.status = 'active'
+		RETURNING ak.id, ak.account_id, ak.key_prefix, ak.label, ak.created_at, ak.last_used_at, ak.revoked_at
 	`, keyHash).Scan(
 		&apiKey.ID, &apiKey.AccountID, &apiKey.KeyPrefix, &apiKey.Label,
 		&apiKey.CreatedAt, &apiKey.LastUsedAt, &apiKey.RevokedAt,
@@ -74,7 +79,7 @@ func (db *DB) GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, err
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, errors.New("api key not found or revoked")
+			return nil, ErrAPIKeyNotFound
 		}
 		return nil, fmt.Errorf("failed to get API key: %w", err)
 	}
