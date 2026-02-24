@@ -201,19 +201,21 @@ func (h *APIKeyHandler) Revoke(c fiber.Ctx) error {
 	})
 }
 
-// getAccountID extracts and parses the account_id from request context
+// getAccountID extracts and parses the account_id from request context.
+// Returns fiber.NewError so callers always get a non-nil error on failure
+// (c.Status().JSON() returns nil, which would let callers continue with uuid.Nil).
 func (h *APIKeyHandler) getAccountID(c fiber.Ctx) (uuid.UUID, error) {
 	accountIDStr := c.Locals("account_id")
 	if accountIDStr == nil {
-		return uuid.UUID{}, c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Authentication required",
-		})
+		return uuid.UUID{}, fiber.NewError(fiber.StatusUnauthorized, "Authentication required")
 	}
-	accountID, err := uuid.Parse(accountIDStr.(string))
+	str, ok := accountIDStr.(string)
+	if !ok {
+		return uuid.UUID{}, fiber.NewError(fiber.StatusInternalServerError, "Invalid account ID format")
+	}
+	accountID, err := uuid.Parse(str)
 	if err != nil {
-		return uuid.UUID{}, c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Invalid account ID",
-		})
+		return uuid.UUID{}, fiber.NewError(fiber.StatusInternalServerError, "Invalid account ID")
 	}
 	return accountID, nil
 }

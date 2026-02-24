@@ -110,9 +110,12 @@ func (pr *PaymentRouter) handleAPIKeyPayment(c fiber.Ctx, price usdc.MicroUSDC) 
 		return nil
 	}
 
-	// Fall back to metered billing
+	// Fall back to metered billing.
+	// Generate the idempotency key once so the same Stripe meter identifier is
+	// used if this billing event is retried after a transport error.
 	if hasMetered {
-		if err := pr.meter.ReportUsage(c.Context(), account.ID, *account.StripeCustomerID, c.Path(), price); err != nil {
+		meterKey := uuid.New().String()
+		if err := pr.meter.ReportUsage(c.Context(), account.ID, *account.StripeCustomerID, c.Path(), price, meterKey); err != nil {
 			slog.Error("metered billing failed", "account_id", account.ID, "error", err)
 			c.Response().Reset()
 			if errors.Is(err, billing.ErrMeteringNotConfigured) {
