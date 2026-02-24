@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"log/slog"
+	"strings"
 
 	"stronghold/internal/billing"
 	"stronghold/internal/db"
@@ -47,13 +48,10 @@ func (pr *PaymentRouter) Route(price usdc.MicroUSDC) fiber.Handler {
 
 		// Path 2: API key authentication (Bearer sk_live_...)
 		authHeader := string(c.Request().Header.Peek("Authorization"))
-		if authHeader != "" && len(authHeader) > 7 {
-			// Check if it looks like an API key (not a JWT)
-			token := authHeader
-			if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
-				token = authHeader[7:]
-			}
-			if len(token) > 8 && token[:8] == "sk_live_" {
+		if authHeader != "" {
+			// Parse scheme case-insensitively (RFC 7235)
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") && strings.HasPrefix(parts[1], "sk_live_") {
 				return pr.handleAPIKeyPayment(c, price)
 			}
 		}
@@ -101,7 +99,10 @@ func (pr *PaymentRouter) handleAPIKeyPayment(c fiber.Ctx, price usdc.MicroUSDC) 
 	deducted, err := pr.db.DeductBalance(c.Context(), account.ID, price)
 	if err != nil {
 		slog.Error("failed to deduct balance", "account_id", account.ID, "error", err)
-		return nil // Response already sent
+		c.Response().Reset()
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Payment processing error",
+		})
 	}
 
 	if deducted {
@@ -114,10 +115,18 @@ func (pr *PaymentRouter) handleAPIKeyPayment(c fiber.Ctx, price usdc.MicroUSDC) 
 		if err := pr.meter.ReportUsage(c.Context(), account.ID, *account.StripeCustomerID, c.Path(), price); err != nil {
 			slog.Error("failed to report metered usage", "account_id", account.ID, "error", err)
 		}
+		pr.logUsage(c, account.ID, price, "metered")
+		return nil
 	}
 
-	pr.logUsage(c, account.ID, price, "metered")
-	return nil
+	// Neither credits nor metered billing succeeded (concurrent race on last credit)
+	slog.Warn("billing race: scan succeeded but no payment method available",
+		"account_id", account.ID)
+	c.Response().Reset()
+	return c.Status(fiber.StatusPaymentRequired).JSON(fiber.Map{
+		"error":   "Payment failed",
+		"message": "Unable to process payment. Please try again.",
+	})
 }
 
 // logUsage creates a usage log entry for a B2B API request.

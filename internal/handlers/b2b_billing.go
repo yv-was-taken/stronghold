@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"log/slog"
+	"math"
 
 	"stronghold/internal/config"
 	"stronghold/internal/db"
@@ -84,9 +85,10 @@ func (h *B2BBillingHandler) PurchaseCredits(c fiber.Ctx) error {
 		})
 	}
 
-	// Convert to cents and microUSDC
-	amountCents := int64(req.AmountUSDC * 100)
-	microUSDCAmount := usdc.FromFloat(req.AmountUSDC)
+	// Round to whole cents and derive both values from that to prevent
+	// charging less in Stripe than credited in microUSDC (e.g. 10.009)
+	amountCents := int64(math.Round(req.AmountUSDC * 100))
+	microUSDCAmount := usdc.MicroUSDC(amountCents * 10000) // 1 cent = 10,000 microUSDC
 
 	// Create Stripe Checkout session
 	stripe.Key = h.stripeConfig.SecretKey
