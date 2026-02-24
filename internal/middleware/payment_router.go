@@ -112,7 +112,7 @@ func (pr *PaymentRouter) handleAPIKeyPayment(c fiber.Ctx, price usdc.MicroUSDC) 
 
 	// Fall back to metered billing
 	if hasMetered && pr.meter != nil {
-		if err := pr.meter.ReportUsage(c.Context(), account.ID, *account.StripeCustomerID, c.Path(), price); err != nil {
+		if err := pr.meter.ReportUsage(c.Context(), account.ID, *account.StripeCustomerID, GetRequestID(c), c.Path(), price); err != nil {
 			slog.Error("metered billing failed", "account_id", account.ID, "error", err)
 			c.Response().Reset()
 			if errors.Is(err, billing.ErrMeteringNotConfigured) {

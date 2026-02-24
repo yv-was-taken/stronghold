@@ -33,27 +33,26 @@ func NewMeterReporter(database *db.DB, stripeConfig *config.StripeConfig) *Meter
 	}
 }
 
-// ReportUsage reports a metered API usage event to Stripe and records it locally
-func (m *MeterReporter) ReportUsage(ctx context.Context, accountID uuid.UUID, stripeCustomerID, endpoint string, amountMicroUSDC usdc.MicroUSDC) error {
+// ReportUsage reports a metered API usage event to Stripe and records it locally.
+// The requestID is used as the Stripe meter event identifier for idempotency —
+// retries with the same requestID collapse to a single billing event.
+func (m *MeterReporter) ReportUsage(ctx context.Context, accountID uuid.UUID, stripeCustomerID, requestID, endpoint string, amountMicroUSDC usdc.MicroUSDC) error {
 	if m.stripeConfig.SecretKey == "" || m.stripeConfig.MeterEventName == "" {
 		return ErrMeteringNotConfigured
 	}
 
 	stripe.Key = m.stripeConfig.SecretKey
 
-	// Convert microUSDC to cents for Stripe (1 USDC = 100 cents, 1 microUSDC = 0.0001 cents)
-	// Stripe meters work with integer values, so we report in microUSDC units
-	// and configure the Stripe meter/price to interpret them correctly
-	valueInCents := amountMicroUSDC / 10000 // 1000 microUSDC = $0.001 = 0.1 cents
-	if valueInCents < 1 {
-		valueInCents = 1 // minimum 1 unit
-	}
-
+	// Report raw microUSDC as the meter value to preserve sub-cent pricing
+	// precision. The Stripe meter price must be configured to interpret
+	// microUSDC units (1,000,000 = $1.00). Converting to cents first would
+	// truncate all sub-cent prices (e.g. $0.001) to the same value.
 	params := &stripe.BillingMeterEventParams{
-		EventName: stripe.String(m.stripeConfig.MeterEventName),
+		EventName:  stripe.String(m.stripeConfig.MeterEventName),
+		Identifier: stripe.String(requestID),
 		Payload: map[string]string{
 			"stripe_customer_id": stripeCustomerID,
-			"value":              fmt.Sprintf("%d", valueInCents),
+			"value":              fmt.Sprintf("%d", amountMicroUSDC),
 		},
 		Timestamp: stripe.Int64(time.Now().Unix()),
 	}
