@@ -111,8 +111,9 @@ func (h *B2BBillingHandler) PurchaseCredits(c fiber.Ctx) error {
 	}
 
 	params := &stripe.CheckoutSessionParams{
-		Mode:     stripe.String(string(stripe.CheckoutSessionModePayment)),
-		Customer: account.StripeCustomerID,
+		Mode:               stripe.String(string(stripe.CheckoutSessionModePayment)),
+		Customer:           account.StripeCustomerID,
+		PaymentMethodTypes: []*string{stripe.String("card")},
 		LineItems: []*stripe.CheckoutSessionLineItemParams{
 			{
 				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{

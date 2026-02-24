@@ -35,7 +35,7 @@ func NewMeterReporter(database *db.DB, stripeConfig *config.StripeConfig) *Meter
 
 // ReportUsage reports a metered API usage event to Stripe and records it locally
 func (m *MeterReporter) ReportUsage(ctx context.Context, accountID uuid.UUID, stripeCustomerID, endpoint string, amountMicroUSDC usdc.MicroUSDC) error {
-	if m.stripeConfig.SecretKey == "" || m.stripeConfig.MeterID == "" {
+	if m.stripeConfig.SecretKey == "" || m.stripeConfig.MeterEventName == "" {
 		return ErrMeteringNotConfigured
 	}
 
@@ -50,7 +50,7 @@ func (m *MeterReporter) ReportUsage(ctx context.Context, accountID uuid.UUID, st
 	}
 
 	params := &stripe.BillingMeterEventParams{
-		EventName: stripe.String("api_usage"),
+		EventName: stripe.String(m.stripeConfig.MeterEventName),
 		Payload: map[string]string{
 			"stripe_customer_id": stripeCustomerID,
 			"value":              fmt.Sprintf("%d", valueInCents),
@@ -87,9 +87,13 @@ func (m *MeterReporter) ReportUsage(ctx context.Context, accountID uuid.UUID, st
 			"endpoint", endpoint,
 			"error", err,
 		)
-		return fmt.Errorf("failed to record usage: %w", err)
+		// Only fail the request if Stripe also rejected the event.
+		// When Stripe accepted it, failing here would cause a client retry
+		// that submits a duplicate meter event (double charge).
+		if stripeErr != nil {
+			return fmt.Errorf("failed to record usage: %w", err)
+		}
 	}
 
-	// Propagate Stripe submission failure so the caller knows metering didn't succeed
 	return stripeErr
 }

@@ -418,6 +418,16 @@ func (db *DB) CloseAccount(ctx context.Context, accountID uuid.UUID) error {
 	return nil
 }
 
+// DeleteAccount permanently deletes an account by ID.
+// Used only for rollback during registration when a subsequent step (e.g. Stripe customer creation) fails.
+func (db *DB) DeleteAccount(ctx context.Context, accountID uuid.UUID) error {
+	_, err := db.pool.Exec(ctx, `DELETE FROM accounts WHERE id = $1`, accountID)
+	if err != nil {
+		return fmt.Errorf("failed to delete account: %w", err)
+	}
+	return nil
+}
+
 // AccountExists checks if an account exists by account number
 func (db *DB) AccountExists(ctx context.Context, accountNumber string) (bool, error) {
 	normalized := normalizeAccountNumber(accountNumber)
