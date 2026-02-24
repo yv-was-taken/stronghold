@@ -334,11 +334,11 @@ export default function APIKeysPage() {
             <li>
               Include your key in the{' '}
               <code className="text-gray-400 bg-[#0a0a0a] px-1.5 py-0.5 rounded">
-                Authorization
+                X-API-Key
               </code>{' '}
               header as{' '}
               <code className="text-gray-400 bg-[#0a0a0a] px-1.5 py-0.5 rounded">
-                Bearer &lt;key&gt;
+                X-API-Key: &lt;key&gt;
               </code>
             </li>
             <li>

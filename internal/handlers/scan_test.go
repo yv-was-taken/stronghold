@@ -683,6 +683,35 @@ func TestFilterJailbreakThreats_NoThreats_NoChange(t *testing.T) {
 	assert.Equal(t, stronghold.DecisionAllow, result.Decision)
 }
 
+func TestFilterJailbreakThreats_B2C_WarnNoThreats_PreservesDecision(t *testing.T) {
+	tDB := testutil.NewTestDB(t)
+	defer tDB.Close(t)
+
+	database := db.NewFromPool(tDB.Pool)
+
+	handler := &ScanHandler{db: database}
+
+	// Simulate heuristic path: WARN decision with no specific threats listed
+	result := makeScanResult(stronghold.DecisionWarn, []stronghold.Threat{})
+
+	app := fiber.New()
+	app.Post("/test", func(c fiber.Ctx) error {
+		// B2C path
+		handler.filterJailbreakThreats(c, result)
+		return c.JSON(result)
+	})
+
+	req := httptest.NewRequest("POST", "/test", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	// Decision should stay WARN — no jailbreak threats were removed, so no reason to downgrade
+	assert.Empty(t, result.ThreatsFound)
+	assert.Equal(t, stronghold.DecisionWarn, result.Decision)
+}
+
 func TestDualAuth_APIKeyHeaderUsesAPIKeyAuth(t *testing.T) {
 	tDB := testutil.NewTestDB(t)
 	defer tDB.Close(t)

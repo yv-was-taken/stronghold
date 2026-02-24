@@ -100,8 +100,18 @@ func (h *SettingsHandler) UpdateSettings(c fiber.Ctx) error {
 	}
 
 	// Return updated settings
-	hasKeys, _ := h.db.HasActiveAPIKeys(c.Context(), accountID)
-	enabled, _ := h.db.GetJailbreakDetectionEnabled(c.Context(), accountID, hasKeys)
+	hasKeys, err := h.db.HasActiveAPIKeys(c.Context(), accountID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to read updated settings",
+		})
+	}
+	enabled, err := h.db.GetJailbreakDetectionEnabled(c.Context(), accountID, hasKeys)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to read updated settings",
+		})
+	}
 
 	return c.JSON(fiber.Map{
 		"jailbreak_detection_enabled": enabled,

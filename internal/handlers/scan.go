@@ -244,15 +244,18 @@ func (h *ScanHandler) filterJailbreakThreats(c fiber.Ctx, result *stronghold.Sca
 
 	// Remove jailbreak-category threats
 	filtered := make([]stronghold.Threat, 0, len(result.ThreatsFound))
+	removedCount := 0
 	for _, t := range result.ThreatsFound {
-		if t.Category != "jailbreak" {
+		if t.Category == "jailbreak" {
+			removedCount++
+		} else {
 			filtered = append(filtered, t)
 		}
 	}
 	result.ThreatsFound = filtered
 
-	// If no threats remain and decision was BLOCK/WARN, reset to ALLOW
-	if len(result.ThreatsFound) == 0 && result.Decision != stronghold.DecisionAllow {
+	// Only reset decision if jailbreak threats were actually removed and no other threats remain
+	if removedCount > 0 && len(result.ThreatsFound) == 0 && result.Decision != stronghold.DecisionAllow {
 		result.Decision = stronghold.DecisionAllow
 		result.RecommendedAction = "allow"
 		result.Reason = "No actionable threats detected"
