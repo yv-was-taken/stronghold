@@ -107,11 +107,14 @@ func (h *B2BAuthHandler) Register(c fiber.Ctx) error {
 		})
 	}
 
-	// Stripe is required for B2B billing — without a stripe_customer_id the
-	// account cannot purchase credits or use metered billing. Reject early
-	// before creating the account.
-	if h.stripeConfig.SecretKey == "" {
-		slog.Error("B2B registration rejected: Stripe not configured")
+	// Stripe is required for B2B billing — both SecretKey (API calls) and
+	// WebhookSecret (checkout.session.completed verification) must be set.
+	// Without WebhookSecret, credit purchases via Checkout succeed on Stripe's
+	// side but the webhook is rejected, so credits never post to the account.
+	if h.stripeConfig.SecretKey == "" || h.stripeConfig.WebhookSecret == "" {
+		slog.Error("B2B registration rejected: Stripe not fully configured",
+			"has_secret_key", h.stripeConfig.SecretKey != "",
+			"has_webhook_secret", h.stripeConfig.WebhookSecret != "")
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 			"error": "Business account registration is temporarily unavailable",
 		})
