@@ -58,30 +58,13 @@ func newTestJWTSetup(t *testing.T) *testJWTSetup {
 	}
 }
 
+// signToken signs a JWT matching the real WorkOS User Management access token format:
+// issuer is "https://api.workos.com/user_management/{clientId}", no audience claim.
+// Ref: https://workos.com/docs/authkit/sessions
 func (s *testJWTSetup) signToken(sub string, exp time.Time) string {
 	claims := jwt.RegisteredClaims{
 		Subject:   sub,
-		ExpiresAt: jwt.NewNumericDate(exp),
-		IssuedAt:  jwt.NewNumericDate(time.Now()),
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
-	token.Header["kid"] = "test-key"
-	signed, err := token.SignedString(s.privateKey)
-	if err != nil {
-		panic(err)
-	}
-	return signed
-}
-
-// signTokenFull signs a JWT with issuer and audience claims set, matching what
-// a real WorkOS access token contains. Use this for tests that exercise the
-// full middleware path (DB lookup, JIT provisioning, etc.) where the JWT must
-// pass all validation checks including issuer and audience.
-func (s *testJWTSetup) signTokenFull(sub, issuer, audience string, exp time.Time) string {
-	claims := jwt.RegisteredClaims{
-		Subject:   sub,
-		Issuer:    issuer,
-		Audience:  jwt.ClaimStrings{audience},
+		Issuer:    "https://api.workos.com/user_management/client_01TEST",
 		ExpiresAt: jwt.NewNumericDate(exp),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
 	}
@@ -318,13 +301,7 @@ func TestWorkOSAuth_JITProvisioning(t *testing.T) {
 		return c.JSON(fiber.Map{"account_id": accountID})
 	})
 
-	// Sign a token with issuer and audience so it passes all JWT validation checks
-	token := jwtSetup.signTokenFull(
-		"user_01NEW",
-		"https://api.workos.com",
-		"client_01TEST",
-		time.Now().Add(1*time.Hour),
-	)
+	token := jwtSetup.signToken("user_01NEW", time.Now().Add(1*time.Hour))
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 

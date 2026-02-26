@@ -106,14 +106,22 @@ func (m *WorkOSAuthMiddleware) Handler() fiber.Handler {
 			})
 		}
 
+		// WorkOS User Management access tokens use issuer format:
+		// https://api.workos.com/user_management/{clientId}
+		// and do NOT include an audience claim.
+		// Ref: https://workos.com/docs/authkit/sessions
+		expectedIssuer := fmt.Sprintf("https://api.workos.com/user_management/%s", m.workosConfig.ClientID)
+
 		claims := &workOSClaims{}
 		parsed, err := jwt.ParseWithClaims(token, claims, k.Keyfunc,
 			jwt.WithExpirationRequired(),
-			jwt.WithIssuer("https://api.workos.com"),
-			jwt.WithAudience(m.workosConfig.ClientID),
+			jwt.WithIssuer(expectedIssuer),
 		)
 		if err != nil || !parsed.Valid {
-			slog.Debug("WorkOS JWT validation failed", "error", err)
+			slog.Warn("WorkOS JWT validation failed",
+				"error", err,
+				"path", c.Path(),
+			)
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Invalid or expired token",
 			})
