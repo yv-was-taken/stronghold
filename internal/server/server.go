@@ -199,6 +199,13 @@ func (s *Server) setupRoutes() {
 	pricingHandler := handlers.NewPricingHandler(x402)
 	pricingHandler.RegisterRoutes(s.app)
 
+	// WorkOS API proxy — forwards /user_management/* requests to api.workos.com.
+	// This works around a WorkOS CORS bug where actual responses (not just OPTIONS
+	// preflight) are missing Access-Control-Allow-Origin headers, breaking the
+	// client-only AuthKit SDK. Must be registered BEFORE the WorkOS auth middleware.
+	workosProxy := handlers.NewWorkOSProxyHandler()
+	workosProxy.RegisterRoutes(s.app)
+
 	// WorkOS B2B auth middleware — validates WorkOS JWTs and provisions B2B accounts.
 	// Applied globally AFTER health/pricing routes so those don't run through it.
 	// For non-JWT requests it's a no-op (calls Next immediately).
