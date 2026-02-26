@@ -32,6 +32,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   refreshAuth: () => Promise<boolean>;
   b2bSignIn: () => Promise<void>;
+  b2bSignUp: () => Promise<void>;
   b2bSignOut: () => void;
   onboardB2B: (companyName: string) => Promise<void>;
 }
@@ -49,6 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isLoading: workosLoading,
     getAccessToken,
     signIn: workosSignIn,
+    signUp: workosSignUp,
     signOut: workosSignOut,
   } = useWorkOSAuth();
 
@@ -246,6 +248,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await workosSignIn();
   };
 
+  const b2bSignUp = async () => {
+    await workosSignUp();
+  };
+
   const b2bSignOutHandler = () => {
     setAccount(null);
     setNeedsOnboarding(false);
@@ -298,6 +304,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         refreshAuth,
         b2bSignIn,
+        b2bSignUp,
         b2bSignOut: b2bSignOutHandler,
         onboardB2B: onboardB2BHandler,
       }}

@@ -18,7 +18,7 @@ export default function LoginPage() {
   const [useRecovery, setUseRecovery] = useState(false);
   const [ttlDays, setTtlDays] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { login, verifyTotp, resetTotp, b2bSignIn, totpRequired, isAuthenticated, isLoading, needsOnboarding } = useAuth();
+  const { login, verifyTotp, resetTotp, b2bSignIn, b2bSignUp, totpRequired, isAuthenticated, isLoading, needsOnboarding } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -165,7 +165,7 @@ export default function LoginPage() {
             {totpRequired
               ? 'Enter your TOTP or recovery code to trust this device'
               : tab === 'business'
-                ? 'Sign in with your business account via SSO'
+                ? 'Sign in to your business account'
                 : 'Enter your account number to access your dashboard'}
           </p>
 
@@ -193,7 +193,7 @@ export default function LoginPage() {
                   'Redirecting...'
                 ) : (
                   <>
-                    Sign in with SSO
+                    Sign in
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
@@ -310,7 +310,11 @@ export default function LoginPage() {
                 <p className="text-gray-400 text-sm">
                   New to Stronghold?{' '}
                   <button
-                    onClick={handleB2BSignIn}
+                    onClick={async () => {
+                      setIsSubmitting(true);
+                      try { await b2bSignUp(); }
+                      catch (err) { setError(err instanceof Error ? err.message : 'Sign up failed'); setIsSubmitting(false); }
+                    }}
                     className="text-[#00D4AA] hover:underline"
                   >
                     Create a business account
@@ -336,7 +340,7 @@ export default function LoginPage() {
           {totpRequired
             ? 'This device is not trusted yet. Enter your TOTP to continue.'
             : tab === 'business'
-              ? 'Business accounts use single sign-on via WorkOS.'
+              ? 'Business accounts are managed securely via WorkOS.'
               : 'Your account number is your password. Store it securely.'}
         </p>
       </motion.div>
