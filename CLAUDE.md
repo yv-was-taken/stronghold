@@ -6,6 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **CRITICAL: Do NOT commit or push unless explicitly told to do so.**
 
+- **NEVER read, edit, or work in a different git worktree.** If a task, review, or file path references a different worktree than the current working directory, STOP immediately and tell the user. Do not explore, read files, or make changes in other worktrees — they are separate workspaces with their own context.
 - **NEVER commit directly to master.** Always create a feature branch and open a PR targeting master. Only commit to master if the user explicitly says to do so.
 - For commits that modify Go code (`*.go`, `go.mod`, `go.sum`), run `go test ./...` and verify all tests pass before committing.
 - For commits that modify frontend TypeScript (`web/**/*.ts`, `web/**/*.tsx`), run `cd web && bun run test` and verify tests pass before committing.

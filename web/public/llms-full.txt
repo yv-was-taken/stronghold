@@ -454,7 +454,118 @@ representing microUSDC (1 microUSDC = 0.000001 USDC). For example, `"1000"` = $0
 pricing money fields were migrated from JSON numbers to string-encoded microUSDC
 integers. Clients that parse money as JSON numbers must be updated.
 
-### Protected Endpoints (Payment Required)
+### Authentication
+
+Two authentication methods for protected endpoints:
+
+#### B2C: x402 Payment (CLI/Proxy)
+
+Include `X-PAYMENT` header with each request. The proxy and CLI handle this
+automatically. $0.001 per scan.
+
+#### B2B: API Key (Server-side Integration)
+
+Include `X-API-Key` header with each request. No per-request payment.
+
+```bash
+curl -X POST https://api.getstronghold.xyz/v1/scan/content \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: sh_live_a1b2c3d4e5f6..." \
+  -d '{"text": "content to scan"}'
+```
+
+Key format: `sh_live_<32 hex chars>` (72 characters total).
+Keys are created via the dashboard or the API key management endpoints.
+
+### Jailbreak Detection Behavior
+
+The scanner detects jailbreak attempts (e.g., "DAN" prompts, "ignore instructions")
+as a threat category. How these are exposed depends on the client type:
+
+- **B2C (x402 payment)**: Jailbreak threats are always filtered from results.
+  B2C users (CLI/proxy) don't need jailbreak detection because the proxy blocks
+  threats at the network level before the agent sees them.
+- **B2B (API key)**: Jailbreak threats are included in results by default.
+  B2B integrators can toggle this via `PUT /v1/account/settings`.
+
+When jailbreak filtering removes all threats from a result, the decision resets
+from BLOCK/WARN to ALLOW.
+
+### API Key Management Endpoints
+
+Requires session authentication (dashboard login).
+
+#### POST /v1/account/api-keys
+
+Create a new API key. The raw key is returned once and cannot be retrieved again.
+
+**Request:**
+```json
+{"label": "Production server"}
+```
+
+**Response (201):**
+```json
+{
+  "key": "sh_live_a1b2c3d4e5f6...",
+  "id": "uuid",
+  "key_prefix": "sh_live_a1b2",
+  "label": "Production server",
+  "created_at": "2026-02-23T00:00:00Z"
+}
+```
+
+#### GET /v1/account/api-keys
+
+List all API keys (including revoked).
+
+**Response:**
+```json
+{
+  "api_keys": [
+    {
+      "id": "uuid",
+      "key_prefix": "sh_live_a1b2",
+      "label": "Production server",
+      "created_at": "2026-02-23T00:00:00Z",
+      "last_used_at": "2026-02-23T12:00:00Z",
+      "revoked_at": null
+    }
+  ]
+}
+```
+
+#### DELETE /v1/account/api-keys/:id
+
+Revoke an API key (soft-delete). The key becomes immediately unusable.
+
+### Account Settings Endpoints
+
+Requires session authentication (dashboard login).
+
+#### GET /v1/account/settings
+
+**Response:**
+```json
+{
+  "jailbreak_detection_enabled": true,
+  "has_api_keys": true
+}
+```
+
+Default: `jailbreak_detection_enabled` is `true` for accounts with active API keys,
+`false` otherwise.
+
+#### PUT /v1/account/settings
+
+**Request:**
+```json
+{"jailbreak_detection_enabled": false}
+```
+
+**Response:** Same format as GET.
+
+### Protected Endpoints (Payment or API Key Required)
 
 #### POST /v1/scan/output
 
@@ -468,12 +579,23 @@ Use this to check agent responses before sending to users. Catches:
 - AWS credentials
 - Environment variable dumps
 
-**Request:**
+**Request (x402 payment):**
 
 ```bash
 curl -X POST https://api.getstronghold.xyz/v1/scan/output \
   -H "Content-Type: application/json" \
   -H "X-PAYMENT: <x402-payment-header>" \
+  -d '{
+    "text": "Here is the configuration:\nDB_PASSWORD=secret123\nAWS_SECRET_KEY=AKIA..."
+  }'
+```
+
+**Request (API key):**
+
+```bash
+curl -X POST https://api.getstronghold.xyz/v1/scan/output \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: sh_live_a1b2c3d4..." \
   -d '{
     "text": "Here is the configuration:\nDB_PASSWORD=secret123\nAWS_SECRET_KEY=AKIA..."
   }'

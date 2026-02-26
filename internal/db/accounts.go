@@ -740,3 +740,51 @@ func (db *DB) SetWalletEscrowEnabled(ctx context.Context, accountID uuid.UUID, e
 	}
 	return nil
 }
+
+// GetJailbreakDetectionEnabled reads the jailbreak_detection_enabled setting from the account's metadata JSONB.
+// Returns defaultValue if the key is absent or the metadata is nil.
+func (db *DB) GetJailbreakDetectionEnabled(ctx context.Context, accountID uuid.UUID, defaultValue bool) (bool, error) {
+	var metadata map[string]any
+	err := db.QueryRow(ctx, `
+		SELECT metadata FROM accounts WHERE id = $1
+	`, accountID).Scan(&metadata)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return defaultValue, errors.New("account not found")
+		}
+		return defaultValue, fmt.Errorf("failed to get account metadata: %w", err)
+	}
+
+	if metadata == nil {
+		return defaultValue, nil
+	}
+
+	val, ok := metadata["jailbreak_detection_enabled"]
+	if !ok {
+		return defaultValue, nil
+	}
+
+	enabled, ok := val.(bool)
+	if !ok {
+		return defaultValue, nil
+	}
+
+	return enabled, nil
+}
+
+// SetJailbreakDetectionEnabled updates the jailbreak_detection_enabled key in the account's metadata JSONB.
+func (db *DB) SetJailbreakDetectionEnabled(ctx context.Context, accountID uuid.UUID, enabled bool) error {
+	_, err := db.pool.Exec(ctx, `
+		UPDATE accounts
+		SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{jailbreak_detection_enabled}', $1::jsonb),
+		    updated_at = $2
+		WHERE id = $3
+	`, fmt.Sprintf("%t", enabled), time.Now().UTC(), accountID)
+
+	if err != nil {
+		return fmt.Errorf("failed to update jailbreak detection setting: %w", err)
+	}
+
+	return nil
+}

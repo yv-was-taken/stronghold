@@ -214,3 +214,40 @@ export async function createBillingPortalSession(): Promise<{ portal_url: string
   }
   return response.json();
 }
+
+// --- Account settings types and helpers ---
+
+/** Account-level feature settings */
+export interface AccountSettings {
+  jailbreak_detection_enabled: boolean;
+  has_api_keys: boolean;
+}
+
+/**
+ * Get account settings.
+ */
+export async function getAccountSettings(): Promise<AccountSettings> {
+  const response = await fetchWithAuth(`${API_URL}/v1/account/settings`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch account settings');
+  }
+  return response.json();
+}
+
+/**
+ * Update account settings.
+ */
+export async function updateAccountSettings(
+  settings: Partial<Pick<AccountSettings, 'jailbreak_detection_enabled'>>
+): Promise<AccountSettings> {
+  const response = await fetchWithAuth(`${API_URL}/v1/account/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Failed to update settings' }));
+    throw new Error(err.error || 'Failed to update settings');
+  }
+  return response.json();
+}

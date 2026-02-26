@@ -7,8 +7,10 @@ import (
 	"stronghold/internal/db"
 	"stronghold/internal/middleware"
 	"stronghold/internal/stronghold"
+	"stronghold/internal/usdc"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
 )
 
 // ScanHandler handles scan-related endpoints
@@ -140,8 +142,14 @@ func (h *ScanHandler) ScanContent(c fiber.Ctx) error {
 
 	result.RequestID = requestID
 
+	// Filter jailbreak threats based on auth method and settings
+	h.filterJailbreakThreats(c, result)
+
 	// Record execution result in payment transaction for idempotent replay
 	h.recordExecutionResult(c, result)
+
+	// Log usage for B2B requests (x402 handles its own logging)
+	h.logB2BUsage(c, result, "/v1/scan/content", h.pricing.ScanContent)
 
 	return c.JSON(result)
 }
@@ -197,7 +205,112 @@ func (h *ScanHandler) ScanOutput(c fiber.Ctx) error {
 	// Record execution result in payment transaction for idempotent replay
 	h.recordExecutionResult(c, result)
 
+	// Log usage for B2B requests
+	h.logB2BUsage(c, result, "/v1/scan/output", h.pricing.ScanOutput)
+
 	return c.JSON(result)
+}
+
+// filterJailbreakThreats removes jailbreak threats from results based on auth method and settings.
+// B2C (x402): always filters out jailbreak threats.
+// B2B (API key): filters only if jailbreak detection is explicitly disabled in settings.
+func (h *ScanHandler) filterJailbreakThreats(c fiber.Ctx, result *stronghold.ScanResult) {
+	authMethod, _ := c.Locals("auth_method").(string)
+
+	shouldFilter := false
+
+	if authMethod == "api_key" {
+		// B2B: check account settings (default: enabled)
+		accountIDStr, _ := c.Locals("account_id").(string)
+		if accountIDStr != "" {
+			accountID, err := uuid.Parse(accountIDStr)
+			if err == nil {
+				enabled, err := h.db.GetJailbreakDetectionEnabled(c.Context(), accountID, true)
+				if err != nil {
+					slog.Warn("failed to get jailbreak detection setting, defaulting to enabled",
+						"account_id", accountIDStr, "error", err)
+					enabled = true
+				}
+				shouldFilter = !enabled
+			}
+		}
+	} else {
+		// B2C (x402 path): always filter jailbreak threats
+		shouldFilter = true
+	}
+
+	if !shouldFilter {
+		return
+	}
+
+	// Remove jailbreak-category threats
+	filtered := make([]stronghold.Threat, 0, len(result.ThreatsFound))
+	removedCount := 0
+	for _, t := range result.ThreatsFound {
+		if t.Category == "jailbreak" {
+			removedCount++
+		} else {
+			filtered = append(filtered, t)
+		}
+	}
+	result.ThreatsFound = filtered
+
+	// Only reset decision if jailbreak threats were actually removed and no other threats remain
+	if removedCount > 0 && len(result.ThreatsFound) == 0 && result.Decision != stronghold.DecisionAllow {
+		result.Decision = stronghold.DecisionAllow
+		result.RecommendedAction = "allow"
+		result.Reason = "No actionable threats detected"
+	}
+}
+
+// logB2BUsage creates a usage log entry for B2B (API key) requests.
+// x402 payment requests already have their own logging via the payment transaction.
+func (h *ScanHandler) logB2BUsage(c fiber.Ctx, result *stronghold.ScanResult, endpoint string, cost usdc.MicroUSDC) {
+	authMethod, _ := c.Locals("auth_method").(string)
+	if authMethod != "api_key" {
+		return
+	}
+
+	accountIDStr, _ := c.Locals("account_id").(string)
+	if accountIDStr == "" {
+		return
+	}
+
+	accountID, err := uuid.Parse(accountIDStr)
+	if err != nil {
+		return
+	}
+
+	threatDetected := len(result.ThreatsFound) > 0
+	var threatType *string
+	if threatDetected && len(result.ThreatsFound) > 0 {
+		t := result.ThreatsFound[0].Category
+		threatType = &t
+	}
+
+	latency := int(result.LatencyMs)
+	usageLog := &db.UsageLog{
+		AccountID:      accountID,
+		RequestID:      result.RequestID,
+		Endpoint:       endpoint,
+		Method:         "POST",
+		CostUSDC:       0,
+		Status:         "success",
+		ThreatDetected: threatDetected,
+		ThreatType:     threatType,
+		LatencyMs:      &latency,
+		Metadata: map[string]any{
+			"auth_method": "api_key",
+		},
+	}
+
+	if err := h.db.CreateUsageLog(c.Context(), usageLog); err != nil {
+		slog.Error("failed to log B2B usage",
+			"account_id", accountIDStr,
+			"request_id", result.RequestID,
+			"error", err,
+		)
+	}
 }
 
 // recordExecutionResult stores the scan result in the payment transaction for idempotent replay

@@ -2,13 +2,16 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http/httptest"
 	"testing"
 
 	"stronghold/internal/config"
 	"stronghold/internal/db"
+	"stronghold/internal/db/testutil"
 	"stronghold/internal/middleware"
+	"stronghold/internal/stronghold"
 	"stronghold/internal/usdc"
 
 	"github.com/gofiber/fiber/v3"
@@ -399,3 +402,315 @@ func TestScanHandler_RegisterRoutes_PanicsWithoutScanner(t *testing.T) {
 		handler.RegisterRoutes(app)
 	})
 }
+
+// --- Jailbreak filtering tests ---
+
+// makeScanResult builds a ScanResult with the given threats and decision.
+func makeScanResult(decision stronghold.Decision, threats []stronghold.Threat) *stronghold.ScanResult {
+	action := "allow"
+	if decision == stronghold.DecisionBlock {
+		action = "block"
+	} else if decision == stronghold.DecisionWarn {
+		action = "warn"
+	}
+	return &stronghold.ScanResult{
+		Decision:          decision,
+		ThreatsFound:      threats,
+		RecommendedAction: action,
+		Reason:            "test",
+		Scores:            map[string]float64{"heuristic": 0.5},
+	}
+}
+
+func TestFilterJailbreakThreats_B2C_AlwaysFilters(t *testing.T) {
+	tDB := testutil.NewTestDB(t)
+	defer tDB.Close(t)
+
+	database := db.NewFromPool(tDB.Pool)
+
+	handler := &ScanHandler{db: database}
+
+	result := makeScanResult(stronghold.DecisionBlock, []stronghold.Threat{
+		{Category: "jailbreak", Pattern: "ignore previous", Severity: "high"},
+		{Category: "prompt_injection", Pattern: "evil prompt", Severity: "high"},
+	})
+
+	// Create a Fiber app and test route to get a real fiber.Ctx
+	app := fiber.New()
+	app.Post("/test", func(c fiber.Ctx) error {
+		// Simulate B2C path (no auth_method set, which is the x402 path)
+		handler.filterJailbreakThreats(c, result)
+		return c.JSON(result)
+	})
+
+	req := httptest.NewRequest("POST", "/test", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, 200, resp.StatusCode)
+
+	// Jailbreak threats should be filtered, prompt_injection should remain
+	assert.Len(t, result.ThreatsFound, 1)
+	assert.Equal(t, "prompt_injection", result.ThreatsFound[0].Category)
+	// Decision should remain BLOCK because there's still a non-jailbreak threat
+	assert.Equal(t, stronghold.DecisionBlock, result.Decision)
+}
+
+func TestFilterJailbreakThreats_B2C_AllJailbreak_ResetsToAllow(t *testing.T) {
+	tDB := testutil.NewTestDB(t)
+	defer tDB.Close(t)
+
+	database := db.NewFromPool(tDB.Pool)
+
+	handler := &ScanHandler{db: database}
+
+	result := makeScanResult(stronghold.DecisionBlock, []stronghold.Threat{
+		{Category: "jailbreak", Pattern: "ignore previous", Severity: "high"},
+		{Category: "jailbreak", Pattern: "DAN mode", Severity: "medium"},
+	})
+
+	app := fiber.New()
+	app.Post("/test", func(c fiber.Ctx) error {
+		// B2C path (no auth_method)
+		handler.filterJailbreakThreats(c, result)
+		return c.JSON(result)
+	})
+
+	req := httptest.NewRequest("POST", "/test", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, 200, resp.StatusCode)
+
+	// All threats were jailbreak, so they should all be removed
+	assert.Empty(t, result.ThreatsFound)
+	// Decision should reset to ALLOW
+	assert.Equal(t, stronghold.DecisionAllow, result.Decision)
+	assert.Equal(t, "allow", result.RecommendedAction)
+	assert.Equal(t, "No actionable threats detected", result.Reason)
+}
+
+func TestFilterJailbreakThreats_B2B_DefaultEnabled_KeepsJailbreak(t *testing.T) {
+	tDB := testutil.NewTestDB(t)
+	defer tDB.Close(t)
+
+	database := db.NewFromPool(tDB.Pool)
+	ctx := context.Background()
+
+	// Create account (jailbreak detection is enabled by default for B2B)
+	account, err := database.CreateAccount(ctx, nil, nil)
+	require.NoError(t, err)
+
+	handler := &ScanHandler{db: database}
+
+	result := makeScanResult(stronghold.DecisionBlock, []stronghold.Threat{
+		{Category: "jailbreak", Pattern: "ignore previous", Severity: "high"},
+		{Category: "prompt_injection", Pattern: "evil prompt", Severity: "high"},
+	})
+
+	app := fiber.New()
+	app.Post("/test", func(c fiber.Ctx) error {
+		// Simulate B2B path
+		c.Locals("auth_method", "api_key")
+		c.Locals("account_id", account.ID.String())
+		handler.filterJailbreakThreats(c, result)
+		return c.JSON(result)
+	})
+
+	req := httptest.NewRequest("POST", "/test", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, 200, resp.StatusCode)
+
+	// B2B with default enabled: jailbreak threats should NOT be filtered
+	assert.Len(t, result.ThreatsFound, 2)
+	assert.Equal(t, stronghold.DecisionBlock, result.Decision)
+}
+
+func TestFilterJailbreakThreats_B2B_DetectionDisabled_FiltersJailbreak(t *testing.T) {
+	tDB := testutil.NewTestDB(t)
+	defer tDB.Close(t)
+
+	database := db.NewFromPool(tDB.Pool)
+	ctx := context.Background()
+
+	// Create account and disable jailbreak detection
+	account, err := database.CreateAccount(ctx, nil, nil)
+	require.NoError(t, err)
+	err = database.SetJailbreakDetectionEnabled(ctx, account.ID, false)
+	require.NoError(t, err)
+
+	handler := &ScanHandler{db: database}
+
+	result := makeScanResult(stronghold.DecisionBlock, []stronghold.Threat{
+		{Category: "jailbreak", Pattern: "ignore previous", Severity: "high"},
+		{Category: "prompt_injection", Pattern: "evil prompt", Severity: "high"},
+	})
+
+	app := fiber.New()
+	app.Post("/test", func(c fiber.Ctx) error {
+		c.Locals("auth_method", "api_key")
+		c.Locals("account_id", account.ID.String())
+		handler.filterJailbreakThreats(c, result)
+		return c.JSON(result)
+	})
+
+	req := httptest.NewRequest("POST", "/test", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, 200, resp.StatusCode)
+
+	// B2B with detection disabled: jailbreak threats should be filtered
+	assert.Len(t, result.ThreatsFound, 1)
+	assert.Equal(t, "prompt_injection", result.ThreatsFound[0].Category)
+}
+
+func TestFilterJailbreakThreats_B2B_DetectionDisabled_AllJailbreak_ResetsToAllow(t *testing.T) {
+	tDB := testutil.NewTestDB(t)
+	defer tDB.Close(t)
+
+	database := db.NewFromPool(tDB.Pool)
+	ctx := context.Background()
+
+	account, err := database.CreateAccount(ctx, nil, nil)
+	require.NoError(t, err)
+	err = database.SetJailbreakDetectionEnabled(ctx, account.ID, false)
+	require.NoError(t, err)
+
+	handler := &ScanHandler{db: database}
+
+	result := makeScanResult(stronghold.DecisionBlock, []stronghold.Threat{
+		{Category: "jailbreak", Pattern: "ignore previous", Severity: "high"},
+	})
+
+	app := fiber.New()
+	app.Post("/test", func(c fiber.Ctx) error {
+		c.Locals("auth_method", "api_key")
+		c.Locals("account_id", account.ID.String())
+		handler.filterJailbreakThreats(c, result)
+		return c.JSON(result)
+	})
+
+	req := httptest.NewRequest("POST", "/test", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, 200, resp.StatusCode)
+
+	// All threats were jailbreak and detection is disabled: decision should reset to ALLOW
+	assert.Empty(t, result.ThreatsFound)
+	assert.Equal(t, stronghold.DecisionAllow, result.Decision)
+	assert.Equal(t, "allow", result.RecommendedAction)
+}
+
+func TestFilterJailbreakThreats_B2B_ExplicitlyEnabled_KeepsJailbreak(t *testing.T) {
+	tDB := testutil.NewTestDB(t)
+	defer tDB.Close(t)
+
+	database := db.NewFromPool(tDB.Pool)
+	ctx := context.Background()
+
+	account, err := database.CreateAccount(ctx, nil, nil)
+	require.NoError(t, err)
+	// Explicitly enable (should be same as default, but tests the explicit set path)
+	err = database.SetJailbreakDetectionEnabled(ctx, account.ID, true)
+	require.NoError(t, err)
+
+	handler := &ScanHandler{db: database}
+
+	result := makeScanResult(stronghold.DecisionBlock, []stronghold.Threat{
+		{Category: "jailbreak", Pattern: "ignore previous", Severity: "high"},
+	})
+
+	app := fiber.New()
+	app.Post("/test", func(c fiber.Ctx) error {
+		c.Locals("auth_method", "api_key")
+		c.Locals("account_id", account.ID.String())
+		handler.filterJailbreakThreats(c, result)
+		return c.JSON(result)
+	})
+
+	req := httptest.NewRequest("POST", "/test", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, 200, resp.StatusCode)
+
+	// Jailbreak detection is enabled, so jailbreak threats should remain
+	assert.Len(t, result.ThreatsFound, 1)
+	assert.Equal(t, "jailbreak", result.ThreatsFound[0].Category)
+	assert.Equal(t, stronghold.DecisionBlock, result.Decision)
+}
+
+func TestFilterJailbreakThreats_NoThreats_NoChange(t *testing.T) {
+	tDB := testutil.NewTestDB(t)
+	defer tDB.Close(t)
+
+	database := db.NewFromPool(tDB.Pool)
+
+	handler := &ScanHandler{db: database}
+
+	result := makeScanResult(stronghold.DecisionAllow, []stronghold.Threat{})
+
+	app := fiber.New()
+	app.Post("/test", func(c fiber.Ctx) error {
+		// B2C path
+		handler.filterJailbreakThreats(c, result)
+		return c.JSON(result)
+	})
+
+	req := httptest.NewRequest("POST", "/test", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Empty(t, result.ThreatsFound)
+	assert.Equal(t, stronghold.DecisionAllow, result.Decision)
+}
+
+func TestFilterJailbreakThreats_B2C_WarnNoThreats_PreservesDecision(t *testing.T) {
+	tDB := testutil.NewTestDB(t)
+	defer tDB.Close(t)
+
+	database := db.NewFromPool(tDB.Pool)
+
+	handler := &ScanHandler{db: database}
+
+	// Simulate heuristic path: WARN decision with no specific threats listed
+	result := makeScanResult(stronghold.DecisionWarn, []stronghold.Threat{})
+
+	app := fiber.New()
+	app.Post("/test", func(c fiber.Ctx) error {
+		// B2C path
+		handler.filterJailbreakThreats(c, result)
+		return c.JSON(result)
+	})
+
+	req := httptest.NewRequest("POST", "/test", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	// Decision should stay WARN — no jailbreak threats were removed, so no reason to downgrade
+	assert.Empty(t, result.ThreatsFound)
+	assert.Equal(t, stronghold.DecisionWarn, result.Decision)
+}
+
+// Note: dualAuth tests removed — PR #32 replaced the dualAuth pattern with
+// PaymentRouter, which is tested in internal/middleware/payment_router_test.go.

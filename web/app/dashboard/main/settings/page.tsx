@@ -10,12 +10,20 @@ import {
   LogOut,
   Shield,
   RefreshCw,
+  Settings2,
   Building2,
   Mail,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { truncateAddress, copyToClipboard, formatUSDC } from '@/lib/utils';
-import { fetchBalances, type BalancesResponse } from '@/lib/api';
+import {
+  fetchBalances,
+  getAccountSettings,
+  updateAccountSettings,
+  listAPIKeys,
+  type BalancesResponse,
+  type AccountSettings,
+} from '@/lib/api';
 
 export default function SettingsPage() {
   const { account, logout } = useAuth();
@@ -24,6 +32,10 @@ export default function SettingsPage() {
   const [solanaCopied, setSolanaCopied] = useState(false);
   const [balances, setBalances] = useState<BalancesResponse | null>(null);
   const [balancesLoading, setBalancesLoading] = useState(false);
+  const [settings, setSettings] = useState<AccountSettings | null>(null);
+  const [hasAPIKeys, setHasAPIKeys] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [toggleLoading, setToggleLoading] = useState(false);
 
   const isB2B = account?.account_type === 'b2b';
 
@@ -47,6 +59,42 @@ export default function SettingsPage() {
   useEffect(() => {
     loadBalances();
   }, [loadBalances]);
+
+  // Load detection settings and API key status
+  useEffect(() => {
+    async function loadSettings() {
+      setSettingsLoading(true);
+      try {
+        const [settingsData, keysData] = await Promise.all([
+          getAccountSettings(),
+          listAPIKeys(),
+        ]);
+        setSettings(settingsData);
+        const activeKeys = (keysData.api_keys || []);
+        setHasAPIKeys(activeKeys.length > 0);
+      } catch (err) {
+        console.error('Failed to load settings:', err);
+      } finally {
+        setSettingsLoading(false);
+      }
+    }
+    loadSettings();
+  }, []);
+
+  const handleToggleJailbreakDetection = async () => {
+    if (!settings || !hasAPIKeys) return;
+    setToggleLoading(true);
+    try {
+      const updated = await updateAccountSettings({
+        jailbreak_detection_enabled: !settings.jailbreak_detection_enabled,
+      });
+      setSettings(updated);
+    } catch (err) {
+      console.error('Failed to update settings:', err);
+    } finally {
+      setToggleLoading(false);
+    }
+  };
 
   const handleCopyAccountNumber = async () => {
     if (account?.account_number) {
@@ -310,11 +358,71 @@ export default function SettingsPage() {
           </motion.div>
         )}
 
+        {/* Detection Settings Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="bg-[#111] border border-[#222] rounded-2xl p-6"
+        >
+          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <Settings2 className="w-5 h-5 text-[#00D4AA]" />
+            Detection Settings
+          </h2>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex-1 mr-4">
+                <div className="text-white font-medium">
+                  Jailbreak Detection
+                </div>
+                <p className="text-gray-500 text-sm mt-1">
+                  Scan inbound prompts for jailbreak and prompt injection
+                  attempts using your API keys.
+                </p>
+              </div>
+              <button
+                onClick={handleToggleJailbreakDetection}
+                disabled={!hasAPIKeys || settingsLoading || toggleLoading}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${
+                  settings?.jailbreak_detection_enabled
+                    ? 'bg-[#00D4AA]'
+                    : 'bg-[#333]'
+                }`}
+                role="switch"
+                aria-checked={settings?.jailbreak_detection_enabled ?? false}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    settings?.jailbreak_detection_enabled
+                      ? 'translate-x-6'
+                      : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {!hasAPIKeys && !settingsLoading && (
+              <div className="bg-[#0a0a0a] border border-[#222] rounded-lg p-3">
+                <p className="text-gray-500 text-sm">
+                  <a
+                    href="/dashboard/main/api-keys"
+                    className="text-[#00D4AA] hover:underline"
+                  >
+                    Create an API key
+                  </a>{' '}
+                  to enable B2B features.
+                </p>
+              </div>
+            )}
+          </div>
+        </motion.div>
+
         {/* Security Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: isB2B ? 0.1 : 0.2 }}
+          transition={{ delay: 0.25 }}
           className="bg-[#111] border border-[#222] rounded-2xl p-6"
         >
           <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">

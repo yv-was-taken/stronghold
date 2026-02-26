@@ -162,7 +162,7 @@ func (s *Server) setupMiddleware() {
 	s.app.Use(cors.New(cors.Config{
 		AllowOrigins:     s.config.Dashboard.AllowedOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "X-PAYMENT", "X-PAYMENT-RESPONSE", "Authorization", "X-Stronghold-Device", middleware.RequestIDHeader},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "X-PAYMENT", "X-PAYMENT-RESPONSE", "Authorization", "X-API-Key", "X-Stronghold-Device", middleware.RequestIDHeader},
 		ExposeHeaders:    []string{"X-PAYMENT-RESPONSE", middleware.RequestIDHeader},
 		AllowCredentials: true,
 		MaxAge:           300,
@@ -246,6 +246,10 @@ func (s *Server) setupRoutes() {
 	// Scan handlers (payment required - uses PaymentRouter for x402 OR API key auth)
 	scanHandler := handlers.NewScanHandlerWithPaymentRouter(s.scanner, x402, s.database, &s.config.Pricing, paymentRouter)
 	scanHandler.RegisterRoutes(s.app)
+
+	// Account settings handlers (session auth required)
+	settingsHandler := handlers.NewSettingsHandler(s.database)
+	settingsHandler.RegisterRoutes(s.app, s.authHandler)
 
 	// API documentation
 	docsHandler := handlers.NewDocsHandler()

@@ -162,6 +162,15 @@ func (db *DB) UpdateAPIKeyLastUsed(ctx context.Context, keyID uuid.UUID) error {
 	return nil
 }
 
+// HasActiveAPIKeys returns true if the account has at least one non-revoked API key.
+func (db *DB) HasActiveAPIKeys(ctx context.Context, accountID uuid.UUID) (bool, error) {
+	count, err := db.CountActiveAPIKeys(ctx, accountID)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 // CountActiveAPIKeys counts non-revoked API keys for an account
 func (db *DB) CountActiveAPIKeys(ctx context.Context, accountID uuid.UUID) (int, error) {
 	var count int

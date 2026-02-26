@@ -412,6 +412,26 @@ export default function DashboardPage() {
                 </div>
                 <ChevronRight className="w-5 h-5 text-gray-500" />
               </div>
+
+              <a
+                href="/dashboard/main/api-keys"
+                className="flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-yellow-500/10 flex items-center justify-center">
+                    <Key className="w-5 h-5 text-yellow-400" />
+                  </div>
+                  <div>
+                    <div className="text-white group-hover:text-[#00D4AA] transition-colors">
+                      API Keys
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      Manage B2B access
+                    </div>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-[#00D4AA] transition-colors" />
+              </a>
             </div>
 
             <a

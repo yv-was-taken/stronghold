@@ -54,6 +54,7 @@ type Database interface {
 	ListAPIKeys(ctx context.Context, accountID uuid.UUID) ([]APIKey, error)
 	RevokeAPIKey(ctx context.Context, keyID, accountID uuid.UUID) error
 	UpdateAPIKeyLastUsed(ctx context.Context, keyID uuid.UUID) error
+	HasActiveAPIKeys(ctx context.Context, accountID uuid.UUID) (bool, error)
 	CountActiveAPIKeys(ctx context.Context, accountID uuid.UUID) (int, error)
 
 	// Stripe usage record operations
@@ -113,6 +114,10 @@ type Database interface {
 	// Webhook event idempotency
 	ClaimWebhookEvent(ctx context.Context, eventID, eventType string) (bool, error)
 	UnclaimWebhookEvent(ctx context.Context, eventID string) error
+
+	// Account settings
+	GetJailbreakDetectionEnabled(ctx context.Context, accountID uuid.UUID, defaultValue bool) (bool, error)
+	SetJailbreakDetectionEnabled(ctx context.Context, accountID uuid.UUID, enabled bool) error
 }
 
 // Ensure DB implements Database interface
