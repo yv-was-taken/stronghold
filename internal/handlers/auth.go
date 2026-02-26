@@ -564,6 +564,7 @@ func (h *AuthHandler) GetMe(c fiber.Ctx) error {
 	resp := fiber.Map{
 		"id":                    account.ID,
 		"account_number":        account.AccountNumber,
+		"account_type":          account.AccountType,
 		"evm_wallet_address":    account.EVMWalletAddress,
 		"solana_wallet_address": account.SolanaWalletAddress,
 		"balance_usdc":          account.BalanceUSDC,
@@ -575,6 +576,10 @@ func (h *AuthHandler) GetMe(c fiber.Ctx) error {
 	}
 	if account.EVMWalletAddress != nil {
 		resp["wallet_address"] = account.EVMWalletAddress
+	}
+	if account.AccountType == db.AccountTypeB2B {
+		resp["email"] = account.Email
+		resp["company_name"] = account.CompanyName
 	}
 
 	return c.JSON(resp)
@@ -721,6 +726,11 @@ func (h *AuthHandler) generateAccessToken(accountID, accountNumber string) (stri
 // AuthMiddleware returns a middleware that validates JWT tokens
 func (h *AuthHandler) AuthMiddleware() fiber.Handler {
 	return func(c fiber.Ctx) error {
+		// If account_id is already set (e.g., by WorkOS B2B middleware), skip
+		if c.Locals("account_id") != nil {
+			return c.Next()
+		}
+
 		var tokenString string
 
 		// First, try to get token from httpOnly cookie

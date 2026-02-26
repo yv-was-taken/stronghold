@@ -2,6 +2,9 @@ package handlers
 
 import (
 	"bytes"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http/httptest"
 	"strings"
@@ -118,7 +121,12 @@ func TestGetSettings_DefaultTrueWhenHasAPIKeys(t *testing.T) {
 	// Create an API key directly in DB
 	account, err := database.GetAccountByNumber(t.Context(), accountNumber)
 	require.NoError(t, err)
-	_, _, err = database.CreateAPIKey(t.Context(), account.ID, "test key")
+	randomBytes := make([]byte, 16)
+	_, err = rand.Read(randomBytes)
+	require.NoError(t, err)
+	rawKey := "sk_live_" + hex.EncodeToString(randomBytes)
+	keyHash := sha256.Sum256([]byte(rawKey))
+	_, err = database.CreateAPIKey(t.Context(), account.ID, rawKey[:12], hex.EncodeToString(keyHash[:]), "test key", 10)
 	require.NoError(t, err)
 
 	req := httptest.NewRequest("GET", "/v1/account/settings/", nil)

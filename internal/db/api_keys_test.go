@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"stronghold/internal/db/testutil"
@@ -12,295 +11,241 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCreateAPIKey_ReturnsCorrectFormat(t *testing.T) {
-	testDB := testutil.NewTestDB(t)
-	defer testDB.Close(t)
-
-	db := &DB{pool: testDB.Pool}
+// createTestB2BAccount is a helper that creates a B2B account for API key tests.
+func createTestB2BAccount(t *testing.T, db *DB, email string) *Account {
+	t.Helper()
 	ctx := context.Background()
-
-	account, err := db.CreateAccount(ctx, nil, nil)
+	account, err := db.CreateB2BAccount(ctx, "user_01"+email, email, "Test Company")
 	require.NoError(t, err)
-
-	apiKey, rawKey, err := db.CreateAPIKey(ctx, account.ID, "test key")
-	require.NoError(t, err)
-	require.NotNil(t, apiKey)
-
-	// Raw key should start with sh_live_
-	assert.True(t, strings.HasPrefix(rawKey, "sh_live_"),
-		"raw key should start with sh_live_, got: %s", rawKey)
-
-	// sh_live_ (8 chars) + 64 hex chars (32 bytes) = 72 chars total
-	assert.Len(t, rawKey, 72, "raw key should be 72 characters")
-
-	// Key prefix should be first 12 chars of raw key
-	assert.Equal(t, rawKey[:12], apiKey.KeyPrefix)
-
-	// Metadata fields
-	assert.Equal(t, "test key", apiKey.Label)
-	assert.Equal(t, account.ID, apiKey.AccountID)
-	assert.NotEqual(t, uuid.Nil, apiKey.ID)
-	assert.Nil(t, apiKey.LastUsedAt)
-	assert.Nil(t, apiKey.RevokedAt)
+	return account
 }
 
-func TestCreateAPIKey_MultipleKeysForSameAccount(t *testing.T) {
+func TestCreateAPIKey(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
 	defer testDB.Close(t)
 
 	db := &DB{pool: testDB.Pool}
 	ctx := context.Background()
 
-	account, err := db.CreateAccount(ctx, nil, nil)
-	require.NoError(t, err)
+	account := createTestB2BAccount(t, db, "apikey-create@example.com")
 
-	key1, rawKey1, err := db.CreateAPIKey(ctx, account.ID, "key one")
+	key, err := db.CreateAPIKey(ctx, account.ID, "sk_live_abc1", "sha256hashvalue", "My Key", 100)
 	require.NoError(t, err)
+	require.NotNil(t, key)
 
-	key2, rawKey2, err := db.CreateAPIKey(ctx, account.ID, "key two")
-	require.NoError(t, err)
-
-	// Keys should be different
-	assert.NotEqual(t, key1.ID, key2.ID)
-	assert.NotEqual(t, rawKey1, rawKey2)
+	// Verify fields
+	assert.NotEqual(t, uuid.Nil, key.ID)
+	assert.Equal(t, account.ID, key.AccountID)
+	assert.Equal(t, "sk_live_abc1", key.KeyPrefix)
+	assert.Equal(t, "sha256hashvalue", key.KeyHash)
+	assert.Equal(t, "My Key", key.Name)
+	assert.NotZero(t, key.CreatedAt)
+	assert.Nil(t, key.LastUsedAt)
+	assert.Nil(t, key.RevokedAt)
 }
 
-func TestGetAPIKeyByHash_Success(t *testing.T) {
+func TestGetAPIKeyByHash(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
 	defer testDB.Close(t)
 
 	db := &DB{pool: testDB.Pool}
 	ctx := context.Background()
 
-	account, err := db.CreateAccount(ctx, nil, nil)
+	account := createTestB2BAccount(t, db, "apikey-get@example.com")
+
+	created, err := db.CreateAPIKey(ctx, account.ID, "sk_live_xyz", "hash_lookup_test", "Lookup Key", 100)
 	require.NoError(t, err)
 
-	_, rawKey, err := db.CreateAPIKey(ctx, account.ID, "lookup test")
-	require.NoError(t, err)
-
-	// Look up by hash
-	keyHash := HashToken(rawKey)
-	found, err := db.GetAPIKeyByHash(ctx, keyHash)
+	// Retrieve by hash
+	found, err := db.GetAPIKeyByHash(ctx, "hash_lookup_test")
 	require.NoError(t, err)
 	require.NotNil(t, found)
-
+	assert.Equal(t, created.ID, found.ID)
 	assert.Equal(t, account.ID, found.AccountID)
-	assert.Equal(t, "lookup test", found.Label)
-
-	// last_used_at should have been updated
-	assert.NotNil(t, found.LastUsedAt, "GetAPIKeyByHash should update last_used_at")
+	assert.Equal(t, "sk_live_xyz", found.KeyPrefix)
+	assert.Equal(t, "hash_lookup_test", found.KeyHash)
+	assert.Equal(t, "Lookup Key", found.Name)
 }
 
-func TestGetAPIKeyByHash_RevokedKeyReturnsError(t *testing.T) {
+func TestGetAPIKeyByHash_NotFound(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
 	defer testDB.Close(t)
 
 	db := &DB{pool: testDB.Pool}
 	ctx := context.Background()
 
-	account, err := db.CreateAccount(ctx, nil, nil)
-	require.NoError(t, err)
-
-	apiKey, rawKey, err := db.CreateAPIKey(ctx, account.ID, "revoke test")
-	require.NoError(t, err)
-
-	// Revoke the key
-	err = db.RevokeAPIKey(ctx, account.ID, apiKey.ID)
-	require.NoError(t, err)
-
-	// Lookup should fail
-	keyHash := HashToken(rawKey)
-	_, err = db.GetAPIKeyByHash(ctx, keyHash)
+	_, err := db.GetAPIKeyByHash(ctx, "nonexistent_hash")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrAPIKeyNotFound)
+	assert.Contains(t, err.Error(), "not found")
 }
 
-func TestGetAPIKeyByHash_NonExistentHash(t *testing.T) {
+func TestGetAPIKeyByHash_Revoked(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
 	defer testDB.Close(t)
 
 	db := &DB{pool: testDB.Pool}
 	ctx := context.Background()
 
-	_, err := db.GetAPIKeyByHash(ctx, "nonexistenthash0000000000000000000000000000000000000000000000000000")
+	account := createTestB2BAccount(t, db, "apikey-revoked@example.com")
+
+	// Create and then revoke a key
+	key, err := db.CreateAPIKey(ctx, account.ID, "sk_live_rev", "hash_revoked_test", "Revoked Key", 100)
+	require.NoError(t, err)
+
+	err = db.RevokeAPIKey(ctx, key.ID, account.ID)
+	require.NoError(t, err)
+
+	// Revoked key should not be found via GetAPIKeyByHash
+	_, err = db.GetAPIKeyByHash(ctx, "hash_revoked_test")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrAPIKeyNotFound)
+	assert.Contains(t, err.Error(), "not found")
 }
 
-func TestListAPIKeys_ReturnsAllIncludingRevoked(t *testing.T) {
+func TestListAPIKeys(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
 	defer testDB.Close(t)
 
 	db := &DB{pool: testDB.Pool}
 	ctx := context.Background()
 
-	account, err := db.CreateAccount(ctx, nil, nil)
+	account := createTestB2BAccount(t, db, "apikey-list@example.com")
+
+	// Create multiple keys
+	_, err := db.CreateAPIKey(ctx, account.ID, "sk_live_a", "hash_a", "Key A", 100)
 	require.NoError(t, err)
 
-	// Create two keys
-	key1, _, err := db.CreateAPIKey(ctx, account.ID, "active key")
+	_, err = db.CreateAPIKey(ctx, account.ID, "sk_live_b", "hash_b", "Key B", 100)
 	require.NoError(t, err)
 
-	key2, _, err := db.CreateAPIKey(ctx, account.ID, "revoked key")
+	keyToRevoke, err := db.CreateAPIKey(ctx, account.ID, "sk_live_c", "hash_c", "Key C (revoked)", 100)
 	require.NoError(t, err)
 
-	// Revoke the second key
-	err = db.RevokeAPIKey(ctx, account.ID, key2.ID)
+	// Revoke one key
+	err = db.RevokeAPIKey(ctx, keyToRevoke.ID, account.ID)
 	require.NoError(t, err)
 
-	// List should return both
+	// List should only return active (non-revoked) keys
 	keys, err := db.ListAPIKeys(ctx, account.ID)
 	require.NoError(t, err)
 	assert.Len(t, keys, 2)
 
-	// Check that we can find both keys and their states
-	foundActive := false
-	foundRevoked := false
+	// Verify revoked key is excluded
 	for _, k := range keys {
-		if k.ID == key1.ID {
-			foundActive = true
-			assert.Nil(t, k.RevokedAt, "active key should not be revoked")
-		}
-		if k.ID == key2.ID {
-			foundRevoked = true
-			assert.NotNil(t, k.RevokedAt, "revoked key should have revoked_at set")
-		}
+		assert.Nil(t, k.RevokedAt)
+		assert.NotEqual(t, keyToRevoke.ID, k.ID)
 	}
-	assert.True(t, foundActive, "active key should be in the list")
-	assert.True(t, foundRevoked, "revoked key should be in the list")
 }
 
-func TestListAPIKeys_EmptyForNewAccount(t *testing.T) {
+func TestRevokeAPIKey(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
 	defer testDB.Close(t)
 
 	db := &DB{pool: testDB.Pool}
 	ctx := context.Background()
 
-	account, err := db.CreateAccount(ctx, nil, nil)
+	account := createTestB2BAccount(t, db, "apikey-revoke@example.com")
+
+	key, err := db.CreateAPIKey(ctx, account.ID, "sk_live_del", "hash_del", "Key To Revoke", 100)
+	require.NoError(t, err)
+	assert.Nil(t, key.RevokedAt)
+
+	// Revoke the key
+	err = db.RevokeAPIKey(ctx, key.ID, account.ID)
 	require.NoError(t, err)
 
-	keys, err := db.ListAPIKeys(ctx, account.ID)
-	require.NoError(t, err)
-	assert.Empty(t, keys)
-}
+	// Verify the key is no longer returned by GetAPIKeyByHash
+	_, err = db.GetAPIKeyByHash(ctx, "hash_del")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
 
-func TestRevokeAPIKey_SetsRevokedAt(t *testing.T) {
-	testDB := testutil.NewTestDB(t)
-	defer testDB.Close(t)
-
-	db := &DB{pool: testDB.Pool}
-	ctx := context.Background()
-
-	account, err := db.CreateAccount(ctx, nil, nil)
-	require.NoError(t, err)
-
-	apiKey, _, err := db.CreateAPIKey(ctx, account.ID, "to revoke")
-	require.NoError(t, err)
-
-	err = db.RevokeAPIKey(ctx, account.ID, apiKey.ID)
-	require.NoError(t, err)
-
-	// Verify via list
-	keys, err := db.ListAPIKeys(ctx, account.ID)
-	require.NoError(t, err)
-	require.Len(t, keys, 1)
-	assert.NotNil(t, keys[0].RevokedAt)
-}
-
-func TestRevokeAPIKey_WrongAccountReturnsError(t *testing.T) {
-	testDB := testutil.NewTestDB(t)
-	defer testDB.Close(t)
-
-	db := &DB{pool: testDB.Pool}
-	ctx := context.Background()
-
-	account1, err := db.CreateAccount(ctx, nil, nil)
-	require.NoError(t, err)
-
-	account2, err := db.CreateAccount(ctx, nil, nil)
-	require.NoError(t, err)
-
-	// Create key for account1
-	apiKey, _, err := db.CreateAPIKey(ctx, account1.ID, "account1 key")
-	require.NoError(t, err)
-
-	// Try to revoke from account2
-	err = db.RevokeAPIKey(ctx, account2.ID, apiKey.ID)
+	// Trying to revoke again should fail (already revoked)
+	err = db.RevokeAPIKey(ctx, key.ID, account.ID)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found or already revoked")
 }
 
-func TestRevokeAPIKey_AlreadyRevokedReturnsError(t *testing.T) {
+func TestRevokeAPIKey_WrongAccount(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
 	defer testDB.Close(t)
 
 	db := &DB{pool: testDB.Pool}
 	ctx := context.Background()
 
-	account, err := db.CreateAccount(ctx, nil, nil)
+	account1 := createTestB2BAccount(t, db, "apikey-owner@example.com")
+	account2 := createTestB2BAccount(t, db, "apikey-intruder@example.com")
+
+	// Create key owned by account1
+	key, err := db.CreateAPIKey(ctx, account1.ID, "sk_live_own", "hash_own", "Owner's Key", 100)
 	require.NoError(t, err)
 
-	apiKey, _, err := db.CreateAPIKey(ctx, account.ID, "double revoke")
-	require.NoError(t, err)
-
-	// First revoke
-	err = db.RevokeAPIKey(ctx, account.ID, apiKey.ID)
-	require.NoError(t, err)
-
-	// Second revoke should fail
-	err = db.RevokeAPIKey(ctx, account.ID, apiKey.ID)
+	// Attempt to revoke with account2's ID — should fail
+	err = db.RevokeAPIKey(ctx, key.ID, account2.ID)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found or already revoked")
+
+	// Verify the key is still active
+	found, err := db.GetAPIKeyByHash(ctx, "hash_own")
+	require.NoError(t, err)
+	assert.Equal(t, key.ID, found.ID)
+	assert.Nil(t, found.RevokedAt)
 }
 
-func TestHasActiveAPIKeys_TrueWhenActiveKeysExist(t *testing.T) {
+func TestUpdateAPIKeyLastUsed(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
 	defer testDB.Close(t)
 
 	db := &DB{pool: testDB.Pool}
 	ctx := context.Background()
 
-	account, err := db.CreateAccount(ctx, nil, nil)
+	account := createTestB2BAccount(t, db, "apikey-lastused@example.com")
+
+	key, err := db.CreateAPIKey(ctx, account.ID, "sk_live_lu", "hash_lu", "Last Used Key", 100)
+	require.NoError(t, err)
+	assert.Nil(t, key.LastUsedAt)
+
+	// Update last used
+	err = db.UpdateAPIKeyLastUsed(ctx, key.ID)
 	require.NoError(t, err)
 
-	// No keys yet
-	hasKeys, err := db.HasActiveAPIKeys(ctx, account.ID)
+	// Retrieve and verify last_used_at is set
+	found, err := db.GetAPIKeyByHash(ctx, "hash_lu")
 	require.NoError(t, err)
-	assert.False(t, hasKeys)
-
-	// Create a key
-	_, _, err = db.CreateAPIKey(ctx, account.ID, "active")
-	require.NoError(t, err)
-
-	hasKeys, err = db.HasActiveAPIKeys(ctx, account.ID)
-	require.NoError(t, err)
-	assert.True(t, hasKeys)
+	assert.NotNil(t, found.LastUsedAt)
 }
 
-func TestHasActiveAPIKeys_FalseAfterAllRevoked(t *testing.T) {
+func TestCountActiveAPIKeys(t *testing.T) {
 	testDB := testutil.NewTestDB(t)
 	defer testDB.Close(t)
 
 	db := &DB{pool: testDB.Pool}
 	ctx := context.Background()
 
-	account, err := db.CreateAccount(ctx, nil, nil)
+	account := createTestB2BAccount(t, db, "apikey-count@example.com")
+
+	// Initially zero
+	count, err := db.CountActiveAPIKeys(ctx, account.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+
+	// Create 3 keys
+	_, err = db.CreateAPIKey(ctx, account.ID, "sk_live_c1", "hash_c1", "Key 1", 100)
+	require.NoError(t, err)
+	_, err = db.CreateAPIKey(ctx, account.ID, "sk_live_c2", "hash_c2", "Key 2", 100)
+	require.NoError(t, err)
+	keyToRevoke, err := db.CreateAPIKey(ctx, account.ID, "sk_live_c3", "hash_c3", "Key 3", 100)
 	require.NoError(t, err)
 
-	key1, _, err := db.CreateAPIKey(ctx, account.ID, "key1")
+	// Count should be 3
+	count, err = db.CountActiveAPIKeys(ctx, account.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 3, count)
+
+	// Revoke one
+	err = db.RevokeAPIKey(ctx, keyToRevoke.ID, account.ID)
 	require.NoError(t, err)
 
-	key2, _, err := db.CreateAPIKey(ctx, account.ID, "key2")
+	// Count should be 2 (revoked key excluded)
+	count, err = db.CountActiveAPIKeys(ctx, account.ID)
 	require.NoError(t, err)
-
-	// Revoke both
-	err = db.RevokeAPIKey(ctx, account.ID, key1.ID)
-	require.NoError(t, err)
-	err = db.RevokeAPIKey(ctx, account.ID, key2.ID)
-	require.NoError(t, err)
-
-	hasKeys, err := db.HasActiveAPIKeys(ctx, account.ID)
-	require.NoError(t, err)
-	assert.False(t, hasKeys, "should be false after all keys are revoked")
+	assert.Equal(t, 2, count)
 }

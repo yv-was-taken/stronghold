@@ -34,6 +34,7 @@ type Config struct {
 	Pricing     PricingConfig
 	RateLimit   RateLimitConfig
 	KMS         KMSConfig
+	WorkOS      WorkOSConfig
 }
 
 // ServerConfig holds HTTP server configuration
@@ -114,6 +115,7 @@ type StripeConfig struct {
 	SecretKey      string
 	WebhookSecret  string
 	PublishableKey string
+	MeterEventName string // Stripe Meter event_name for B2B metered billing
 }
 
 // StrongholdConfig holds Stronghold scanner configuration
@@ -147,6 +149,12 @@ type RateLimitConfig struct {
 type KMSConfig struct {
 	Region string // AWS region (e.g., "us-east-1")
 	KeyID  string // KMS key ARN or alias (e.g., "alias/stronghold-wallet-keys")
+}
+
+// WorkOSConfig holds WorkOS AuthKit configuration for B2B SSO
+type WorkOSConfig struct {
+	APIKey   string // WorkOS API key (sk_live_... or sk_test_...)
+	ClientID string // WorkOS client ID (client_01...)
 }
 
 // Load loads configuration from environment variables
@@ -200,6 +208,7 @@ func Load() *Config {
 			SecretKey:      getEnv("STRIPE_SECRET_KEY", ""),
 			WebhookSecret:  getEnv("STRIPE_WEBHOOK_SECRET", ""),
 			PublishableKey: getEnv("STRIPE_PUBLISHABLE_KEY", ""),
+			MeterEventName: getEnv("STRIPE_METER_EVENT_NAME", ""),
 		},
 		Stronghold: StrongholdConfig{
 			BlockThreshold:  getFloat("STRONGHOLD_BLOCK_THRESHOLD", 0.55),
@@ -225,6 +234,10 @@ func Load() *Config {
 		KMS: KMSConfig{
 			Region: getEnv("KMS_REGION", ""),
 			KeyID:  getEnv("KMS_KEY_ID", ""),
+		},
+		WorkOS: WorkOSConfig{
+			APIKey:   getEnv("WORKOS_API_KEY", ""),
+			ClientID: getEnv("WORKOS_CLIENT_ID", ""),
 		},
 	}
 }
@@ -388,6 +401,16 @@ func (c *Config) Validate() error {
 		}
 		if c.KMS.KeyID == "" {
 			errs = append(errs, "KMS_KEY_ID is required in production")
+		}
+	}
+
+	// WorkOS is required in production for B2B SSO
+	if c.Environment == EnvProduction {
+		if c.WorkOS.APIKey == "" {
+			errs = append(errs, "WORKOS_API_KEY is required in production")
+		}
+		if c.WorkOS.ClientID == "" {
+			errs = append(errs, "WORKOS_CLIENT_ID is required in production")
 		}
 	}
 

@@ -3,6 +3,9 @@ import starlight from '@astrojs/starlight';
 
 export default defineConfig({
   site: 'https://docs.getstronghold.xyz',
+  redirects: {
+    '/': '/getting-started/',
+  },
   integrations: [
     starlight({
       title: 'Stronghold',

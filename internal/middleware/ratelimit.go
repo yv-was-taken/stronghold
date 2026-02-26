@@ -74,7 +74,7 @@ func (m *RateLimitMiddleware) getAuthLimit(c fiber.Ctx) int {
 	switch {
 	case strings.HasSuffix(path, "/login"):
 		return m.config.LoginMax
-	case strings.HasSuffix(path, "/account"):
+	case strings.HasSuffix(path, "/account"), strings.HasSuffix(path, "/register"):
 		return m.config.AccountMax
 	case strings.HasSuffix(path, "/refresh"):
 		return m.config.RefreshMax

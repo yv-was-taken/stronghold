@@ -51,7 +51,7 @@ func setupAPIKeyTest(t *testing.T) (*fiber.App, *AuthHandler, *APIKeyHandler, *t
 
 	app := fiber.New()
 	authHandler.RegisterRoutes(app)
-	apiKeyHandler.RegisterRoutes(app, authHandler)
+	apiKeyHandler.RegisterRoutes(app, authHandler.AuthMiddleware())
 
 	return app, authHandler, apiKeyHandler, testDB, database
 }

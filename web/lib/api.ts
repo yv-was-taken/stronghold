@@ -41,10 +41,26 @@ export async function fetchWithAuth(
   input: string,
   init?: RequestInit
 ): Promise<Response> {
-  const options: RequestInit = {
-    ...init,
-    credentials: 'include',
-  };
+  const options: RequestInit = { ...init };
+
+  if (_getB2BAccessToken) {
+    // B2B: use WorkOS Bearer token (SDK handles refresh internally)
+    try {
+      const token = await _getB2BAccessToken();
+      const headers = new Headers(options.headers);
+      headers.set('Authorization', `Bearer ${token}`);
+      options.headers = headers;
+    } catch {
+      // Token refresh failed — redirect to login
+      if (typeof window !== 'undefined') {
+        window.location.href = '/dashboard/login';
+      }
+      throw new Error('Session expired');
+    }
+  } else {
+    // B2C: use httpOnly cookies
+    options.credentials = 'include';
+  }
 
   let response: Response;
   try {
@@ -56,8 +72,8 @@ export async function fetchWithAuth(
     throw err;
   }
 
-  if (response.status === 401) {
-    // Attempt token refresh
+  // B2C-only: attempt cookie-based token refresh on 401
+  if (!_getB2BAccessToken && response.status === 401) {
     const refreshResponse = await fetchWithTimeout(`${API_URL}/v1/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
@@ -107,66 +123,96 @@ export async function fetchBalances(): Promise<BalancesResponse> {
   return response.json();
 }
 
-// --- API Key types and helpers ---
+// --- B2B token provider ---
 
-/** An API key record (the raw key is only returned on creation) */
-export interface APIKey {
-  id: string;
-  key_prefix: string;
-  label: string;
-  created_at: string;
-  last_used_at: string | null;
-  revoked_at: string | null;
+// Module-level function that returns a fresh B2B access token (set by AuthProvider
+// when a WorkOS user is detected). fetchWithAuth calls this before every request
+// so tokens are always fresh (the WorkOS SDK handles refresh internally).
+let _getB2BAccessToken: (() => Promise<string>) | null = null;
+
+export function setB2BTokenProvider(fn: (() => Promise<string>) | null) {
+  _getB2BAccessToken = fn;
 }
 
-/** Response from POST /v1/account/api-keys (includes the raw key once) */
-export interface CreateAPIKeyResponse {
-  key: string;
-  id: string;
-  key_prefix: string;
-  label: string;
-  created_at: string;
-}
+// --- B2B API helpers ---
 
-/**
- * Create a new API key with the given label.
- */
-export async function createAPIKey(label: string): Promise<CreateAPIKeyResponse> {
-  const response = await fetchWithAuth(`${API_URL}/v1/account/api-keys`, {
+export async function onboardB2B(companyName: string): Promise<void> {
+  const response = await fetchWithAuth(`${API_URL}/v1/auth/b2b/onboard`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ label }),
+    body: JSON.stringify({ company_name: companyName }),
   });
   if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: 'Failed to create API key' }));
-    throw new Error(err.error || 'Failed to create API key');
+    const error = await response.json();
+    throw new Error(error.error || 'Onboarding failed');
+  }
+}
+
+export interface APIKeyItem {
+  id: string;
+  key_prefix: string;
+  name: string;
+  created_at: string;
+  last_used_at?: string;
+}
+
+export async function listAPIKeys(): Promise<{ api_keys: APIKeyItem[] }> {
+  const response = await fetchWithAuth(`${API_URL}/v1/api-keys`);
+  if (!response.ok) throw new Error('Failed to list API keys');
+  return response.json();
+}
+
+export async function createAPIKey(name: string): Promise<{ id: string; key: string; key_prefix: string; name: string }> {
+  const response = await fetchWithAuth(`${API_URL}/v1/api-keys`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to create API key');
   }
   return response.json();
 }
 
-/**
- * List all API keys for the authenticated account.
- */
-export async function listAPIKeys(): Promise<APIKey[]> {
-  const response = await fetchWithAuth(`${API_URL}/v1/account/api-keys`);
-  if (!response.ok) {
-    throw new Error('Failed to list API keys');
-  }
-  const data = await response.json();
-  return data.api_keys ?? [];
-}
-
-/**
- * Revoke an API key by ID.
- */
 export async function revokeAPIKey(id: string): Promise<void> {
-  const response = await fetchWithAuth(`${API_URL}/v1/account/api-keys/${id}`, {
+  const response = await fetchWithAuth(`${API_URL}/v1/api-keys/${id}`, {
     method: 'DELETE',
   });
   if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: 'Failed to revoke API key' }));
-    throw new Error(err.error || 'Failed to revoke API key');
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to revoke API key');
   }
+}
+
+export async function purchaseCredits(amountUSDC: number): Promise<{ checkout_url: string }> {
+  const response = await fetchWithAuth(`${API_URL}/v1/billing/credits`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount_usdc: amountUSDC }),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to initiate purchase');
+  }
+  return response.json();
+}
+
+export async function getBillingInfo() {
+  const response = await fetchWithAuth(`${API_URL}/v1/billing/info`);
+  if (!response.ok) throw new Error('Failed to get billing info');
+  return response.json();
+}
+
+export async function createBillingPortalSession(): Promise<{ portal_url: string }> {
+  const response = await fetchWithAuth(`${API_URL}/v1/billing/portal`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to create billing portal session');
+  }
+  return response.json();
 }
 
 // --- Account settings types and helpers ---

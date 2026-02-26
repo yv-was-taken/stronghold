@@ -12,6 +12,8 @@ import {
   AlertTriangle,
   FileText,
   Key,
+  CreditCard,
+  Building2,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -131,6 +133,8 @@ export default function DashboardPage() {
     );
   }
 
+  const isB2B = account.account_type?.toLowerCase() === 'b2b';
+
   let balanceMicroUSDC = BigInt(0);
   try {
     balanceMicroUSDC = BigInt(account.balance_usdc || '0');
@@ -153,10 +157,19 @@ export default function DashboardPage() {
 
           <div className="flex items-center gap-4">
             <div className="text-right hidden sm:block">
-              <div className="text-sm text-gray-400">Account</div>
-              <div className="font-mono text-white">
-                {account.account_number}
-              </div>
+              {isB2B ? (
+                <>
+                  <div className="text-sm text-gray-400">{account.company_name ?? '\u2014'}</div>
+                  <div className="text-white text-sm">{account.email}</div>
+                </>
+              ) : (
+                <>
+                  <div className="text-sm text-gray-400">Account</div>
+                  <div className="font-mono text-white">
+                    {account.account_number}
+                  </div>
+                </>
+              )}
             </div>
             {API_URL && (
               <a
@@ -190,92 +203,180 @@ export default function DashboardPage() {
         >
           <div className="flex items-start justify-between mb-4">
             <div>
-              <h2 className="text-gray-400 text-sm mb-1">Balance</h2>
+              <h2 className="text-gray-400 text-sm mb-1">
+                {isB2B ? 'Credit Balance' : 'Balance'}
+              </h2>
               <div className="text-4xl font-bold text-white">
                 {formatUSDC(account.balance_usdc)}{' '}
                 <span className="text-lg text-gray-500">USDC</span>
               </div>
             </div>
             <div className="w-12 h-12 rounded-xl bg-[#00D4AA]/10 flex items-center justify-center">
-              <Wallet className="w-6 h-6 text-[#00D4AA]" />
+              {isB2B ? (
+                <CreditCard className="w-6 h-6 text-[#00D4AA]" />
+              ) : (
+                <Wallet className="w-6 h-6 text-[#00D4AA]" />
+              )}
             </div>
           </div>
 
           {isLowBalance && (
             <div className="flex items-center gap-2 text-yellow-400 text-sm mb-4">
               <AlertTriangle className="w-4 h-4" />
-              Low balance. Add funds to continue using Stronghold.
+              {isB2B
+                ? 'Low credit balance. Purchase more credits to continue using Stronghold.'
+                : 'Low balance. Add funds to continue using Stronghold.'}
             </div>
           )}
 
           <div className="flex gap-3">
-            <a
-              href="/dashboard/main/deposit"
-              className="flex-1 py-2.5 px-4 bg-[#00D4AA] hover:bg-[#00b894] text-black font-semibold rounded-lg transition-colors text-center"
-            >
-              Add Funds
-            </a>
-            <a
-              href="/dashboard/main/settings"
-              className="py-2.5 px-4 bg-[#222] hover:bg-[#333] text-white font-semibold rounded-lg transition-colors"
-            >
-              Settings
-            </a>
+            {isB2B ? (
+              <>
+                <a
+                  href="/dashboard/main/billing"
+                  className="flex-1 py-2.5 px-4 bg-[#00D4AA] hover:bg-[#00b894] text-black font-semibold rounded-lg transition-colors text-center"
+                >
+                  Buy Credits
+                </a>
+                <a
+                  href="/dashboard/main/api-keys"
+                  className="py-2.5 px-4 bg-[#222] hover:bg-[#333] text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <Key className="w-4 h-4" />
+                  API Keys
+                </a>
+              </>
+            ) : (
+              <>
+                <a
+                  href="/dashboard/main/deposit"
+                  className="flex-1 py-2.5 px-4 bg-[#00D4AA] hover:bg-[#00b894] text-black font-semibold rounded-lg transition-colors text-center"
+                >
+                  Add Funds
+                </a>
+                <a
+                  href="/dashboard/main/settings"
+                  className="py-2.5 px-4 bg-[#222] hover:bg-[#333] text-white font-semibold rounded-lg transition-colors"
+                >
+                  Settings
+                </a>
+              </>
+            )}
           </div>
         </motion.div>
 
         <div className="grid md:grid-cols-2 gap-6">
-          {/* Wallet Info */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="bg-[#111] border border-[#222] rounded-2xl p-6"
-          >
-            <h3 className="text-white font-semibold mb-4">Wallets</h3>
-            {(account.evm_wallet_address || account.solana_wallet_address) ? (
+          {/* B2B: Quick Links / B2C: Wallet Info */}
+          {isB2B ? (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-[#111] border border-[#222] rounded-2xl p-6"
+            >
+              <h3 className="text-white font-semibold mb-4">Quick Links</h3>
               <div className="space-y-3">
-                {/* EVM Wallet */}
-                {account.evm_wallet_address && (
-                  <div className="font-mono text-white bg-[#0a0a0a] rounded-lg p-3 flex items-center justify-between gap-2">
-                    <span className="truncate text-sm">{truncateAddress(account.evm_wallet_address)}</span>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <CopyButton text={account.evm_wallet_address} />
-                      <span className="text-xs text-[#00D4AA] bg-[#00D4AA]/10 px-2 py-1 rounded">
-                        Base
-                      </span>
+                <a
+                  href="/dashboard/main/api-keys"
+                  className="flex items-center justify-between p-3 bg-[#0a0a0a] rounded-lg hover:bg-[#161616] transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-[#00D4AA]/10 flex items-center justify-center">
+                      <Key className="w-5 h-5 text-[#00D4AA]" />
+                    </div>
+                    <div>
+                      <div className="text-white font-medium">API Keys</div>
+                      <div className="text-sm text-gray-500">Manage your API keys</div>
                     </div>
                   </div>
-                )}
+                  <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-white transition-colors" />
+                </a>
 
-                {/* Solana Wallet */}
-                {account.solana_wallet_address && (
-                  <div className="font-mono text-white bg-[#0a0a0a] rounded-lg p-3 flex items-center justify-between gap-2">
-                    <span className="truncate text-sm">{truncateAddress(account.solana_wallet_address)}</span>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <CopyButton text={account.solana_wallet_address} />
-                      <span className="text-xs text-purple-400 bg-purple-400/10 px-2 py-1 rounded">
-                        Solana
-                      </span>
+                <a
+                  href="/dashboard/main/billing"
+                  className="flex items-center justify-between p-3 bg-[#0a0a0a] rounded-lg hover:bg-[#161616] transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                      <CreditCard className="w-5 h-5 text-blue-400" />
+                    </div>
+                    <div>
+                      <div className="text-white font-medium">Billing</div>
+                      <div className="text-sm text-gray-500">Credits and payment methods</div>
                     </div>
                   </div>
-                )}
+                  <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-white transition-colors" />
+                </a>
 
-                <p className="text-gray-500 text-sm mt-3">
-                  <span className="text-[#00D4AA] font-medium">To fund your account:</span> Send USDC to your wallet on the corresponding network.
-                </p>
+                <a
+                  href="/dashboard/main/settings"
+                  className="flex items-center justify-between p-3 bg-[#0a0a0a] rounded-lg hover:bg-[#161616] transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                      <Building2 className="w-5 h-5 text-purple-400" />
+                    </div>
+                    <div>
+                      <div className="text-white font-medium">Settings</div>
+                      <div className="text-sm text-gray-500">Account settings</div>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-white transition-colors" />
+                </a>
               </div>
-            ) : (
-              <div className="text-center py-4">
-                <p className="text-gray-400 mb-3">
-                  No wallets linked to your account.
-                </p>
-                <p className="text-gray-500 text-sm">
-                  Set up via CLI: <code className="text-gray-400">stronghold init</code>
-                </p>
-              </div>
-            )}
-          </motion.div>
+            </motion.div>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-[#111] border border-[#222] rounded-2xl p-6"
+            >
+              <h3 className="text-white font-semibold mb-4">Wallets</h3>
+              {(account.evm_wallet_address || account.solana_wallet_address) ? (
+                <div className="space-y-3">
+                  {/* EVM Wallet */}
+                  {account.evm_wallet_address && (
+                    <div className="font-mono text-white bg-[#0a0a0a] rounded-lg p-3 flex items-center justify-between gap-2">
+                      <span className="truncate text-sm">{truncateAddress(account.evm_wallet_address)}</span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <CopyButton text={account.evm_wallet_address} />
+                        <span className="text-xs text-[#00D4AA] bg-[#00D4AA]/10 px-2 py-1 rounded">
+                          Base
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Solana Wallet */}
+                  {account.solana_wallet_address && (
+                    <div className="font-mono text-white bg-[#0a0a0a] rounded-lg p-3 flex items-center justify-between gap-2">
+                      <span className="truncate text-sm">{truncateAddress(account.solana_wallet_address)}</span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <CopyButton text={account.solana_wallet_address} />
+                        <span className="text-xs text-purple-400 bg-purple-400/10 px-2 py-1 rounded">
+                          Solana
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-gray-500 text-sm mt-3">
+                    <span className="text-[#00D4AA] font-medium">To fund your account:</span> Send USDC to your wallet on the corresponding network.
+                  </p>
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-gray-400 mb-3">
+                    No wallets linked to your account.
+                  </p>
+                  <p className="text-gray-500 text-sm">
+                    Set up via CLI: <code className="text-gray-400">stronghold init</code>
+                  </p>
+                </div>
+              )}
+            </motion.div>
+          )}
 
           {/* Quick Stats */}
           <motion.div
@@ -351,12 +452,25 @@ export default function DashboardPage() {
         >
           <h3 className="text-white font-semibold mb-4">Account Information</h3>
           <div className="grid sm:grid-cols-2 gap-4 text-sm">
-            <div>
-              <div className="text-gray-500 mb-1">Account Number</div>
-              <div className="font-mono text-white">
-                {account.account_number}
+            {isB2B ? (
+              <>
+                <div>
+                  <div className="text-gray-500 mb-1">Company</div>
+                  <div className="text-white">{account.company_name ?? '\u2014'}</div>
+                </div>
+                <div>
+                  <div className="text-gray-500 mb-1">Email</div>
+                  <div className="text-white">{account.email}</div>
+                </div>
+              </>
+            ) : (
+              <div>
+                <div className="text-gray-500 mb-1">Account Number</div>
+                <div className="font-mono text-white">
+                  {account.account_number}
+                </div>
               </div>
-            </div>
+            )}
             <div>
               <div className="text-gray-500 mb-1">Status</div>
               <div className="flex items-center gap-2">
@@ -378,14 +492,16 @@ export default function DashboardPage() {
                 {new Date(account.created_at).toLocaleDateString()}
               </div>
             </div>
-            <div>
-              <div className="text-gray-500 mb-1">Last Login</div>
-              <div className="text-white">
-                {account.last_login_at
-                  ? new Date(account.last_login_at).toLocaleString()
-                  : 'N/A'}
+            {!isB2B && (
+              <div>
+                <div className="text-gray-500 mb-1">Last Login</div>
+                <div className="text-white">
+                  {account.last_login_at
+                    ? new Date(account.last_login_at).toLocaleString()
+                    : 'N/A'}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </motion.div>
       </main>

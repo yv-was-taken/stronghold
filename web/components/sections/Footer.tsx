@@ -8,7 +8,7 @@ const footerLinks = {
   Product: [
     { label: 'Features', href: '#features' },
     { label: 'Pricing', href: '#pricing' },
-    { label: 'Documentation', href: 'https://docs.stronghold.xyz', external: true },
+    { label: 'Documentation', href: 'https://docs.getstronghold.xyz', external: true },
     { label: 'Changelog', href: 'https://github.com/yv-was-taken/stronghold/commits/master', external: true },
   ],
   Resources: [

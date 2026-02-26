@@ -16,8 +16,7 @@ External content -> [PROXY scans] -> Agent -> [API scans] -> Output
 **Proxy**: Scans INCOMING content, blocks prompt injection before agent sees it
 **API**: Scans OUTGOING content, catches credential leaks in agent responses
 
-**B2C (CLI/Proxy)**: Pay-per-request via x402 protocol. $0.001 per scan.
-**B2B (Server-side)**: Authenticate via API key (`X-API-Key` header). No per-request payment.
+Both require payment. B2C users pay $0.001 per scan via x402 crypto. B2B users authenticate with API keys and pay via prepaid credits or metered billing.
 
 **Note on USDC amounts**: Canonical money fields are string-encoded microUSDC
 integers (1 microUSDC = 0.000001 USDC). For example, `"1000"` = $0.001,
@@ -279,6 +278,63 @@ Add funds: `stronghold account deposit`
 
 ---
 
+## B2B / API Key Access (Business Accounts)
+
+For server-to-server integration, Stronghold supports B2B accounts with SSO
+authentication via WorkOS, API keys, and traditional card billing via Stripe.
+
+### Quick Start
+
+1. **Sign in**: Visit the dashboard and click "Business" tab → "Sign in with SSO" (handled by WorkOS AuthKit)
+2. **Onboard**: Set your company name on first sign-in (`POST /v1/auth/b2b/onboard`)
+3. **Create API key**: `POST /v1/api-keys` (WorkOS JWT auth required) → returns `sk_live_...`
+4. **Make requests**: `Authorization: Bearer sk_live_...` on scan endpoints
+
+### Authentication
+
+**SSO (WorkOS AuthKit)** for dashboard login. WorkOS handles signup, login, password
+management, email verification, MFA, and social login. The backend validates WorkOS
+JWTs via JWKS and auto-provisions a local B2B account on first sign-in (JIT provisioning).
+
+**API keys** (`sk_live_...`) for scan endpoints. Created via the JWT-authenticated
+management endpoints in the dashboard.
+
+### Billing
+
+Two payment methods, used in order:
+1. **Prepaid credits**: Purchase via Stripe Checkout (`POST /v1/billing/credits`)
+2. **Metered overflow**: When credits run out, usage is metered and billed monthly via Stripe
+
+### Scan Endpoint Usage
+
+```bash
+# With API key (B2B)
+curl -X POST https://api.getstronghold.xyz/v1/scan/content \
+  -H "Authorization: Bearer sk_live_abc123..." \
+  -H "Content-Type: application/json" \
+  -d '{"text": "content to scan"}'
+
+# With x402 crypto payment (B2C - unchanged)
+curl -X POST https://api.getstronghold.xyz/v1/scan/content \
+  -H "X-PAYMENT: <x402-payment-header>" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "content to scan"}'
+```
+
+### B2B API Endpoints
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| /v1/auth/b2b/onboard | POST | WorkOS JWT | Set company name (first sign-in) |
+| /v1/api-keys | POST | JWT | Create API key |
+| /v1/api-keys | GET | JWT | List API keys |
+| /v1/api-keys/:id | DELETE | JWT | Revoke API key |
+| /v1/billing/credits | POST | JWT | Purchase credits (Stripe Checkout) |
+| /v1/billing/info | GET | JWT | Get billing info |
+| /v1/billing/portal | POST | JWT | Create Stripe billing portal session |
+
+---
+
 ## TOTP and Wallet Uploads (Important)
 
 Stronghold supports optional server-side wallet storage for easier setup on new devices.
@@ -307,7 +363,7 @@ If you choose to upload your wallet to the server, **TOTP is required**.
 ## Links
 
 - Documentation: https://github.com/yv-was-taken/stronghold
-- Human Docs: https://docs.stronghold.xyz
+- Human Docs: https://docs.getstronghold.xyz
 - API Spec: https://api.getstronghold.xyz/docs
 - Dashboard: https://getstronghold.xyz/dashboard
 - Full Reference: https://getstronghold.xyz/llms-full.txt

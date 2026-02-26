@@ -15,21 +15,31 @@ import (
 
 // ScanHandler handles scan-related endpoints
 type ScanHandler struct {
-	scanner    *stronghold.Scanner
-	x402       *middleware.X402Middleware
-	apiKeyAuth *middleware.APIKeyMiddleware
-	db         *db.DB
-	pricing    *config.PricingConfig
+	scanner       *stronghold.Scanner
+	x402          *middleware.X402Middleware
+	db            *db.DB
+	pricing       *config.PricingConfig
+	paymentRouter *middleware.PaymentRouter
 }
 
 // NewScanHandlerWithDB creates a new scan handler with database support
-func NewScanHandlerWithDB(scanner *stronghold.Scanner, x402 *middleware.X402Middleware, apiKeyAuth *middleware.APIKeyMiddleware, database *db.DB, pricing *config.PricingConfig) *ScanHandler {
+func NewScanHandlerWithDB(scanner *stronghold.Scanner, x402 *middleware.X402Middleware, database *db.DB, pricing *config.PricingConfig) *ScanHandler {
 	return &ScanHandler{
-		scanner:    scanner,
-		x402:       x402,
-		apiKeyAuth: apiKeyAuth,
-		db:         database,
-		pricing:    pricing,
+		scanner: scanner,
+		x402:    x402,
+		db:      database,
+		pricing: pricing,
+	}
+}
+
+// NewScanHandlerWithPaymentRouter creates a new scan handler with payment router support
+func NewScanHandlerWithPaymentRouter(scanner *stronghold.Scanner, x402 *middleware.X402Middleware, database *db.DB, pricing *config.PricingConfig, router *middleware.PaymentRouter) *ScanHandler {
+	return &ScanHandler{
+		scanner:       scanner,
+		x402:          x402,
+		db:            database,
+		pricing:       pricing,
+		paymentRouter: router,
 	}
 }
 
@@ -45,19 +55,6 @@ type ScanContentRequest struct {
 // ScanOutputRequest represents a request to scan LLM/agent output for credential leaks
 type ScanOutputRequest struct {
 	Text string `json:"text"`
-}
-
-// dualAuth returns middleware that authenticates via API key (B2B) or x402 payment (B2C).
-// If X-API-Key header is present, API key auth is used; otherwise x402 payment is required.
-func (h *ScanHandler) dualAuth(price usdc.MicroUSDC) fiber.Handler {
-	return func(c fiber.Ctx) error {
-		if c.Get("X-API-Key") != "" {
-			// B2B path: authenticate via API key
-			return h.apiKeyAuth.Authenticate()(c)
-		}
-		// B2C path: require x402 payment
-		return h.x402.AtomicPayment(price)(c)
-	}
 }
 
 // RegisterRoutes registers all scan routes
@@ -77,11 +74,15 @@ func (h *ScanHandler) RegisterRoutes(app *fiber.App) {
 
 	group := app.Group("/v1/scan")
 
-	// Content scanning - detect prompt injection in external content
-	group.Post("/content", h.dualAuth(h.pricing.ScanContent), h.ScanContent)
-
-	// Output scanning - detect credential leaks in LLM responses
-	group.Post("/output", h.dualAuth(h.pricing.ScanOutput), h.ScanOutput)
+	// Use PaymentRouter if available (supports both x402 and API key auth),
+	// otherwise fall back to x402-only middleware
+	if h.paymentRouter != nil {
+		group.Post("/content", h.paymentRouter.Route(h.pricing.ScanContent), h.ScanContent)
+		group.Post("/output", h.paymentRouter.Route(h.pricing.ScanOutput), h.ScanOutput)
+	} else {
+		group.Post("/content", h.x402.AtomicPayment(h.pricing.ScanContent), h.ScanContent)
+		group.Post("/output", h.x402.AtomicPayment(h.pricing.ScanOutput), h.ScanOutput)
+	}
 }
 
 // ScanContent handles content scanning for prompt injection

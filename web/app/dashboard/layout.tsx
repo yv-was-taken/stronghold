@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { AuthProvider } from '@/components/providers/AuthProvider'
+import { Providers } from '@/components/providers/Providers'
 import '../globals.css'
 
 export const metadata: Metadata = {
@@ -13,8 +13,8 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   return (
-    <AuthProvider>
+    <Providers>
       {children}
-    </AuthProvider>
+    </Providers>
   )
 }

@@ -468,3 +468,124 @@ func TestStripeWebhook_InvalidDepositID(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&body)
 	assert.Contains(t, body["error"], "Invalid deposit_id")
 }
+
+func TestStripeWebhook_CheckoutSessionCompleted(t *testing.T) {
+	app, _, testDB, database := setupStripeWebhookTest(t)
+	defer testDB.Close(t)
+	defer database.Close()
+
+	// Create a B2B account
+	account, err := database.CreateB2BAccount(t.Context(), "user_01TEST", "test@example.com", "Test Corp")
+	require.NoError(t, err)
+
+	// Create a pending deposit for a B2B credit purchase (no fee)
+	deposit := &db.Deposit{
+		AccountID:     account.ID,
+		Provider:      db.DepositProviderStripe,
+		AmountUSDC:    usdc.FromFloat(50.00),
+		FeeUSDC:       0,
+		NetAmountUSDC: usdc.FromFloat(50.00),
+		Metadata:      map[string]any{"type": "b2b_credit_purchase"},
+	}
+	err = database.CreateDeposit(t.Context(), deposit)
+	require.NoError(t, err)
+
+	// Create webhook event payload for checkout.session.completed
+	timestamp := time.Now().Unix()
+	payload := []byte(fmt.Sprintf(`{
+		"id": "evt_test_checkout",
+		"type": "checkout.session.completed",
+		"created": %d,
+		"data": {
+			"object": {
+				"id": "cs_test_session_123",
+				"payment_status": "paid",
+				"metadata": {
+					"deposit_id": "%s"
+				}
+			}
+		}
+	}`, timestamp, deposit.ID.String()))
+	signature := generateStripeSignature(payload, testWebhookSecret, timestamp)
+
+	req := httptest.NewRequest("POST", "/webhooks/stripe", bytes.NewBuffer(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Stripe-Signature", signature)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, 200, resp.StatusCode)
+
+	var body map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&body)
+	assert.True(t, body["received"].(bool))
+	assert.Equal(t, "completed", body["status"])
+
+	// Verify deposit is marked as completed
+	updatedDeposit, err := database.GetDepositByID(t.Context(), deposit.ID)
+	require.NoError(t, err)
+	assert.Equal(t, db.DepositStatusCompleted, updatedDeposit.Status)
+	assert.NotNil(t, updatedDeposit.CompletedAt)
+
+	// Verify account balance was credited with the net amount (50.00)
+	updatedAccount, err := database.GetAccountByID(t.Context(), account.ID)
+	require.NoError(t, err)
+	assert.Equal(t, usdc.FromFloat(50.00), updatedAccount.BalanceUSDC)
+}
+
+func TestStripeWebhook_CheckoutSessionNotPaid(t *testing.T) {
+	app, _, testDB, database := setupStripeWebhookTest(t)
+	defer testDB.Close(t)
+	defer database.Close()
+
+	// Create a B2B account
+	account, err := database.CreateB2BAccount(t.Context(), "user_01TEST", "test@example.com", "Test Corp")
+	require.NoError(t, err)
+
+	// Create a pending deposit
+	deposit := &db.Deposit{
+		AccountID:     account.ID,
+		Provider:      db.DepositProviderStripe,
+		AmountUSDC:    usdc.FromFloat(50.00),
+		FeeUSDC:       0,
+		NetAmountUSDC: usdc.FromFloat(50.00),
+		Metadata:      map[string]any{"type": "b2b_credit_purchase"},
+	}
+	err = database.CreateDeposit(t.Context(), deposit)
+	require.NoError(t, err)
+
+	// Create webhook event payload with payment_status "unpaid"
+	timestamp := time.Now().Unix()
+	payload := []byte(fmt.Sprintf(`{
+		"id": "evt_test_checkout_unpaid",
+		"type": "checkout.session.completed",
+		"created": %d,
+		"data": {
+			"object": {
+				"id": "cs_test_session_456",
+				"payment_status": "unpaid",
+				"metadata": {
+					"deposit_id": "%s"
+				}
+			}
+		}
+	}`, timestamp, deposit.ID.String()))
+	signature := generateStripeSignature(payload, testWebhookSecret, timestamp)
+
+	req := httptest.NewRequest("POST", "/webhooks/stripe", bytes.NewBuffer(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Stripe-Signature", signature)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, 200, resp.StatusCode)
+
+	var body map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&body)
+	assert.True(t, body["received"].(bool))
+	assert.Equal(t, "ignored", body["status"])
+}

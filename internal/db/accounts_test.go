@@ -530,3 +530,286 @@ func TestGetAccountByNumber_NotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
+
+func TestCreateB2BAccount(t *testing.T) {
+	testDB := testutil.NewTestDB(t)
+	defer testDB.Close(t)
+
+	db := &DB{pool: testDB.Pool}
+	ctx := context.Background()
+
+	workosUserID := "user_01EXAMPLE"
+	email := "test@example.com"
+	companyName := "Test Company"
+
+	account, err := db.CreateB2BAccount(ctx, workosUserID, email, companyName)
+	require.NoError(t, err)
+	require.NotNil(t, account)
+
+	// Verify account type
+	assert.Equal(t, AccountTypeB2B, account.AccountType)
+
+	// Verify email is set
+	require.NotNil(t, account.Email)
+	assert.Equal(t, email, *account.Email)
+
+	// Verify company name is set
+	require.NotNil(t, account.CompanyName)
+	assert.Equal(t, companyName, *account.CompanyName)
+
+	// Verify WorkOS user ID is set
+	require.NotNil(t, account.WorkOSUserID)
+	assert.Equal(t, workosUserID, *account.WorkOSUserID)
+
+	// B2B accounts should not have an account_number
+	assert.Empty(t, account.AccountNumber)
+
+	// Verify default fields
+	assert.Equal(t, usdc.MicroUSDC(0), account.BalanceUSDC)
+	assert.Equal(t, AccountStatusActive, account.Status)
+	assert.NotZero(t, account.CreatedAt)
+	assert.NotZero(t, account.UpdatedAt)
+	assert.NotEqual(t, uuid.Nil, account.ID)
+
+	// Verify the account can be retrieved from DB
+	found, err := db.GetAccountByID(ctx, account.ID)
+	require.NoError(t, err)
+	assert.Equal(t, AccountTypeB2B, found.AccountType)
+	require.NotNil(t, found.Email)
+	assert.Equal(t, email, *found.Email)
+	require.NotNil(t, found.CompanyName)
+	assert.Equal(t, companyName, *found.CompanyName)
+}
+
+func TestCreateB2BAccount_EmptyCompanyName(t *testing.T) {
+	testDB := testutil.NewTestDB(t)
+	defer testDB.Close(t)
+
+	db := &DB{pool: testDB.Pool}
+	ctx := context.Background()
+
+	account, err := db.CreateB2BAccount(ctx, "user_01NOCO", "noco@example.com", "")
+	require.NoError(t, err)
+	require.NotNil(t, account)
+	assert.Nil(t, account.CompanyName, "empty company name should store as NULL")
+}
+
+func TestGetAccountByWorkOSUserID(t *testing.T) {
+	testDB := testutil.NewTestDB(t)
+	defer testDB.Close(t)
+
+	db := &DB{pool: testDB.Pool}
+	ctx := context.Background()
+
+	workosUserID := "user_01LOOKUP"
+	email := "workos@example.com"
+
+	account, err := db.CreateB2BAccount(ctx, workosUserID, email, "WorkOS Co")
+	require.NoError(t, err)
+
+	found, err := db.GetAccountByWorkOSUserID(ctx, workosUserID)
+	require.NoError(t, err)
+	require.NotNil(t, found)
+	assert.Equal(t, account.ID, found.ID)
+	assert.Equal(t, AccountTypeB2B, found.AccountType)
+	require.NotNil(t, found.WorkOSUserID)
+	assert.Equal(t, workosUserID, *found.WorkOSUserID)
+}
+
+func TestGetAccountByWorkOSUserID_NotFound(t *testing.T) {
+	testDB := testutil.NewTestDB(t)
+	defer testDB.Close(t)
+
+	db := &DB{pool: testDB.Pool}
+	ctx := context.Background()
+
+	_, err := db.GetAccountByWorkOSUserID(ctx, "user_01NONEXISTENT")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrAccountNotFound)
+}
+
+func TestUpdateCompanyName(t *testing.T) {
+	testDB := testutil.NewTestDB(t)
+	defer testDB.Close(t)
+
+	db := &DB{pool: testDB.Pool}
+	ctx := context.Background()
+
+	account, err := db.CreateB2BAccount(ctx, "user_01ONBOARD", "onboard@example.com", "")
+	require.NoError(t, err)
+	assert.Nil(t, account.CompanyName)
+
+	err = db.UpdateCompanyName(ctx, account.ID, "Acme Corp")
+	require.NoError(t, err)
+
+	found, err := db.GetAccountByID(ctx, account.ID)
+	require.NoError(t, err)
+	require.NotNil(t, found.CompanyName)
+	assert.Equal(t, "Acme Corp", *found.CompanyName)
+}
+
+func TestCreateB2BAccount_DuplicateEmail(t *testing.T) {
+	testDB := testutil.NewTestDB(t)
+	defer testDB.Close(t)
+
+	db := &DB{pool: testDB.Pool}
+	ctx := context.Background()
+
+	email := "duplicate@example.com"
+
+	// Create first account
+	_, err := db.CreateB2BAccount(ctx, "user_01DUP1", email, "Test Company")
+	require.NoError(t, err)
+
+	// Attempt to create second account with same email
+	_, err = db.CreateB2BAccount(ctx, "user_01DUP2", email, "Another Company")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrEmailAlreadyExists)
+}
+
+func TestGetAccountByEmail(t *testing.T) {
+	testDB := testutil.NewTestDB(t)
+	defer testDB.Close(t)
+
+	db := &DB{pool: testDB.Pool}
+	ctx := context.Background()
+
+	email := "lookup@example.com"
+
+	account, err := db.CreateB2BAccount(ctx, "user_01EMAIL", email, "Test Company")
+	require.NoError(t, err)
+
+	// Lookup by email
+	found, err := db.GetAccountByEmail(ctx, email)
+	require.NoError(t, err)
+	require.NotNil(t, found)
+	assert.Equal(t, account.ID, found.ID)
+	assert.Equal(t, AccountTypeB2B, found.AccountType)
+	require.NotNil(t, found.Email)
+	assert.Equal(t, email, *found.Email)
+}
+
+func TestGetAccountByEmail_NotFound(t *testing.T) {
+	testDB := testutil.NewTestDB(t)
+	defer testDB.Close(t)
+
+	db := &DB{pool: testDB.Pool}
+	ctx := context.Background()
+
+	_, err := db.GetAccountByEmail(ctx, "nonexistent@example.com")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestUpdateStripeCustomerID(t *testing.T) {
+	testDB := testutil.NewTestDB(t)
+	defer testDB.Close(t)
+
+	db := &DB{pool: testDB.Pool}
+	ctx := context.Background()
+
+	// Create a B2B account
+	account, err := db.CreateB2BAccount(ctx, "user_01STRIPE", "stripe@example.com", "Stripe Co")
+	require.NoError(t, err)
+	assert.Nil(t, account.StripeCustomerID)
+
+	// Update Stripe customer ID
+	customerID := "cus_test123456"
+	err = db.UpdateStripeCustomerID(ctx, account.ID, customerID)
+	require.NoError(t, err)
+
+	// Verify it was updated
+	found, err := db.GetAccountByID(ctx, account.ID)
+	require.NoError(t, err)
+	require.NotNil(t, found.StripeCustomerID)
+	assert.Equal(t, customerID, *found.StripeCustomerID)
+}
+
+func TestGetAccountByStripeCustomerID(t *testing.T) {
+	testDB := testutil.NewTestDB(t)
+	defer testDB.Close(t)
+
+	db := &DB{pool: testDB.Pool}
+	ctx := context.Background()
+
+	// Create a B2B account and set Stripe customer ID
+	account, err := db.CreateB2BAccount(ctx, "user_01SLOOKUP", "stripelookup@example.com", "Stripe Lookup Co")
+	require.NoError(t, err)
+
+	customerID := "cus_lookup789"
+	err = db.UpdateStripeCustomerID(ctx, account.ID, customerID)
+	require.NoError(t, err)
+
+	// Lookup by Stripe customer ID
+	found, err := db.GetAccountByStripeCustomerID(ctx, customerID)
+	require.NoError(t, err)
+	require.NotNil(t, found)
+	assert.Equal(t, account.ID, found.ID)
+	require.NotNil(t, found.StripeCustomerID)
+	assert.Equal(t, customerID, *found.StripeCustomerID)
+
+	// Lookup nonexistent customer ID
+	_, err = db.GetAccountByStripeCustomerID(ctx, "cus_nonexistent")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestDeductBalance(t *testing.T) {
+	testDB := testutil.NewTestDB(t)
+	defer testDB.Close(t)
+
+	db := &DB{pool: testDB.Pool}
+	ctx := context.Background()
+
+	// Create a B2B account and fund it
+	account, err := db.CreateB2BAccount(ctx, "user_01DEDUCT", "deduct@example.com", "Deduct Co")
+	require.NoError(t, err)
+
+	err = db.UpdateBalance(ctx, account.ID, usdc.FromFloat(100.0))
+	require.NoError(t, err)
+
+	// Deduct a portion
+	deducted, err := db.DeductBalance(ctx, account.ID, usdc.FromFloat(30.0))
+	require.NoError(t, err)
+	assert.True(t, deducted)
+
+	// Verify remaining balance
+	found, err := db.GetAccountByID(ctx, account.ID)
+	require.NoError(t, err)
+	assert.Equal(t, usdc.FromFloat(70.0), found.BalanceUSDC)
+
+	// Deduct exactly the remaining balance
+	deducted, err = db.DeductBalance(ctx, account.ID, usdc.FromFloat(70.0))
+	require.NoError(t, err)
+	assert.True(t, deducted)
+
+	// Verify balance is now zero
+	found, err = db.GetAccountByID(ctx, account.ID)
+	require.NoError(t, err)
+	assert.Equal(t, usdc.MicroUSDC(0), found.BalanceUSDC)
+}
+
+func TestDeductBalance_InsufficientFunds(t *testing.T) {
+	testDB := testutil.NewTestDB(t)
+	defer testDB.Close(t)
+
+	db := &DB{pool: testDB.Pool}
+	ctx := context.Background()
+
+	// Create a B2B account with limited funds
+	account, err := db.CreateB2BAccount(ctx, "user_01BROKE", "insufficient@example.com", "Broke Co")
+	require.NoError(t, err)
+
+	err = db.UpdateBalance(ctx, account.ID, usdc.FromFloat(10.0))
+	require.NoError(t, err)
+
+	// Attempt to deduct more than balance
+	deducted, err := db.DeductBalance(ctx, account.ID, usdc.FromFloat(50.0))
+	require.NoError(t, err)
+	assert.False(t, deducted)
+
+	// Verify balance was not changed
+	found, err := db.GetAccountByID(ctx, account.ID)
+	require.NoError(t, err)
+	assert.Equal(t, usdc.FromFloat(10.0), found.BalanceUSDC)
+}

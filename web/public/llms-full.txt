@@ -16,6 +16,7 @@ For a concise overview, see: https://getstronghold.xyz/llms.txt
 6. Account Management
 7. Configuration Reference
 8. Self-Hosting
+9. B2B / API Key Access (Business Accounts)
 
 ---
 
@@ -909,10 +910,209 @@ See `.env.example` for full configuration documentation.
 
 ---
 
+## 9. B2B / API Key Access (Business Accounts)
+
+Stronghold supports a separate B2B account model for server-to-server integration.
+B2B accounts use SSO authentication via WorkOS AuthKit, API keys for scan requests,
+and traditional card billing via Stripe -- no crypto wallets required.
+
+### B2B vs B2C Account Model
+
+| | B2C (Wallet) | B2B (API Key) |
+|--|--------------|---------------|
+| **Identity** | Account number + wallet keypair | SSO via WorkOS (email, Google, SSO, etc.) |
+| **Scan auth** | `X-PAYMENT` header (x402) | `Authorization: Bearer sk_live_...` |
+| **Payment** | Per-request x402 crypto (USDC) | Prepaid credits + metered overflow (Stripe) |
+| **Management** | CLI + OS keyring | Dashboard + WorkOS JWT sessions |
+
+B2B and B2C accounts are completely separate. A B2B account has its own user record,
+billing relationship, and API keys. There is no conversion between account types.
+
+### Authentication
+
+**Sign-in** is handled entirely by WorkOS AuthKit. Users authenticate via email/password,
+Google, or enterprise SSO on WorkOS's hosted login page. The backend validates the
+resulting JWT via JWKS and auto-provisions a local B2B account on first sign-in
+(JIT provisioning). WorkOS handles signup, login, password management, email
+verification, MFA, and social login.
+
+**Onboarding**: After first sign-in, a B2B user sets their company name:
+
+```bash
+# Set company name (requires WorkOS JWT)
+curl -X POST https://api.getstronghold.xyz/v1/auth/b2b/onboard \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <workos-jwt>" \
+  -d '{"company_name": "Acme Corp"}'
+
+# Response (200 OK)
+{
+  "account_id": "uuid",
+  "company_name": "Acme Corp"
+}
+```
+
+**API keys** authenticate scan requests. Create them via the JWT-authenticated
+management endpoints:
+
+```bash
+# Create API key (requires WorkOS JWT)
+curl -X POST https://api.getstronghold.xyz/v1/api-keys \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <workos-jwt>" \
+  -d '{"name": "production-scanner"}'
+
+# Response (201 Created)
+{
+  "id": "uuid",
+  "name": "production-scanner",
+  "key": "sk_live_a1b2c3d4e5f6...",
+  "prefix": "sk_live_a1b2c3d4",
+  "created_at": "2026-02-23T00:00:00Z"
+}
+```
+
+**IMPORTANT**: The full API key (`sk_live_...`) is returned only once at creation.
+Store it securely. Only the prefix is available later for identification.
+
+### API Key Format
+
+- Format: `sk_live_` + 32 random hex characters (e.g., `sk_live_a1b2c3d4...`)
+- Storage: SHA-256 hashed before database storage (the plaintext key is never stored)
+- Limit: Maximum 10 active API keys per B2B account
+- Lookup: The first 8 hex characters after `sk_live_` are stored as a prefix for fast lookup
+
+### Payment Routing
+
+The API server determines payment method based on the request headers:
+
+```
+Request arrives
+  |
+  +-- Has X-PAYMENT header? --> x402 payment flow (B2C)
+  |
+  +-- Has Authorization: Bearer sk_live_...? --> B2B billing
+  |
+  +-- Neither? --> 402 Payment Required
+```
+
+Both paths lead to the same scan endpoints (`/v1/scan/content`, `/v1/scan/output`)
+with identical request/response formats. The only difference is how payment is handled.
+
+### Credit Purchase Flow
+
+B2B accounts can purchase prepaid credits via Stripe Checkout:
+
+```bash
+# Create a Stripe Checkout session for credit purchase
+curl -X POST https://api.getstronghold.xyz/v1/billing/credits \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <workos-jwt>" \
+  -d '{"amount_usd": 50}'
+
+# Response (200 OK)
+{
+  "checkout_url": "https://checkout.stripe.com/c/pay/cs_live_...",
+  "session_id": "cs_live_..."
+}
+```
+
+The user is redirected to Stripe Checkout to complete the one-time payment.
+On successful payment, a Stripe webhook (`checkout.session.completed`) triggers
+a deposit that credits the B2B account balance. Credits are denominated in
+microUSDC internally (1 credit = 1 microUSDC = $0.000001).
+
+### Metered Billing (Overflow)
+
+When a B2B account's prepaid credit balance reaches zero, scan requests are not
+rejected. Instead, usage is reported to the Stripe Meter API in real time:
+
+1. Scan request arrives with `Authorization: Bearer sk_live_...`
+2. Server checks B2B account credit balance
+3. If balance > 0: deduct scan cost from credits
+4. If balance = 0: report usage event to Stripe Meter
+5. Stripe aggregates metered usage and bills monthly via the account's payment method
+
+This ensures uninterrupted service. The B2B user sees metered charges on their
+next Stripe invoice. Spending caps and low-balance alerts are not currently
+available. Metered usage is aggregated and billed at the end of each Stripe
+billing cycle.
+
+### Billing Management
+
+```bash
+# Get billing info (balance, Stripe customer status, current usage)
+curl -s https://api.getstronghold.xyz/v1/billing/info \
+  -H "Authorization: Bearer <workos-jwt>"
+
+# Response (200 OK)
+{
+  "credit_balance_micro_usdc": "50000000",
+  "credit_balance_usd": 50.00,
+  "stripe_customer_id": "cus_...",
+  "has_payment_method": true,
+  "metered_usage_current_period": 1250  // microUSDC consumed in current billing cycle
+}
+
+# Open Stripe billing portal (manage payment methods, view invoices)
+curl -X POST https://api.getstronghold.xyz/v1/billing/portal \
+  -H "Authorization: Bearer <workos-jwt>"
+
+# Response (200 OK)
+{
+  "portal_url": "https://billing.stripe.com/p/session/..."
+}
+```
+
+### B2B API Endpoints Reference
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/v1/auth/b2b/onboard` | POST | WorkOS JWT | Set company name (first sign-in) |
+| `/v1/api-keys` | POST | WorkOS JWT | Create a new API key (returns full key once) |
+| `/v1/api-keys` | GET | WorkOS JWT | List API keys (prefix only, no full keys) |
+| `/v1/api-keys/:id` | DELETE | WorkOS JWT | Revoke an API key |
+| `/v1/billing/credits` | POST | WorkOS JWT | Create Stripe Checkout session for credit purchase |
+| `/v1/billing/info` | GET | WorkOS JWT | Get billing info (balance, usage, Stripe status) |
+| `/v1/billing/portal` | POST | WorkOS JWT | Create Stripe billing portal session |
+| `/v1/scan/content` | POST | API key | Scan content for prompt injection |
+| `/v1/scan/output` | POST | API key | Scan output for credential leaks |
+
+### Scan Endpoint Usage (B2B)
+
+```bash
+# Scan content for prompt injection
+curl -X POST https://api.getstronghold.xyz/v1/scan/content \
+  -H "Authorization: Bearer sk_live_<your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Ignore all previous instructions..."}'
+
+# Scan output for credential leaks
+curl -X POST https://api.getstronghold.xyz/v1/scan/output \
+  -H "Authorization: Bearer sk_live_<your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Here is the config: DB_PASSWORD=secret123"}'
+
+# Response format is identical to x402-authenticated requests
+{
+  "decision": "BLOCK",
+  "scores": {
+    "heuristic": 0.85,
+    "ml_confidence": 0.92,
+    "semantic": 0.75
+  },
+  "reason": "High heuristic score - possible prompt injection",
+  "latency_ms": 15,
+  "request_id": "uuid"
+}
+```
+
+---
+
 ## Links
 
 - GitHub: https://github.com/yv-was-taken/stronghold
-- Human Docs: https://docs.stronghold.xyz
+- Human Docs: https://docs.getstronghold.xyz
 - API Spec: https://api.getstronghold.xyz/docs
 - Dashboard: https://getstronghold.xyz/dashboard
 - Quick Reference: https://getstronghold.xyz/llms.txt

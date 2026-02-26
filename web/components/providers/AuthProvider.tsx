@@ -1,7 +1,8 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { API_URL } from '@/lib/api';
+import { useAuth as useWorkOSAuth } from '@workos-inc/authkit-react';
+import { API_URL, setB2BTokenProvider, onboardB2B as onboardB2BAPI } from '@/lib/api';
 
 interface Account {
   id: string;
@@ -12,6 +13,10 @@ interface Account {
   status: string;
   created_at: string;
   last_login_at?: string;
+  account_type?: 'b2c' | 'b2b';
+  email?: string;
+  company_name?: string;
+  stripe_customer_id?: string;
 }
 
 interface AuthContextType {
@@ -19,12 +24,16 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   totpRequired: boolean;
+  needsOnboarding: boolean;
   login: (accountNumber: string) => Promise<{ totpRequired: boolean }>;
   createAccount: () => Promise<{ accountNumber: string; recoveryFile: string; walletAddress?: string }>;
   verifyTotp: (code: string, isRecovery: boolean, ttlDays: number) => Promise<void>;
   resetTotp: () => void;
   logout: () => Promise<void>;
   refreshAuth: () => Promise<boolean>;
+  b2bSignIn: () => Promise<void>;
+  b2bSignOut: () => void;
+  onboardB2B: (companyName: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,6 +42,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [account, setAccount] = useState<Account | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [totpRequired, setTotpRequired] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+
+  const {
+    user: workosUser,
+    isLoading: workosLoading,
+    getAccessToken,
+    signIn: workosSignIn,
+    signOut: workosSignOut,
+  } = useWorkOSAuth();
+
+  // Wire up the B2B token provider so fetchWithAuth uses Bearer tokens
+  useEffect(() => {
+    if (workosUser) {
+      setB2BTokenProvider(getAccessToken);
+    } else {
+      setB2BTokenProvider(null);
+    }
+    return () => setB2BTokenProvider(null);
+  }, [workosUser, getAccessToken]);
 
   const refreshAuth = useCallback(async (): Promise<boolean> => {
     try {
@@ -48,7 +76,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const checkAuth = useCallback(async () => {
+  const checkB2BAuth = useCallback(async () => {
+    try {
+      const token = await getAccessToken();
+      const response = await fetch(`${API_URL}/v1/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAccount(data);
+        setTotpRequired(false);
+        setNeedsOnboarding(data.account_type === 'b2b' && !data.company_name);
+      }
+    } catch (error) {
+      console.error('Error checking B2B auth:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [getAccessToken]);
+
+  const checkB2CAuth = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/v1/auth/me`, {
         credentials: 'include', // Send httpOnly cookies
@@ -58,6 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const data = await response.json();
         setAccount(data);
         setTotpRequired(false);
+        setNeedsOnboarding(false);
       } else if (response.status === 401) {
         // Try to refresh the token
         const refreshed = await refreshAuth();
@@ -85,10 +134,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [refreshAuth]);
 
-  // Check auth status on mount by fetching account info
+  // Check auth status on mount (wait for WorkOS to finish loading first)
   useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
+    if (workosLoading) return;
+
+    if (workosUser) {
+      checkB2BAuth();
+    } else {
+      checkB2CAuth();
+    }
+  }, [workosLoading, workosUser, checkB2BAuth, checkB2CAuth]);
 
   const login = async (accountNumber: string): Promise<{ totpRequired: boolean }> => {
     setIsLoading(true);
@@ -114,7 +169,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Fetch account info after successful login
-      await checkAuth();
+      await checkB2CAuth();
       return { totpRequired: false };
     } finally {
       setIsLoading(false);
@@ -146,7 +201,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setTotpRequired(false);
-      await checkAuth();
+      await checkB2CAuth();
     } finally {
       setIsLoading(false);
     }
@@ -172,7 +227,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const data = await response.json();
 
       // Fetch account info after successful creation
-      await checkAuth();
+      await checkB2CAuth();
 
       const result: { accountNumber: string; recoveryFile: string; walletAddress?: string } = {
         accountNumber: data.account_number,
@@ -187,7 +242,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const b2bSignIn = async () => {
+    await workosSignIn();
+  };
+
+  const b2bSignOutHandler = () => {
+    setAccount(null);
+    setNeedsOnboarding(false);
+    setB2BTokenProvider(null);
+    workosSignOut();
+  };
+
+  const onboardB2BHandler = async (companyName: string) => {
+    await onboardB2BAPI(companyName);
+    setNeedsOnboarding(false);
+    // Refresh account data to get updated company_name
+    await checkB2BAuth();
+  };
+
   const logout = async () => {
+    if (workosUser) {
+      b2bSignOutHandler();
+      return;
+    }
+
     try {
       await fetch(`${API_URL}/v1/auth/logout`, {
         method: 'POST',
@@ -212,12 +290,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         isAuthenticated: !!account,
         totpRequired,
+        needsOnboarding,
         login,
         createAccount,
         verifyTotp,
         resetTotp,
         logout,
         refreshAuth,
+        b2bSignIn,
+        b2bSignOut: b2bSignOutHandler,
+        onboardB2B: onboardB2BHandler,
       }}
     >
       {children}

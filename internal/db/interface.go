@@ -20,25 +20,46 @@ type Database interface {
 
 	// Account operations
 	CreateAccount(ctx context.Context, evmWalletAddress *string, solanaWalletAddress *string) (*Account, error)
+	CreateB2BAccount(ctx context.Context, workosUserID, email, companyName string) (*Account, error)
 	GetAccountByID(ctx context.Context, id uuid.UUID) (*Account, error)
 	GetAccountByNumber(ctx context.Context, accountNumber string) (*Account, error)
+	GetAccountByEmail(ctx context.Context, email string) (*Account, error)
+	GetAccountByWorkOSUserID(ctx context.Context, workosUserID string) (*Account, error)
+	UpdateCompanyName(ctx context.Context, accountID uuid.UUID, companyName string) error
 	GetAccountByWalletAddress(ctx context.Context, walletAddress string) (*Account, error)
 	GetAccountByEVMWallet(ctx context.Context, evmAddress string) (*Account, error)
 	GetAccountBySolanaWallet(ctx context.Context, solanaAddress string) (*Account, error)
+	GetAccountByStripeCustomerID(ctx context.Context, customerID string) (*Account, error)
 	UpdateAccount(ctx context.Context, account *Account) error
 	UpdateLastLogin(ctx context.Context, accountID uuid.UUID) error
+	UpdateStripeCustomerID(ctx context.Context, accountID uuid.UUID, customerID string) error
+	DeductBalance(ctx context.Context, accountID uuid.UUID, amount usdc.MicroUSDC) (bool, error)
 	LinkWallet(ctx context.Context, accountID uuid.UUID, walletAddress string) error
 	LinkEVMWallet(ctx context.Context, accountID uuid.UUID, evmAddress string) error
 	LinkSolanaWallet(ctx context.Context, accountID uuid.UUID, solanaAddress string) error
 	UpdateBalance(ctx context.Context, accountID uuid.UUID, newBalance usdc.MicroUSDC) error
 	SuspendAccount(ctx context.Context, accountID uuid.UUID) error
 	CloseAccount(ctx context.Context, accountID uuid.UUID) error
+	DeleteAccount(ctx context.Context, accountID uuid.UUID) error
 	AccountExists(ctx context.Context, accountNumber string) (bool, error)
 	StoreEncryptedKey(ctx context.Context, accountID uuid.UUID, encryptedKey, kmsKeyID string) error
 	GetEncryptedKey(ctx context.Context, accountID uuid.UUID) (string, error)
 	HasEncryptedKey(ctx context.Context, accountID uuid.UUID) (bool, error)
 	UpdateWalletAddress(ctx context.Context, accountID uuid.UUID, walletAddress string) error
 	UpdateWalletAddresses(ctx context.Context, accountID uuid.UUID, evmAddr *string, solanaAddr *string) error
+
+	// API key operations
+	CreateAPIKey(ctx context.Context, accountID uuid.UUID, keyPrefix, keyHash, name string, maxKeys int) (*APIKey, error)
+	GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, error)
+	ListAPIKeys(ctx context.Context, accountID uuid.UUID) ([]APIKey, error)
+	RevokeAPIKey(ctx context.Context, keyID, accountID uuid.UUID) error
+	UpdateAPIKeyLastUsed(ctx context.Context, keyID uuid.UUID) error
+	HasActiveAPIKeys(ctx context.Context, accountID uuid.UUID) (bool, error)
+	CountActiveAPIKeys(ctx context.Context, accountID uuid.UUID) (int, error)
+
+	// Stripe usage record operations
+	CreateStripeUsageRecord(ctx context.Context, record *StripeUsageRecord) (*StripeUsageRecord, error)
+	GetStripeUsageRecords(ctx context.Context, accountID uuid.UUID, limit, offset int) ([]StripeUsageRecord, error)
 
 	// Session operations
 	CreateSession(ctx context.Context, accountID uuid.UUID, ipAddress net.IP, userAgent string, duration time.Duration) (*Session, string, error)
@@ -91,14 +112,8 @@ type Database interface {
 	LinkUsageLog(ctx context.Context, usageLogID, paymentTxID uuid.UUID) error
 
 	// Webhook event idempotency
-	CheckAndRecordWebhookEvent(ctx context.Context, eventID, eventType string) (bool, error)
-
-	// API key operations
-	CreateAPIKey(ctx context.Context, accountID uuid.UUID, label string) (*APIKey, string, error)
-	GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, error)
-	ListAPIKeys(ctx context.Context, accountID uuid.UUID) ([]*APIKey, error)
-	RevokeAPIKey(ctx context.Context, accountID uuid.UUID, keyID uuid.UUID) error
-	HasActiveAPIKeys(ctx context.Context, accountID uuid.UUID) (bool, error)
+	ClaimWebhookEvent(ctx context.Context, eventID, eventType string) (bool, error)
+	UnclaimWebhookEvent(ctx context.Context, eventID string) error
 
 	// Account settings
 	GetJailbreakDetectionEnabled(ctx context.Context, accountID uuid.UUID, defaultValue bool) (bool, error)

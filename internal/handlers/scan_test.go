@@ -345,7 +345,7 @@ func TestScanHandler_RegisterRoutes_PanicsWithoutDB(t *testing.T) {
 	}
 	x402 := middleware.NewX402Middleware(x402cfg, pricing)
 
-	handler := NewScanHandlerWithDB(nil, x402, nil, nil, pricing)
+	handler := NewScanHandlerWithDB(nil, x402, nil, pricing)
 	app := fiber.New()
 
 	assert.Panics(t, func() {
@@ -359,7 +359,7 @@ func TestScanHandler_RegisterRoutes_PanicsWithoutX402(t *testing.T) {
 		ScanOutput:  usdc.MicroUSDC(1000),
 	}
 
-	handler := NewScanHandlerWithDB(nil, nil, nil, &db.DB{}, pricing)
+	handler := NewScanHandlerWithDB(nil, nil, &db.DB{}, pricing)
 	app := fiber.New()
 
 	assert.Panics(t, func() {
@@ -375,7 +375,7 @@ func TestScanHandler_RegisterRoutes_PanicsWithoutPricing(t *testing.T) {
 	}
 	x402 := middleware.NewX402Middleware(x402cfg, &config.PricingConfig{})
 
-	handler := NewScanHandlerWithDB(nil, x402, nil, &db.DB{}, nil)
+	handler := NewScanHandlerWithDB(nil, x402, &db.DB{}, nil)
 	app := fiber.New()
 
 	assert.Panics(t, func() {
@@ -395,7 +395,7 @@ func TestScanHandler_RegisterRoutes_PanicsWithoutScanner(t *testing.T) {
 	}
 	x402 := middleware.NewX402Middleware(x402cfg, pricing)
 
-	handler := NewScanHandlerWithDB(nil, x402, nil, &db.DB{}, pricing)
+	handler := NewScanHandlerWithDB(nil, x402, &db.DB{}, pricing)
 	app := fiber.New()
 
 	assert.Panics(t, func() {
@@ -712,94 +712,5 @@ func TestFilterJailbreakThreats_B2C_WarnNoThreats_PreservesDecision(t *testing.T
 	assert.Equal(t, stronghold.DecisionWarn, result.Decision)
 }
 
-func TestDualAuth_APIKeyHeaderUsesAPIKeyAuth(t *testing.T) {
-	tDB := testutil.NewTestDB(t)
-	defer tDB.Close(t)
-
-	database := db.NewFromPool(tDB.Pool)
-	ctx := context.Background()
-
-	account, err := database.CreateAccount(ctx, nil, nil)
-	require.NoError(t, err)
-
-	_, rawKey, err := database.CreateAPIKey(ctx, account.ID, "dual auth test")
-	require.NoError(t, err)
-
-	x402cfg := &config.X402Config{
-		EVMWalletAddress: "0x1234567890123456789012345678901234567890",
-		FacilitatorURL:   "https://x402.org/facilitator",
-		Networks:         []string{"base-sepolia"},
-	}
-	pricing := &config.PricingConfig{
-		ScanContent: usdc.MicroUSDC(1000),
-	}
-	x402mw := middleware.NewX402Middleware(x402cfg, pricing)
-	apiKeyMw := middleware.NewAPIKeyMiddleware(database)
-
-	handler := &ScanHandler{
-		x402:       x402mw,
-		apiKeyAuth: apiKeyMw,
-		db:         database,
-		pricing:    pricing,
-	}
-
-	var capturedAuthMethod string
-	var capturedAccountID string
-
-	app := fiber.New()
-	app.Post("/test", handler.dualAuth(usdc.MicroUSDC(1000)), func(c fiber.Ctx) error {
-		capturedAuthMethod, _ = c.Locals("auth_method").(string)
-		capturedAccountID, _ = c.Locals("account_id").(string)
-		return c.JSON(fiber.Map{"status": "ok"})
-	})
-
-	req := httptest.NewRequest("POST", "/test", bytes.NewBufferString(`{}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", rawKey)
-
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, 200, resp.StatusCode)
-	assert.Equal(t, "api_key", capturedAuthMethod)
-	assert.Equal(t, account.ID.String(), capturedAccountID)
-}
-
-func TestDualAuth_NoAPIKeyHeaderUsesX402(t *testing.T) {
-	// In dev mode (empty wallet), x402 bypasses payment
-	x402cfg := &config.X402Config{
-		EVMWalletAddress: "", // Dev mode
-		FacilitatorURL:   "https://x402.org/facilitator",
-		Networks:         []string{"base-sepolia"},
-	}
-	pricing := &config.PricingConfig{
-		ScanContent: usdc.MicroUSDC(1000),
-	}
-	x402mw := middleware.NewX402Middleware(x402cfg, pricing)
-
-	handler := &ScanHandler{
-		x402:    x402mw,
-		pricing: pricing,
-	}
-
-	var capturedAuthMethod string
-
-	app := fiber.New()
-	app.Post("/test", handler.dualAuth(usdc.MicroUSDC(1000)), func(c fiber.Ctx) error {
-		capturedAuthMethod, _ = c.Locals("auth_method").(string)
-		return c.JSON(fiber.Map{"status": "ok"})
-	})
-
-	req := httptest.NewRequest("POST", "/test", bytes.NewBufferString(`{}`))
-	req.Header.Set("Content-Type", "application/json")
-	// No X-API-Key header
-
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, 200, resp.StatusCode)
-	// In x402 dev mode bypass, auth_method is not set (empty string)
-	assert.Equal(t, "", capturedAuthMethod)
-}
+// Note: dualAuth tests removed — PR #32 replaced the dualAuth pattern with
+// PaymentRouter, which is tested in internal/middleware/payment_router_test.go.
