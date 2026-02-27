@@ -37,7 +37,7 @@ func (h *APIKeyHandler) RegisterRoutes(app *fiber.App, authMiddleware fiber.Hand
 
 // CreateAPIKeyRequest represents a request to create an API key
 type CreateAPIKeyRequest struct {
-	Name string `json:"name"`
+	Name string `json:"label"`
 }
 
 // CreateAPIKeyResponse includes the full key (only returned once)
@@ -45,7 +45,7 @@ type CreateAPIKeyResponse struct {
 	ID        string `json:"id"`
 	Key       string `json:"key"`
 	KeyPrefix string `json:"key_prefix"`
-	Name      string `json:"name"`
+	Name      string `json:"label"`
 	CreatedAt string `json:"created_at"`
 }
 
@@ -67,7 +67,7 @@ func (h *APIKeyHandler) Create(c fiber.Ctx) error {
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Key name is required",
+			"error": "Key label is required",
 		})
 	}
 
@@ -118,7 +118,7 @@ func (h *APIKeyHandler) Create(c fiber.Ctx) error {
 type APIKeyListItem struct {
 	ID         string  `json:"id"`
 	KeyPrefix  string  `json:"key_prefix"`
-	Name       string  `json:"name"`
+	Name       string  `json:"label"`
 	CreatedAt  string  `json:"created_at"`
 	LastUsedAt *string `json:"last_used_at,omitempty"`
 }
@@ -168,7 +168,7 @@ func (h *APIKeyHandler) Revoke(c fiber.Ctx) error {
 	keyID, err := uuid.Parse(keyIDStr)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid key ID",
+			"error": "Invalid API key ID",
 		})
 	}
 

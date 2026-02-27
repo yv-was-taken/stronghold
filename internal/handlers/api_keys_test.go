@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -56,8 +57,10 @@ func setupAPIKeyTest(t *testing.T) (*fiber.App, *AuthHandler, *APIKeyHandler, *t
 	return app, authHandler, apiKeyHandler, testDB, database
 }
 
-// createAuthenticatedAccountForAPIKeys creates an account and returns account number and access token.
-func createAuthenticatedAccountForAPIKeys(t *testing.T, app *fiber.App) (string, string) {
+// createAuthenticatedAccountForAPIKeys creates a B2B account and returns account number and access token.
+// API key endpoints require B2B accounts, so after creating a B2C account (to get a valid JWT),
+// we promote it to B2B via the database.
+func createAuthenticatedAccountForAPIKeys(t *testing.T, app *fiber.App, database *db.DB) (string, string) {
 	t.Helper()
 
 	createReq := httptest.NewRequest("POST", "/v1/auth/account", bytes.NewBufferString(`{}`))
@@ -83,6 +86,15 @@ func createAuthenticatedAccountForAPIKeys(t *testing.T, app *fiber.App) (string,
 		}
 	}
 
+	// Promote account to B2B so API key endpoints accept it
+	account, err := database.GetAccountByNumber(context.Background(), createBody.AccountNumber)
+	require.NoError(t, err)
+	uniqueEmail := fmt.Sprintf("test-%s@example.com", account.ID)
+	_, err = database.Pool().Exec(context.Background(),
+		`UPDATE accounts SET account_type = 'b2b', email = $1 WHERE id = $2`,
+		uniqueEmail, account.ID)
+	require.NoError(t, err)
+
 	return createBody.AccountNumber, accessToken
 }
 
@@ -91,12 +103,12 @@ func TestCreateAPIKey_ReturnsRawKey(t *testing.T) {
 	defer testDB.Close(t)
 	defer database.Close()
 
-	_, accessToken := createAuthenticatedAccountForAPIKeys(t, app)
+	_, accessToken := createAuthenticatedAccountForAPIKeys(t, app, database)
 
 	reqBody := map[string]string{"label": "my test key"}
 	bodyJSON, _ := json.Marshal(reqBody)
 
-	req := httptest.NewRequest("POST", "/v1/account/api-keys/", bytes.NewBuffer(bodyJSON))
+	req := httptest.NewRequest("POST", "/v1/api-keys/", bytes.NewBuffer(bodyJSON))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Cookie", AccessTokenCookie+"="+accessToken)
 
@@ -113,7 +125,7 @@ func TestCreateAPIKey_ReturnsRawKey(t *testing.T) {
 	// Should contain the raw key
 	rawKey, ok := body["key"].(string)
 	assert.True(t, ok, "response should contain 'key' field")
-	assert.True(t, strings.HasPrefix(rawKey, "sh_live_"), "raw key should start with sh_live_")
+	assert.True(t, strings.HasPrefix(rawKey, "sk_live_"), "raw key should start with sk_live_")
 
 	// Should also contain metadata
 	assert.Contains(t, body, "id")
@@ -126,14 +138,14 @@ func TestListAPIKeys_ReturnsAllKeys(t *testing.T) {
 	defer testDB.Close(t)
 	defer database.Close()
 
-	_, accessToken := createAuthenticatedAccountForAPIKeys(t, app)
+	_, accessToken := createAuthenticatedAccountForAPIKeys(t, app, database)
 
 	// Create two keys
 	for _, label := range []string{"key one", "key two"} {
 		reqBody := map[string]string{"label": label}
 		bodyJSON, _ := json.Marshal(reqBody)
 
-		req := httptest.NewRequest("POST", "/v1/account/api-keys/", bytes.NewBuffer(bodyJSON))
+		req := httptest.NewRequest("POST", "/v1/api-keys/", bytes.NewBuffer(bodyJSON))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Cookie", AccessTokenCookie+"="+accessToken)
 
@@ -144,7 +156,7 @@ func TestListAPIKeys_ReturnsAllKeys(t *testing.T) {
 	}
 
 	// List keys
-	req := httptest.NewRequest("GET", "/v1/account/api-keys/", nil)
+	req := httptest.NewRequest("GET", "/v1/api-keys/", nil)
 	req.Header.Set("Cookie", AccessTokenCookie+"="+accessToken)
 
 	resp, err := app.Test(req)
@@ -166,9 +178,9 @@ func TestListAPIKeys_EmptyArray(t *testing.T) {
 	defer testDB.Close(t)
 	defer database.Close()
 
-	_, accessToken := createAuthenticatedAccountForAPIKeys(t, app)
+	_, accessToken := createAuthenticatedAccountForAPIKeys(t, app, database)
 
-	req := httptest.NewRequest("GET", "/v1/account/api-keys/", nil)
+	req := httptest.NewRequest("GET", "/v1/api-keys/", nil)
 	req.Header.Set("Cookie", AccessTokenCookie+"="+accessToken)
 
 	resp, err := app.Test(req)
@@ -191,13 +203,13 @@ func TestRevokeAPIKey_Success(t *testing.T) {
 	defer testDB.Close(t)
 	defer database.Close()
 
-	_, accessToken := createAuthenticatedAccountForAPIKeys(t, app)
+	_, accessToken := createAuthenticatedAccountForAPIKeys(t, app, database)
 
 	// Create a key
 	reqBody := map[string]string{"label": "to revoke"}
 	bodyJSON, _ := json.Marshal(reqBody)
 
-	createReq := httptest.NewRequest("POST", "/v1/account/api-keys/", bytes.NewBuffer(bodyJSON))
+	createReq := httptest.NewRequest("POST", "/v1/api-keys/", bytes.NewBuffer(bodyJSON))
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.Header.Set("Cookie", AccessTokenCookie+"="+accessToken)
 
@@ -211,7 +223,7 @@ func TestRevokeAPIKey_Success(t *testing.T) {
 	keyID := createBody["id"].(string)
 
 	// Revoke the key
-	revokeReq := httptest.NewRequest("DELETE", "/v1/account/api-keys/"+keyID, nil)
+	revokeReq := httptest.NewRequest("DELETE", "/v1/api-keys/"+keyID, nil)
 	revokeReq.Header.Set("Cookie", AccessTokenCookie+"="+accessToken)
 
 	revokeResp, err := app.Test(revokeReq)
@@ -230,9 +242,9 @@ func TestRevokeAPIKey_InvalidID(t *testing.T) {
 	defer testDB.Close(t)
 	defer database.Close()
 
-	_, accessToken := createAuthenticatedAccountForAPIKeys(t, app)
+	_, accessToken := createAuthenticatedAccountForAPIKeys(t, app, database)
 
-	req := httptest.NewRequest("DELETE", "/v1/account/api-keys/not-a-uuid", nil)
+	req := httptest.NewRequest("DELETE", "/v1/api-keys/not-a-uuid", nil)
 	req.Header.Set("Cookie", AccessTokenCookie+"="+accessToken)
 
 	resp, err := app.Test(req)
@@ -251,9 +263,9 @@ func TestRevokeAPIKey_NonExistentID(t *testing.T) {
 	defer testDB.Close(t)
 	defer database.Close()
 
-	_, accessToken := createAuthenticatedAccountForAPIKeys(t, app)
+	_, accessToken := createAuthenticatedAccountForAPIKeys(t, app, database)
 
-	req := httptest.NewRequest("DELETE", "/v1/account/api-keys/"+uuid.New().String(), nil)
+	req := httptest.NewRequest("DELETE", "/v1/api-keys/"+uuid.New().String(), nil)
 	req.Header.Set("Cookie", AccessTokenCookie+"="+accessToken)
 
 	resp, err := app.Test(req)
@@ -276,9 +288,9 @@ func TestAPIKeyEndpoints_RequireAuth(t *testing.T) {
 		method string
 		path   string
 	}{
-		{"POST", "/v1/account/api-keys/"},
-		{"GET", "/v1/account/api-keys/"},
-		{"DELETE", "/v1/account/api-keys/" + uuid.New().String()},
+		{"POST", "/v1/api-keys/"},
+		{"GET", "/v1/api-keys/"},
+		{"DELETE", "/v1/api-keys/" + uuid.New().String()},
 	}
 
 	for _, ep := range endpoints {
@@ -299,12 +311,12 @@ func TestRevokeAPIKey_OtherAccountCannotRevoke(t *testing.T) {
 	defer database.Close()
 
 	// Create first account and API key
-	_, accessToken1 := createAuthenticatedAccountForAPIKeys(t, app)
+	_, accessToken1 := createAuthenticatedAccountForAPIKeys(t, app, database)
 
 	reqBody := map[string]string{"label": "account1 key"}
 	bodyJSON, _ := json.Marshal(reqBody)
 
-	createReq := httptest.NewRequest("POST", "/v1/account/api-keys/", bytes.NewBuffer(bodyJSON))
+	createReq := httptest.NewRequest("POST", "/v1/api-keys/", bytes.NewBuffer(bodyJSON))
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.Header.Set("Cookie", AccessTokenCookie+"="+accessToken1)
 
@@ -318,10 +330,10 @@ func TestRevokeAPIKey_OtherAccountCannotRevoke(t *testing.T) {
 	keyID := createBody["id"].(string)
 
 	// Create second account
-	_, accessToken2 := createAuthenticatedAccountForAPIKeys(t, app)
+	_, accessToken2 := createAuthenticatedAccountForAPIKeys(t, app, database)
 
 	// Try to revoke account1's key using account2's auth
-	revokeReq := httptest.NewRequest("DELETE", "/v1/account/api-keys/"+keyID, nil)
+	revokeReq := httptest.NewRequest("DELETE", "/v1/api-keys/"+keyID, nil)
 	revokeReq.Header.Set("Cookie", AccessTokenCookie+"="+accessToken2)
 
 	revokeResp, err := app.Test(revokeReq)

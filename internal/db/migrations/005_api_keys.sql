@@ -1,12 +1,12 @@
 -- API Keys table for B2B authentication
--- Key format: sh_live_<32 hex chars>, stored as SHA-256 hash
+-- Key format: sk_live_<32 hex chars>, stored as SHA-256 hash
 
 CREATE TABLE IF NOT EXISTS api_keys (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     key_hash VARCHAR(64) NOT NULL,
     key_prefix VARCHAR(12) NOT NULL,
-    label TEXT,
+    name TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_used_at TIMESTAMPTZ,
     revoked_at TIMESTAMPTZ,

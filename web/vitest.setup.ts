@@ -20,6 +20,29 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }))
 
+// Mock WorkOS AuthKit to avoid requiring AuthKitProvider in tests.
+// IMPORTANT: Mock functions are extracted so useAuth() returns stable references
+// across re-renders. Otherwise React effects that depend on getAccessToken
+// would re-fire on every render, breaking tests that count fetch calls.
+vi.mock('@workos-inc/authkit-react', () => {
+  const mockGetAccessToken = vi.fn().mockResolvedValue('mock-token')
+  const mockSignIn = vi.fn()
+  const mockSignUp = vi.fn()
+  const mockSignOut = vi.fn()
+
+  return {
+    AuthKitProvider: ({ children }: { children: React.ReactNode }) => children,
+    useAuth: () => ({
+      user: null,
+      isLoading: false,
+      getAccessToken: mockGetAccessToken,
+      signIn: mockSignIn,
+      signUp: mockSignUp,
+      signOut: mockSignOut,
+    }),
+  }
+})
+
 // Mock framer-motion to avoid animation issues in tests
 vi.mock('framer-motion', () => {
   const createMotionComponent = (tag: string) => {

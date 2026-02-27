@@ -126,5 +126,9 @@ func validProductionConfig() *Config {
 			BlockThreshold: 0.55,
 			WarnThreshold:  0.35,
 		},
+		WorkOS: WorkOSConfig{
+			APIKey:   "sk_test_workos_key",
+			ClientID: "client_01test",
+		},
 	}
 }

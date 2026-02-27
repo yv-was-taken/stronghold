@@ -171,7 +171,7 @@ Base URL: https://api.getstronghold.xyz
 Two authentication methods:
 
 **B2C (x402 payment)**: Include `X-PAYMENT` header with each request. Used by CLI/proxy.
-**B2B (API key)**: Include `X-API-Key: sh_live_...` header. Manage keys via dashboard or API.
+**B2B (API key)**: Include `X-API-Key: sk_live_...` header. Manage keys via dashboard or API.
 
 ```bash
 # B2C: x402 payment
@@ -183,7 +183,7 @@ curl -X POST https://api.getstronghold.xyz/v1/scan/output \
 # B2B: API key
 curl -X POST https://api.getstronghold.xyz/v1/scan/output \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: sh_live_a1b2c3d4..." \
+  -H "X-API-Key: sk_live_a1b2c3d4..." \
   -d '{"text": "..."}'
 ```
 

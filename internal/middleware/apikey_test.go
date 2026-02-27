@@ -139,12 +139,22 @@ func TestAPIKeyMiddleware_RevokedKey(t *testing.T) {
 	account := helperCreateB2BAccount(t, database)
 	apiKey, rawKey := helperCreateAPIKey(t, database, account.ID, "revoked key")
 
-	err := database.RevokeAPIKey(context.Background(), account.ID, apiKey.ID)
+	err := database.RevokeAPIKey(context.Background(), apiKey.ID, account.ID)
 	require.NoError(t, err)
 
 	m := NewAPIKeyMiddleware(database)
 
-	app := fiber.New()
+	app := fiber.New(fiber.Config{
+		ErrorHandler: func(c fiber.Ctx, err error) error {
+			code := fiber.StatusInternalServerError
+			message := "Internal server error"
+			if e, ok := err.(*fiber.Error); ok {
+				code = e.Code
+				message = e.Message
+			}
+			return c.Status(code).JSON(fiber.Map{"error": message})
+		},
+	})
 	app.Post("/test", authMiddleware(m), func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
