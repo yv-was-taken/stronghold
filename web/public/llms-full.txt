@@ -464,12 +464,12 @@ automatically. $0.001 per scan.
 
 #### B2B: API Key (Server-side Integration)
 
-Include `X-API-Key` header with each request. No per-request payment.
+Include `Authorization: Bearer sk_live_...` header with each request. No per-request payment.
 
 ```bash
 curl -X POST https://api.getstronghold.xyz/v1/scan/content \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: sk_live_a1b2c3d4e5f6..." \
+  -H "Authorization: Bearer sk_live_a1b2c3d4e5f6..." \
   -d '{"text": "content to scan"}'
 ```
 
@@ -594,7 +594,7 @@ curl -X POST https://api.getstronghold.xyz/v1/scan/output \
 ```bash
 curl -X POST https://api.getstronghold.xyz/v1/scan/output \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: sk_live_a1b2c3d4..." \
+  -H "Authorization: Bearer sk_live_a1b2c3d4..." \
   -d '{
     "text": "Here is the configuration:\nDB_PASSWORD=secret123\nAWS_SECRET_KEY=AKIA..."
   }'

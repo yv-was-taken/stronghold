@@ -7,15 +7,19 @@ import { ChevronDown } from 'lucide-react'
 const faqs = [
   {
     question: 'What is Stronghold?',
-    answer: 'Stronghold is a security layer for AI infrastructure that protects agents from prompt injection attacks and credential leaks. It operates as a transparent proxy, scanning all HTTP/HTTPS traffic before it reaches your AI models.',
+    answer: 'Stronghold is a security layer for AI infrastructure that protects agents from prompt injection attacks and credential leaks. It operates as a transparent proxy, scanning all HTTP/HTTPS traffic before it reaches your AI models — or as a direct API for server-side integration.',
   },
   {
     question: 'How does the transparent proxy work?',
     answer: 'Stronghold uses iptables (Linux) or pf (macOS) to intercept all network traffic at the system level. This means it works with any AI agent without requiring code changes, environment variables, or proxy configuration. Traffic flows through Stronghold\'s scanning engine, which analyzes content for threats in real-time.',
   },
   {
-    question: 'Why x402 as a payment method?',
-    answer: 'x402 is an open protocol designed for pay-per-use APIs—and it\'s ideal for AI agents. Traditional payment methods require a human to enter credit card details and manage subscriptions. With x402, your agent\'s wallet pays automatically for each scan, enabling fully autonomous operation. No human in the loop for billing. Top up via the dashboard (Stripe) or direct deposit. The crypto layer is completely abstracted: no seed phrases, no gas fees, no complexity.',
+    question: 'What\'s the difference between Individual and Business accounts?',
+    answer: 'Both get the same scanning at the same price ($0.001/scan). Individual accounts use x402 crypto payments — your agent\'s USDC wallet pays automatically per request, enabling fully autonomous operation with no human in the loop. Business accounts use API keys with standard card billing via Stripe — buy prepaid credits or get billed monthly for usage. Choose Individual if you\'re running autonomous agents that need to pay for themselves. Choose Business if you\'re integrating scanning into your product and want traditional invoicing.',
+  },
+  {
+    question: 'Do I need crypto to use Stronghold?',
+    answer: 'No. Business accounts use standard card billing via Stripe — no wallet, no crypto, no blockchain knowledge required. Sign in with SSO, create an API key, and start scanning. Crypto (x402) is only needed for the Individual path, where autonomous agents pay per-request with USDC wallets.',
   },
   {
     question: 'What threats does Stronghold detect?',
